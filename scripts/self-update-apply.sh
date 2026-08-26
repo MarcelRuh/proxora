@@ -67,6 +67,39 @@ if [ "$SKIP_COMPOSE" != "1" ]; then
   docker compose version >/dev/null 2>&1 || { echo "ERROR: docker compose plugin required" >&2; exit 1; }
 fi
 
+detect_lan_ip() {
+  _ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')"
+  if [ -z "$_ip" ] || [ "$_ip" = "127.0.0.1" ]; then
+    _ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+  printf '%s\n' "${_ip:-127.0.0.1}"
+}
+
+sync_app_url_if_localhost() {
+  _file="$1"
+  [ -f "$_file" ] || return 0
+  _current="$(grep -E '^APP_URL=' "$_file" 2>/dev/null | head -1 | cut -d= -f2- || true)"
+  case "$_current" in
+    https://*) return 0 ;;
+    *localhost*|*127.0.0.1*|http://:*) ;;
+    "") ;;
+    *) return 0 ;;
+  esac
+  # In-app updater runs inside Docker — do not overwrite with a container IP.
+  if [ -f /.dockerenv ]; then
+    return 0
+  fi
+  _ip="$(detect_lan_ip)"
+  _port="$(grep -E '^PORT=' "$_file" 2>/dev/null | head -1 | cut -d= -f2- || true)"
+  _port="${_port:-3000}"
+  _url="http://${_ip}:${_port}"
+  if grep -q '^APP_URL=' "$_file" 2>/dev/null; then
+    sed -i "s|^APP_URL=.*|APP_URL=${_url}|" "$_file"
+  else
+    printf 'APP_URL=%s\n' "$_url" >> "$_file"
+  fi
+}
+
 ensure_git() {
   command -v git >/dev/null 2>&1 && return 0
   if command -v apk >/dev/null 2>&1; then apk add --no-cache git >/dev/null 2>&1 || return 1; fi
@@ -149,6 +182,7 @@ fi
 echo "==> Rebuilding stack (docker compose up -d --build)"
 write_progress 28 build "Stack rebuild starting"
 cd "$INSTALL_DIR"
+sync_app_url_if_localhost "${INSTALL_DIR}/.env"
 COMPOSE_FILE="docker-compose.yml"
 if [ -f docker-compose.prod.yml ]; then COMPOSE_FILE="docker-compose.prod.yml"; fi
 docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans > "$TMP/compose.log" 2>&1 &

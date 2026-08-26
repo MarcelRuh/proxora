@@ -14,7 +14,7 @@ export default function SecuritySettingsPage() {
           <p>Passwords are hashed with bcrypt (12 rounds).</p>
           <p>API tokens are encrypted at rest with AES-256-GCM.</p>
           <p>Sessions are random tokens stored as SHA-256 hashes.</p>
-          <p>Mutating API calls validate Origin against APP_URL.</p>
+          <p>Mutating API calls validate Origin against the request Host and APP_URL.</p>
           <p>2FA enrollment UI is not in v1 (status is stored on the user). Treat this as coming soon.</p>
         </CardContent>
       </Card>

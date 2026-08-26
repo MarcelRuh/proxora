@@ -8,7 +8,7 @@ Proxora has its **own** user database. Proxmox PAM users are not reused for the 
 
 - Passwords are hashed with **bcrypt** (12 rounds).
 - A random session token is generated and stored as **SHA-256** in `Session`.
-- The raw token is set as the httpOnly `pm_session` cookie (`SameSite=Lax`, `Secure` in production).
+- The raw token is set as the httpOnly `pm_session` cookie (`SameSite=Lax`). `Secure` is only set when `APP_URL` is HTTPS (or `COOKIE_SECURE=true`).
 - Login is rate-limited (8 attempts / 15 minutes / IP).
 - Success and failure are written to the audit log (`LOGIN_SUCCESS` / `LOGIN_FAILED`).
 

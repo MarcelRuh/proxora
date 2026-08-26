@@ -34,7 +34,7 @@ The wget installer prints username and password again in the final summary box. 
 | `DATABASE_URL` | yes | PostgreSQL |
 | `ENCRYPTION_KEY` | yes | ≥ 32 chars, prefer 64 hex |
 | `SESSION_SECRET` | yes | cookie signing / rotation helper |
-| `APP_URL` | yes in prod | Canonical origin (reverse proxy / HTTPS). LAN IP access still works via `Host`. |
+| `APP_URL` | yes in prod | Canonical public origin. The installer sets `http://<LAN-IP>:3000`. Leave HTTPS URLs untouched (reverse proxy). Cookie `Secure` follows this scheme. |
 | `APP_ALLOWED_ORIGINS` | no | Extra CSRF origins, comma-separated |
 | `BOOTSTRAP_ADMIN_PASSWORD` | first boot | change after login |
 | `REDIS_URL` | no | |

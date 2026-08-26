@@ -97,12 +97,20 @@ export function assertHostAccess(user: SessionUser, hostId: string) {
   }
 }
 
+export function cookieSecure(
+  appUrl = process.env.APP_URL,
+  override = process.env.COOKIE_SECURE,
+): boolean {
+  if (override === "true") return true;
+  if (override === "false") return false;
+  return (appUrl ?? "").trim().toLowerCase().startsWith("https://");
+}
+
 export function sessionCookieOptions(expiresAt: Date) {
-  const secure = process.env.NODE_ENV === "production";
   return {
     httpOnly: true,
     sameSite: "lax" as const,
-    secure,
+    secure: cookieSecure(),
     path: "/",
     expires: expiresAt,
   };

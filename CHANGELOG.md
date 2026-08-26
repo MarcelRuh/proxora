@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.6] – 2026-08-27
+
+### Fixed
+
+- Session cookie is no longer `Secure` on HTTP. Production + `http://192.168.x.x:3000` previously dropped the cookie in the browser, so login appeared to succeed but never stayed signed in.
+- Installer sets `APP_URL` to the machine LAN IP (`http://<ip>:3000`) instead of localhost. HTTPS `APP_URL` (reverse proxy) is left unchanged.
+
 ## [1.0.5] – 2026-08-27
 
 ### Fixed

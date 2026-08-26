@@ -36,6 +36,30 @@ docker_cmd() {
 rand() { openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'; }
 rand_pw() { openssl rand -base64 18 2>/dev/null | tr -d '/+=' | head -c 20; }
 
+detect_lan_ip() {
+  local ip
+  ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')"
+  if [[ -z "$ip" || "$ip" == "127.0.0.1" ]]; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+  printf '%s\n' "${ip:-127.0.0.1}"
+}
+
+sync_app_url() {
+  local file="$1" ip="$2" port="$3"
+  local current url
+  current="$(env_get "$file" APP_URL)"
+  case "$current" in
+    https://*) return 0 ;;
+  esac
+  url="http://${ip}:${port}"
+  if grep -q '^APP_URL=' "$file" 2>/dev/null; then
+    as_root sed -i "s|^APP_URL=.*|APP_URL=${url}|" "$file"
+  else
+    printf 'APP_URL=%s\n' "$url" | as_root tee -a "$file" >/dev/null
+  fi
+}
+
 env_get() {
   local file="$1" key="$2"
   grep -E "^${key}=" "$file" 2>/dev/null | head -1 | cut -d= -f2- || true
@@ -67,13 +91,14 @@ else
 fi
 
 NEW_INSTALL=0
+LAN_IP="$(detect_lan_ip)"
 if [[ ! -f "${INSTALL_DIR}/.env" ]]; then
   NEW_INSTALL=1
   ADMIN_USER="${BOOTSTRAP_ADMIN_USERNAME:-admin}"
   ADMIN_PW="${BOOTSTRAP_ADMIN_PASSWORD:-$(rand_pw)}"
   ADMIN_EMAIL="${BOOTSTRAP_ADMIN_EMAIL:-admin@localhost}"
   as_root tee "${INSTALL_DIR}/.env" >/dev/null <<EOF
-APP_URL=http://localhost:3000
+APP_URL=http://${LAN_IP}:3000
 NODE_ENV=production
 DATABASE_URL=postgresql://proxora:proxora@postgres:5432/proxora?schema=public
 POSTGRES_USER=proxora
@@ -99,6 +124,10 @@ else
   ADMIN_USER="${ADMIN_USER:-admin}"
   ADMIN_EMAIL="${ADMIN_EMAIL:-admin@localhost}"
 fi
+
+PORT="$(env_get "${INSTALL_DIR}/.env" PORT)"
+PORT="${PORT:-3000}"
+sync_app_url "${INSTALL_DIR}/.env" "$LAN_IP" "$PORT"
 
 SHA="$(as_root git -C "$INSTALL_DIR" rev-parse HEAD 2>/dev/null || true)"
 if [[ -n "$SHA" ]]; then
@@ -139,7 +168,8 @@ if [[ "$ok" -ne 1 ]]; then
   exit 1
 fi
 
-WEB_HINT="http://$(hostname -f 2>/dev/null || hostname || echo localhost):3000"
+WEB_HINT="$(env_get "${INSTALL_DIR}/.env" APP_URL)"
+WEB_HINT="${WEB_HINT:-http://${LAN_IP}:${PORT}}"
 
 echo
 green "Proxora is running."
