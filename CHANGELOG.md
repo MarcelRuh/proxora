@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.9] – 2026-08-27
+
+### Fixed
+
+- Confirm dialogs (self-update and others) close immediately after confirmation instead of staying open until the action finishes.
+
 ## [1.0.8] – 2026-08-27
 
 ### Fixed

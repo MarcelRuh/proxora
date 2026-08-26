@@ -32,8 +32,8 @@ export function ConfirmAction({
 
   return (
     <>
-      <span onClick={() => setOpen(true)}>{children}</span>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <span onClick={() => { if (!busy) setOpen(true); }}>{children}</span>
+      <Dialog open={open} onOpenChange={(next) => { if (next && busy) return; setOpen(next); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
@@ -42,26 +42,29 @@ export function ConfirmAction({
           {confirmText ? (
             <div className="space-y-2">
               <p className="text-sm">
-                Type <span className="font-mono font-semibold">{confirmText}</span> to confirm.
+                Zum Bestätigen <span className="font-mono font-semibold">{confirmText}</span> eingeben.
               </p>
               <Input value={typed} onChange={(e) => setTyped(e.target.value)} />
             </div>
           ) : null}
           <div className="mt-4 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
+              Abbrechen
             </Button>
             <Button
               variant={destructive ? "destructive" : "default"}
               disabled={!can || busy}
-              onClick={async () => {
+              onClick={() => {
                 setBusy(true);
-                try {
-                  await onConfirm();
-                  setOpen(false);
-                } finally {
-                  setBusy(false);
-                }
+                setOpen(false);
+                setTyped("");
+                void onConfirm()
+                  .catch((err: unknown) => {
+                    toast.error(err instanceof Error ? err.message : "Aktion fehlgeschlagen");
+                  })
+                  .finally(() => {
+                    setBusy(false);
+                  });
               }}
             >
               {actionLabel}

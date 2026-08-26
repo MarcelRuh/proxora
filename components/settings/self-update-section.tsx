@@ -90,27 +90,31 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
       });
       setSuccess(result.message);
       await qc.invalidateQueries({ queryKey: ["self-update"] });
-      if (result.ok) {
-        const deadline = Date.now() + 20 * 60 * 1000;
-        while (Date.now() < deadline) {
-          await new Promise((r) => setTimeout(r, 1500));
-          try {
-            await qc.invalidateQueries({ queryKey: ["self-update"] });
-            const next = qc.getQueryData<SelfUpdateStatus>(["self-update"]);
-            if (next && !next.updating) break;
-          } catch {
-            /* API down */
-          }
-        }
-        const ok = await waitForHealth();
-        setSuccess(ok ? "Health check passed — reloading…" : "Update finished. Refresh manually if the UI looks stale.");
-        if (ok) window.setTimeout(() => window.location.reload(), 1500);
+      if (!result.ok) {
+        setBusy(false);
+        return;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Update failed");
-    } finally {
       setBusy(false);
+      setError(err instanceof Error ? err.message : "Update failed");
+      throw err;
     }
+
+    const deadline = Date.now() + 20 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 1500));
+      try {
+        await qc.invalidateQueries({ queryKey: ["self-update"] });
+        const next = qc.getQueryData<SelfUpdateStatus>(["self-update"]);
+        if (next && !next.updating) break;
+      } catch {
+        /* API down during rebuild */
+      }
+    }
+    const ok = await waitForHealth();
+    setSuccess(ok ? "Health check passed — reloading…" : "Update finished. Refresh manually if the UI looks stale.");
+    setBusy(false);
+    if (ok) window.setTimeout(() => window.location.reload(), 1500);
   };
 
   return (
