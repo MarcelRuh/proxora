@@ -31,6 +31,7 @@ ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
 RUN apt-get update && apt-get install -y --no-install-recommends openssl libssl3 ca-certificates wget git docker.io && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/server ./server

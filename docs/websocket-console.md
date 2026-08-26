@@ -28,6 +28,6 @@ This matches [pve-xtermjs](https://github.com/proxmox/pve-xtermjs).
 ## Process model
 
 - **Development:** `next dev` on `:3000` plus `tsx server/ws/standalone.ts` on `:3001`. Set `NEXT_PUBLIC_WS_URL=ws://localhost:3001` if you do not use the combined server.
-- **Production:** `tsx server/index.ts` serves Next.js and upgrades `/ws/console` on the same port.
+- **Production:** `node dist/server.cjs` serves Next.js and upgrades `/ws/console` on the same port.
 
 QEMU VGA/SPICE (noVNC) is not implemented in v1. The console is the native **xterm.js / termproxy** console used by Proxmox for LXC, node shell, and serial-enabled VMs.

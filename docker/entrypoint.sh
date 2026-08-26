@@ -14,6 +14,10 @@ if [ ! -f ./node_modules/tsx/dist/cli.mjs ]; then
   echo "ERROR: tsx package missing in image" >&2
   exit 1
 fi
+if [ ! -f ./dist/server.cjs ]; then
+  echo "ERROR: compiled custom server missing (dist/server.cjs)" >&2
+  exit 1
+fi
 
 if [ -z "${DATABASE_URL:-}" ]; then
   echo "ERROR: DATABASE_URL is not set" >&2
@@ -42,4 +46,5 @@ echo "Seeding…"
 $TSX prisma/seed.ts
 
 echo "Starting Proxora on 0.0.0.0:${PORT:-3000}"
-exec $TSX server/index.ts
+# Do not start Next.js via tsx: its CJS transformer breaks AsyncLocalStorage in Next 16.
+exec node dist/server.cjs

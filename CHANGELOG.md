@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.4] – 2026-08-27
+
+### Fixed
+
+- Production start no longer uses `tsx` for the Next.js custom server. The server is compiled with esbuild and started with `node dist/server.cjs`.
+- Custom server no longer loads `next/headers` at process boot (WebSocket console used the App-Router session module). That left Next.js without `AsyncLocalStorage` (`Invariant: AsyncLocalStorage accessed in runtime where it is not available`).
+
 ## [1.0.3] – 2026-08-27
 
 ### Fixed

@@ -4,8 +4,8 @@ import { prisma } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { ConflictError, HostUnreachableError, NotFoundError, ProxmoxApiError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
-import type { SessionUser } from "@/server/auth/session";
-import { canAccessHost } from "@/server/auth/session";
+import type { SessionUser } from "@/server/auth/session-core";
+import { canAccessHost } from "@/server/auth/session-core";
 import { createProxmoxClient } from "@/server/proxmox/client";
 import type { ConnectionTestResult, ProxmoxConnectionConfig } from "@/server/proxmox/types";
 

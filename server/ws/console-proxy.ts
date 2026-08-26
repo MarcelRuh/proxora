@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { SESSION_COOKIE } from "@/lib/env";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { hasPermission } from "@/lib/permissions";
-import { getSessionFromToken } from "@/server/auth/session";
+import { getSessionFromToken } from "@/server/auth/session-core";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { clientForHost } from "@/server/services/host-service";
 
