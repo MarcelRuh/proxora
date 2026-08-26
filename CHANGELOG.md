@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.7] – 2026-08-27
+
+### Added
+
+- Hosts can be added with Proxmox **root / PAM password** (`root@pam`). The add-host dialog defaults to password auth; `root` is stored as `root@pam`. API tokens remain available.
+
 ## [1.0.6] – 2026-08-27
 
 ### Fixed

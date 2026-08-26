@@ -26,9 +26,9 @@ type FormState = {
 const empty: FormState = {
   name: "",
   url: "https://192.168.1.10:8006",
-  authType: "API_TOKEN",
+  authType: "PASSWORD",
   username: "root@pam",
-  tokenId: "manager",
+  tokenId: "",
   secret: "",
   allowInsecureTls: true,
 };
@@ -126,11 +126,40 @@ export default function HostsPage() {
           <div className="grid gap-3">
             <Field label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
             <Field label="Host" value={form.url} onChange={(v) => setForm({ ...form, url: v })} />
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="User" value={form.username} onChange={(v) => setForm({ ...form, username: v })} />
-              <Field label="Token ID" value={form.tokenId} onChange={(v) => setForm({ ...form, tokenId: v })} />
+            <div className="space-y-1">
+              <Label>Authentication</Label>
+              <select
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={form.authType}
+                onChange={(e) => {
+                  const authType = e.target.value as FormState["authType"];
+                  setForm({
+                    ...form,
+                    authType,
+                    tokenId: authType === "API_TOKEN" ? form.tokenId || "manager" : "",
+                    username: form.username || "root@pam",
+                  });
+                }}
+              >
+                <option value="PASSWORD">Password (root@pam)</option>
+                <option value="API_TOKEN">API token</option>
+              </select>
             </div>
-            <Field label="Secret" type="password" value={form.secret} onChange={(v) => setForm({ ...form, secret: v })} />
+            <Field
+              label="User"
+              value={form.username}
+              onChange={(v) => setForm({ ...form, username: v })}
+              placeholder="root@pam"
+            />
+            {form.authType === "API_TOKEN" ? (
+              <Field label="Token ID" value={form.tokenId} onChange={(v) => setForm({ ...form, tokenId: v })} />
+            ) : null}
+            <Field
+              label={form.authType === "PASSWORD" ? "Password" : "Token secret"}
+              type="password"
+              value={form.secret}
+              onChange={(v) => setForm({ ...form, secret: v })}
+            />
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -173,16 +202,18 @@ function Field({
   value,
   onChange,
   type = "text",
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
+  placeholder?: string;
 }) {
   return (
     <div className="space-y-1">
       <Label>{label}</Label>
-      <Input type={type} value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { Agent, fetch as undiciFetch, type RequestInit as UndiciRequestInit } fr
 import { ProxmoxApiError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import type { ProxmoxConnectionConfig } from "@/server/proxmox/types";
+import { normalizeProxmoxUsername } from "@/server/proxmox/username";
 
 type Query = Record<string, string | number | boolean | undefined | null>;
 
@@ -81,7 +82,7 @@ export class ProxmoxHttpClient {
         throw new ProxmoxApiError("API token ID is required");
       }
       return {
-        Authorization: `PVEAPIToken=${this.config.username}!${tokenId}=${this.config.secret}`,
+        Authorization: `PVEAPIToken=${normalizeProxmoxUsername(this.config.username)}!${tokenId}=${this.config.secret}`,
       };
     }
     const ticket = await this.ensureTicket();
@@ -97,7 +98,7 @@ export class ProxmoxHttpClient {
     }
     const url = `${this.baseUrl}/api2/json/access/ticket`;
     const body = toFormBody({
-      username: this.config.username,
+      username: normalizeProxmoxUsername(this.config.username),
       password: this.config.secret,
     });
     const response = await this.rawFetch(url, {

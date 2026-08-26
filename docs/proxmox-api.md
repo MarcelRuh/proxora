@@ -30,9 +30,9 @@ Authorization: PVEAPIToken=root@pam!manager=<secret>
 
 Create a token in Datacenter → Permissions → API Tokens. Privilege separation can stay disabled for a management token, or you can grant a minimal ACL.
 
-### Username / password
+### Username / password (root@pam)
 
-`POST /access/ticket` returns `ticket` + `CSRFPreventionToken`. The client caches the ticket for ~90 minutes and sends:
+`POST /access/ticket` with `username=root@pam` (realm is added automatically if omitted) and the PAM password. The client caches the ticket for ~90 minutes and sends:
 
 ```
 Cookie: PVEAuthCookie=<ticket>

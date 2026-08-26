@@ -8,6 +8,7 @@ import type { SessionUser } from "@/server/auth/session-core";
 import { canAccessHost } from "@/server/auth/session-core";
 import { createProxmoxClient } from "@/server/proxmox/client";
 import type { ConnectionTestResult, ProxmoxConnectionConfig } from "@/server/proxmox/types";
+import { normalizeProxmoxUsername } from "@/server/proxmox/username";
 
 export const hostInputSchema = z.object({
   name: z.string().min(1).max(80),
@@ -78,8 +79,8 @@ export function clientConfigFromHost(host: Host, secret: string): ProxmoxConnect
   return {
     url: host.url,
     authType: host.authType,
-    username: host.username,
-    tokenId: host.tokenId,
+    username: normalizeProxmoxUsername(host.username),
+    tokenId: host.authType === "PASSWORD" ? null : host.tokenId,
     secret,
     allowInsecureTls: host.allowInsecureTls,
   };
@@ -96,8 +97,8 @@ export async function testRawConnection(
   const client = createProxmoxClient({
     url: normalizeUrl(input.url),
     authType: input.authType as AuthType,
-    username: input.username,
-    tokenId: input.tokenId,
+    username: normalizeProxmoxUsername(input.username),
+    tokenId: input.authType === "PASSWORD" ? null : input.tokenId,
     secret: input.secret,
     allowInsecureTls: input.allowInsecureTls,
   });
@@ -139,13 +140,14 @@ export async function createHost(input: z.infer<typeof hostInputSchema>) {
   if (input.authType === "API_TOKEN" && !input.tokenId) {
     throw new ValidationError("Token ID is required for API token authentication");
   }
+  const username = normalizeProxmoxUsername(input.username);
   const host = await prisma.host.create({
     data: {
       name: input.name,
       url,
       authType: input.authType,
-      username: input.username,
-      tokenId: input.tokenId ?? null,
+      username,
+      tokenId: input.authType === "PASSWORD" ? null : (input.tokenId ?? null),
       encryptedSecret: encryptSecret(input.secret),
       allowInsecureTls: input.allowInsecureTls ?? false,
       notes: input.notes ?? null,
@@ -163,8 +165,9 @@ export async function updateHost(id: string, input: z.infer<typeof hostUpdateSch
   if (input.name) data.name = input.name;
   if (input.url) data.url = normalizeUrl(input.url);
   if (input.authType) data.authType = input.authType;
-  if (input.username) data.username = input.username;
-  if (input.tokenId !== undefined) data.tokenId = input.tokenId;
+  if (input.username) data.username = normalizeProxmoxUsername(input.username);
+  if (input.authType === "PASSWORD") data.tokenId = null;
+  else if (input.tokenId !== undefined) data.tokenId = input.tokenId;
   if (input.allowInsecureTls !== undefined) data.allowInsecureTls = input.allowInsecureTls;
   if (input.notes !== undefined) data.notes = input.notes;
   if (input.secret) data.encryptedSecret = encryptSecret(input.secret);

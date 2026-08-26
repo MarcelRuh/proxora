@@ -54,7 +54,36 @@ describe("ProxmoxClient", () => {
     const vms = await client.listVms();
     expect(vms).toHaveLength(1);
     expect(vms[0]?.name).toBe("web");
-    expect(String(vi.mocked(undiciFetch).mock.calls[0]?.[0])).toContain("/cluster/resources");
+    const [url, init] = vi.mocked(undiciFetch).mock.calls[0] ?? [];
+    expect(String(url)).toContain("/cluster/resources");
+    expect(String((init as { headers?: Record<string, string> })?.headers?.Authorization)).toContain(
+      "PVEAPIToken=root@pam!manager=",
+    );
+  });
+
+  it("logs in with root password via /access/ticket", async () => {
+    const passwordClient = new ProxmoxClient({
+      url: "https://pve.example:8006",
+      authType: "PASSWORD",
+      username: "root",
+      secret: "pve-root-pw",
+      allowInsecureTls: true,
+    });
+    vi.mocked(undiciFetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { ticket: "PVE:ticket", CSRFPreventionToken: "CSRF" } }),
+        text: async () => JSON.stringify({ data: { ticket: "PVE:ticket", CSRFPreventionToken: "CSRF" } }),
+      } as never)
+      .mockResolvedValueOnce(jsonResponse({ version: "8.4" }) as never);
+    const version = await passwordClient.http.get<{ version: string }>("/version");
+    expect(version.version).toBe("8.4");
+    const [ticketUrl, ticketInit] = vi.mocked(undiciFetch).mock.calls[0] ?? [];
+    expect(String(ticketUrl)).toContain("/access/ticket");
+    expect(String((ticketInit as { body?: string })?.body)).toContain("username=root%40pam");
+    const [, versionInit] = vi.mocked(undiciFetch).mock.calls[1] ?? [];
+    expect((versionInit as { headers?: Record<string, string> })?.headers?.Cookie).toBe("PVEAuthCookie=PVE:ticket");
   });
 
   it("starts a VM via the QEMU status API", async () => {

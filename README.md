@@ -5,7 +5,7 @@
 [![CI](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-> Status: **v1.0.6** – self-hosted Proxmox control plane with in-app updates.
+> Status: **v1.0.7** – self-hosted Proxmox control plane with in-app updates.
 
 Proxora talks to each node through the official **Proxmox VE API**. No cluster required.
 
@@ -98,12 +98,24 @@ Full operator guide: [docs/deployment.md](./docs/deployment.md)
 
 ## Proxmox API setup
 
-On each host (Datacenter → Permissions → API Tokens):
+On each host you can use **root password** or an **API token**.
+
+### Password (root@pam)
+
+1. In Proxora: **Hosts → Add host**
+2. Authentication: **Password (root@pam)**
+3. User: `root@pam` (or just `root`)
+4. Password: the Proxmox root password
+5. Test connection, then save
+
+### API token
+
+On the host (Datacenter → Permissions → API Tokens):
 
 1. User e.g. `root@pam` or a dedicated `manager@pve`
 2. Token ID e.g. `manager`
 3. Copy the secret once
-4. In Proxora: **Hosts → Add host** → Test connection
+4. In Proxora: **Hosts → Add host** → Authentication: **API token**
 
 ## Documentation
 
