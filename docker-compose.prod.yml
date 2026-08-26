@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-proxora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-proxora}
+      POSTGRES_DB: ${POSTGRES_DB:-proxora}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-proxora} -d ${POSTGRES_DB:-proxora}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  proxora:
+    build: .
+    container_name: proxora
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      LISTEN_HOST: "0.0.0.0"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-proxora}:${POSTGRES_PASSWORD:-proxora}@postgres:5432/${POSTGRES_DB:-proxora}?schema=public
+      REDIS_URL: redis://redis:6379
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      SESSION_SECRET: ${SESSION_SECRET}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@localhost}
+      PROXORA_INSTALL_DIR: ${PROXORA_INSTALL_DIR:-/opt/proxora}
+      PROXORA_INSTALL_MOUNT: /install
+      PROXORA_REPO: ${PROXORA_REPO:-MarcelRuh/proxora}
+      PROXORA_BRANCH: ${PROXORA_BRANCH:-main}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    volumes:
+      - ${PROXORA_INSTALL_DIR:-/opt/proxora}:/install
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  postgres_data:

@@ -1,0 +1,172 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum AuthType {
+  API_TOKEN
+  PASSWORD
+}
+
+enum HostConnectionState {
+  ONLINE
+  OFFLINE
+  CONNECTING
+  ERROR
+  MAINTENANCE
+}
+
+enum AuditResult {
+  SUCCESS
+  FAILURE
+}
+
+enum JobStatus {
+  PENDING
+  WAITING
+  RUNNING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  username     String     @unique
+  email        String     @unique
+  passwordHash String
+  status       UserStatus @default(ACTIVE)
+  totpEnabled  Boolean    @default(false)
+  totpSecret   String?
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id])
+  sessions     Session[]
+  auditLogs    AuditLog[]
+  hostAccess   UserHostAccess[]
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String   @default("")
+  isSystem    Boolean  @default(false)
+  permissions String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  ip        String?
+  userAgent String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Host {
+  id               String              @id @default(cuid())
+  name             String
+  url              String
+  authType         AuthType
+  username         String
+  tokenId          String?
+  encryptedSecret  String
+  allowInsecureTls Boolean             @default(false)
+  connectionState  HostConnectionState @default(CONNECTING)
+  lastSeenAt       DateTime?
+  lastError        String?
+  proxmoxVersion   String?
+  clusterName      String?
+  isClusterMember  Boolean             @default(false)
+  notes            String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  userAccess       UserHostAccess[]
+  auditLogs        AuditLog[]
+  jobs             Job[]
+
+  @@index([connectionState])
+}
+
+model UserHostAccess {
+  userId String
+  hostId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  host   Host @relation(fields: [hostId], references: [id], onDelete: Cascade)
+
+  @@id([userId, hostId])
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String?
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ip        String?
+  action    String
+  target    String?
+  hostId    String?
+  host      Host?       @relation(fields: [hostId], references: [id], onDelete: SetNull)
+  result    AuditResult
+  error     String?
+  metadata  Json?
+  createdAt DateTime    @default(now())
+
+  @@index([createdAt])
+  @@index([action])
+  @@index([userId])
+  @@index([hostId])
+}
+
+model Setting {
+  key   String @id
+  value Json
+}
+
+model NotificationChannel {
+  id        String   @id @default(cuid())
+  type      String
+  name      String
+  enabled   Boolean  @default(true)
+  config    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  type        String
+  hostId      String?
+  host        Host?     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  status      JobStatus @default(PENDING)
+  payload     Json?
+  result      Json?
+  error       String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  createdById String?
+
+  @@index([status])
+  @@index([type])
+}

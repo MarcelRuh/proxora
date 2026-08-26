@@ -1,0 +1,40 @@
+# Changelog
+
+All notable changes to this project are documented here.
+
+## [Unreleased]
+
+## [1.0.3] – 2026-08-27
+
+### Fixed
+
+- Docker `npm ci` failed because Prisma `binaryTargets` used `debian-openssl-3.0` instead of `debian-openssl-3.0.x` (`prisma generate` in postinstall)
+
+## [1.0.2] – 2026-08-26
+
+### Fixed
+
+- Container boot no longer treats the Prisma CLI shim as missing (`-x` on a non-executable `node_modules/.bin` link)
+- `prisma migrate deploy` is invoked via `node …/prisma/build/index.js` and retried until Postgres is reachable
+- Prisma client `binaryTargets` include `debian-openssl-3.0.x` for the slim Node image
+
+## [1.0.1] – 2026-08-26
+
+### Fixed
+
+- Production bind address: do not use Docker `HOSTNAME` (container id), listen on `0.0.0.0`
+- Docker image build: provide dummy `DATABASE_URL` so `next build` / Prisma can compile
+- Custom server is incompatible with Next.js `output: "standalone"` – removed
+- wget installer waits until `/api/health` is up and prints username + password again at the end
+
+## [1.0.0] – 2026-08-26
+
+### Added
+
+- First public release of **Proxora**, a central control plane for independent Proxmox VE hosts
+- Host inventory, VM/LXC lifecycle, create wizards, xterm.js consoles
+- Storage and ZFS health, Proxmox APT updates, tasks, audit log, RBAC
+- In-app GitHub self-update with version display (`current → latest`) and live progress bar
+- wget installer / updater (`scripts/install.sh`, `scripts/update.sh`)
+- Docker Compose production stack (web, PostgreSQL, Redis)
+- GitHub Actions CI (lint, typecheck, tests, build)

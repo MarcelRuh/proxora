@@ -1,0 +1,41 @@
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# prisma
+/generated
+
+# Proxora runtime
+.proxora-revision
+.proxora-update-progress
+/data
