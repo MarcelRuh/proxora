@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProgressBar, Skeleton } from "@/components/ui/misc";
-import { HostStateBadge } from "@/components/status-badge";
+import { HostStateBadge, GuestStateBadge } from "@/components/status-badge";
 import { api } from "@/lib/api";
 import { bytesToSize, formatUptime, percentage } from "@/lib/utils";
 import { SelfUpdateSection } from "@/components/settings/self-update-section";
@@ -40,6 +40,26 @@ type Dashboard = {
     user: { username: string } | null;
     host: { name: string } | null;
   }>;
+  guests: {
+    vms: Array<{
+      vmid: number;
+      name: string;
+      node: string;
+      status: string;
+      hostId: string;
+      hostName: string;
+      template?: boolean;
+    }>;
+    containers: Array<{
+      vmid: number;
+      name: string;
+      node: string;
+      status: string;
+      hostId: string;
+      hostName: string;
+      template?: boolean;
+    }>;
+  };
 };
 
 export default function DashboardPage() {
@@ -164,6 +184,20 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <GuestIdCard
+          title="VMs"
+          empty="Keine VMs"
+          items={data.guests?.vms ?? []}
+          href={(g) => `/vms/${g.hostId}/${g.node}/${g.vmid}`}
+        />
+        <GuestIdCard
+          title="Container"
+          empty="Keine Container"
+          items={data.guests?.containers ?? []}
+          href={(g) => `/containers/${g.hostId}/${g.node}/${g.vmid}`}
+        />
+      </div>
     </div>
   );
 }
@@ -177,5 +211,56 @@ function Metric({ label, value }: { label: string; value: number }) {
       </div>
       <ProgressBar value={value} />
     </div>
+  );
+}
+
+function GuestIdCard({
+  title,
+  empty,
+  items,
+  href,
+}: {
+  title: string;
+  empty: string;
+  items: Array<{
+    vmid: number;
+    name: string;
+    node: string;
+    status: string;
+    hostId: string;
+    hostName: string;
+    template?: boolean;
+  }>;
+  href: (item: { vmid: number; node: string; hostId: string }) => string;
+}) {
+  const sorted = [...items].sort((a, b) => a.vmid - b.vmid);
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle>{title}</CardTitle>
+        <span className="text-xs text-muted-foreground">{sorted.length}</span>
+      </CardHeader>
+      <CardContent className="max-h-[28rem] space-y-1 overflow-auto">
+        {sorted.length === 0 ? <p className="text-sm text-muted-foreground">{empty}</p> : null}
+        {sorted.map((g) => (
+          <Link
+            key={`${g.hostId}-${g.node}-${g.vmid}`}
+            href={href(g)}
+            className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted/40"
+          >
+            <span className="min-w-0 truncate">
+              <span className="font-mono font-semibold">{g.vmid}</span>
+              <span className="text-muted-foreground"> · </span>
+              {g.name}
+              {g.template ? <span className="text-xs text-muted-foreground"> (template)</span> : null}
+              <span className="block text-xs text-muted-foreground">
+                {g.hostName} / {g.node}
+              </span>
+            </span>
+            <GuestStateBadge status={g.status} />
+          </Link>
+        ))}
+      </CardContent>
+    </Card>
   );
 }

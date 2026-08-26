@@ -16,14 +16,22 @@ describe("semver", () => {
     expect(selfUpdateTargetVersion("1.2.0", "1.2.0", "1.2.0")).toBeNull();
   });
 
-  it("detects revision drift as an update", () => {
+  it("does not treat git SHA drift as an update when versions match", () => {
     expect(
       isSelfUpdateAvailable({
-        deployedRevision: "aaa",
-        remoteRevision: "bbb",
-        runningVersion: "1.0.0",
-        sourceVersion: "1.0.0",
-        remoteVersion: "1.0.0",
+        runningVersion: "1.0.7",
+        sourceVersion: "1.0.7",
+        remoteVersion: "1.0.7",
+      }),
+    ).toBe(false);
+  });
+
+  it("detects a newer remote version", () => {
+    expect(
+      isSelfUpdateAvailable({
+        runningVersion: "1.0.7",
+        sourceVersion: "1.0.7",
+        remoteVersion: "1.0.8",
       }),
     ).toBe(true);
   });

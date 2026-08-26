@@ -160,8 +160,6 @@ export async function getSelfUpdateStatus(): Promise<SelfUpdateStatus> {
 
   const targetVersion = selfUpdateTargetVersion(APP_VERSION, remoteVersion, sourceVersion);
   const updateAvailable = isSelfUpdateAvailable({
-    deployedRevision: base.localRevision,
-    remoteRevision,
     runningVersion: APP_VERSION,
     sourceVersion,
     remoteVersion,

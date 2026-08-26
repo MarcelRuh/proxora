@@ -205,7 +205,7 @@ function SidebarVersion() {
     <Link href="/updates" className="mt-3 block rounded-md bg-white/5 px-2 py-2 hover:bg-white/10">
       <div className="flex items-center justify-between gap-2 text-[11px]">
         <span className="font-mono text-sidebar-foreground">
-          {current} → {target}
+          {status?.updateAvailable ? `${current} → ${target}` : `v${current}`}
         </span>
         {status?.updateAvailable ? (
           <span className="text-amber-300">Update</span>

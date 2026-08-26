@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.8] – 2026-08-27
+
+### Fixed
+
+- Self-update no longer reports an update when the running version matches GitHub (git SHA drift is ignored).
+
+### Added
+
+- Dashboard lists every VM and CT ID (with name, host, status).
+- ZFS page shows per-disk green/amber/red status and a pool summary (“Alle Platten grün”).
+
 ## [1.0.7] – 2026-08-27
 
 ### Added

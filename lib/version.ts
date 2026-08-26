@@ -1,5 +1,5 @@
 export const APP_NAME = "Proxora";
-export const APP_VERSION = "1.0.7";
+export const APP_VERSION = "1.0.8";
 export const DEFAULT_GITHUB_REPO = "MarcelRuh/proxora";
 export const DEFAULT_GITHUB_BRANCH = "main";
 
@@ -32,14 +32,9 @@ export function selfUpdateTargetVersion(
 }
 
 export function isSelfUpdateAvailable(input: {
-  deployedRevision: string | null;
-  remoteRevision: string | null;
   runningVersion: string;
   sourceVersion: string | null;
   remoteVersion: string | null;
 }): boolean {
-  if (input.remoteRevision && input.deployedRevision && input.remoteRevision !== input.deployedRevision) {
-    return true;
-  }
   return Boolean(selfUpdateTargetVersion(input.runningVersion, input.remoteVersion, input.sourceVersion));
 }

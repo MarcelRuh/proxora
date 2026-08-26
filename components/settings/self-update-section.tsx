@@ -130,11 +130,15 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
           <>
             <p className="text-muted-foreground">{status.message}</p>
             <div className="flex flex-wrap items-baseline gap-2 font-mono text-lg font-semibold">
-              <span>{status.currentVersion}</span>
-              <span className="text-muted-foreground">→</span>
-              <span className={status.updateAvailable ? "text-primary" : "text-muted-foreground"}>
-                {status.targetVersion ?? status.currentVersion}
-              </span>
+              {status.updateAvailable ? (
+                <>
+                  <span>{status.currentVersion}</span>
+                  <span className="text-muted-foreground">→</span>
+                  <span className="text-primary">{status.targetVersion ?? "latest"}</span>
+                </>
+              ) : (
+                <span>v{status.currentVersion}</span>
+              )}
             </div>
             {!compact ? (
               <dl className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
