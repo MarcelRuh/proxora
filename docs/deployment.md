@@ -34,7 +34,8 @@ The wget installer prints username and password again in the final summary box. 
 | `DATABASE_URL` | yes | PostgreSQL |
 | `ENCRYPTION_KEY` | yes | ≥ 32 chars, prefer 64 hex |
 | `SESSION_SECRET` | yes | cookie signing / rotation helper |
-| `APP_URL` | yes in prod | CSRF origin |
+| `APP_URL` | yes in prod | Canonical origin (reverse proxy / HTTPS). LAN IP access still works via `Host`. |
+| `APP_ALLOWED_ORIGINS` | no | Extra CSRF origins, comma-separated |
 | `BOOTSTRAP_ADMIN_PASSWORD` | first boot | change after login |
 | `REDIS_URL` | no | |
 | `NEXT_PUBLIC_WS_URL` | no | only if WS is split |

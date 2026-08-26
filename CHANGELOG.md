@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.5] – 2026-08-27
+
+### Fixed
+
+- CSRF no longer treats `APP_URL=http://localhost:3000` as the only allowed origin. Login from a LAN IP (`http://192.168.x.x:3000`) is allowed when it matches the request `Host`.
+
 ## [1.0.4] – 2026-08-27
 
 ### Fixed

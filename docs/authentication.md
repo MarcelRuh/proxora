@@ -20,7 +20,7 @@ API routes load the cookie, hash it, and join `User` + `Role` + `UserHostAccess`
 
 ## CSRF
 
-Mutating requests with an `Origin` header must match `APP_URL` (or the request `Host` when `APP_URL` is unset).
+Mutating requests with an `Origin` header must match the request `Host` / `X-Forwarded-Host` (LAN IP access), `APP_URL`, or a comma-separated `APP_ALLOWED_ORIGINS` list.
 
 ## Logout
 
