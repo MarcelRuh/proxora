@@ -8,6 +8,7 @@ import {
 } from "@/lib/discord-embed";
 import { channelAllowsTopic, parseNotificationEvents } from "@/lib/notification-topics";
 import { sendNotificationTest } from "@/server/notifications/send-test";
+import { pickGuestName } from "@/server/notifications/guest-name";
 
 describe("notification topic filters", () => {
   it("treats a missing list as all events", () => {
@@ -34,6 +35,10 @@ describe("discord embeds", () => {
         level: "success",
         title: "VM erstellt",
         message: "VM 100 (web)",
+        name: "web",
+        id: "100",
+        host: "pve-lab",
+        node: "pve",
       },
       {
         now: new Date("2026-08-27T13:00:00.000Z"),
@@ -54,6 +59,10 @@ describe("discord embeds", () => {
       footer: { text: "Proxora 1.0.33", icon_url: "https://example.com/icon.png" },
     });
     expect(payload.embeds[0].fields).toEqual([
+      { name: "Name", value: "web", inline: true },
+      { name: "ID", value: "100", inline: true },
+      { name: "Host", value: "pve-lab", inline: true },
+      { name: "Node", value: "pve", inline: true },
       { name: "Ereignis", value: "VM erstellt", inline: true },
       { name: "Stufe", value: "OK", inline: true },
     ]);
@@ -77,6 +86,29 @@ describe("discord embeds", () => {
   it("parses Discord error JSON", () => {
     expect(discordErrorMessage(401, '{"message":"Invalid Webhook Token"}')).toBe("Discord: Invalid Webhook Token");
     expect(discordErrorMessage(500, "")).toBe("Discord webhook failed (500)");
+  });
+
+  it("fills missing identity fields with a dash", () => {
+    const fields = buildDiscordWebhookPayload({
+      topic: "host.offline",
+      level: "error",
+      title: "Host offline",
+      message: "gone",
+    }).embeds[0].fields;
+    expect(fields.slice(0, 4)).toEqual([
+      { name: "Name", value: "—", inline: true },
+      { name: "ID", value: "—", inline: true },
+      { name: "Host", value: "—", inline: true },
+      { name: "Node", value: "—", inline: true },
+    ]);
+  });
+});
+
+describe("guest name lookup", () => {
+  it("reads name or hostname from status payloads", () => {
+    expect(pickGuestName({ name: "web-01" })).toBe("web-01");
+    expect(pickGuestName({ hostname: "ct-mail" })).toBe("ct-mail");
+    expect(pickGuestName({})).toBeUndefined();
   });
 });
 

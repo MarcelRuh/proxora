@@ -152,6 +152,9 @@ function notifyHostState(
       title: "Host online",
       message: `${host.name} ist wieder erreichbar.`,
       hostId: host.id,
+      name: host.name,
+      id: host.id,
+      host: host.name,
     });
     return;
   }
@@ -161,6 +164,9 @@ function notifyHostState(
       title: "Host offline",
       message: `${host.name} ist nicht erreichbar.`,
       hostId: host.id,
+      name: host.name,
+      id: host.id,
+      host: host.name,
     });
   }
 }

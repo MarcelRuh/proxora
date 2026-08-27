@@ -5,6 +5,7 @@ import { clientIp } from "@/server/auth/session";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { notifyTopic } from "@/server/notifications/dispatch";
+import { pickGuestName } from "@/server/notifications/guest-name";
 import { withHostClient } from "@/server/services/host-service";
 
 const actionSchema = z.object({
@@ -86,9 +87,16 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
     throw new ValidationError("Confirmation required");
   }
   const vmid = Number(params.vmid);
-  const upid = await withHostClient(params.id, session.user, async (client) => {
+  let hostName = "";
+  let guestName: string | undefined;
+  const upid = await withHostClient(params.id, session.user, async (client, host) => {
+    hostName = host.name;
     const vm = client.vms;
     const node = params.node;
+    if (body.action === "delete") {
+      const status = await vm.status(node, vmid).catch(() => null);
+      guestName = pickGuestName(status);
+    }
     switch (body.action) {
       case "start":
         return vm.start(node, vmid);
@@ -135,8 +143,12 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
     notifyTopic("vm.deleted", {
       level: "warning",
       title: "VM gelöscht",
-      message: `VM ${vmid} auf ${params.node}`,
+      message: `VM ${vmid}${guestName ? ` (${guestName})` : ""} auf ${params.node}`,
       hostId: params.id,
+      name: guestName,
+      id: String(vmid),
+      host: hostName,
+      node: params.node,
     });
   }
   return json({ upid });

@@ -51,8 +51,10 @@ export const POST = apiRoute("lxc.create", async (req, session, params) => {
   });
   const features = [body.nesting === false ? null : "nesting=1"].filter(Boolean).join(",");
 
-  const upid = await withHostClient(params.id, session.user, (client) =>
-    client.lxc.create(
+  let hostName = "";
+  const upid = await withHostClient(params.id, session.user, (client, host) => {
+    hostName = host.name;
+    return client.lxc.create(
       body.node,
       compactProxmoxBody({
         vmid: body.vmid,
@@ -70,8 +72,8 @@ export const POST = apiRoute("lxc.create", async (req, session, params) => {
         searchdomain: body.searchdomain,
         description: body.description,
       }) as LxcCreateParams,
-    ),
-  );
+    );
+  });
   let started = false;
   if (body.startAfter) {
     const result = await withHostClient(params.id, session.user, (client) =>
@@ -93,6 +95,10 @@ export const POST = apiRoute("lxc.create", async (req, session, params) => {
     title: "Container erstellt",
     message: `LXC ${body.vmid} (${body.hostname})`,
     hostId: params.id,
+    name: body.hostname,
+    id: String(body.vmid),
+    host: hostName,
+    node: body.node,
   });
   return json({ upid, started }, 201);
 });

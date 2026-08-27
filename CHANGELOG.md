@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.34] – 2026-08-27
+
+### Changed
+
+- Discord embeds always show **Name**, **ID**, **Host**, and **Node**.
+- Deleting a VM or container from the detail page returns to `/vms` or `/containers`.
+
 ## [1.0.33] – 2026-08-27
 
 ### Changed

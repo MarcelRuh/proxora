@@ -21,7 +21,9 @@ async function storeSnapshot(
   const count = updates.reduce((sum, n) => sum + n.count, 0);
   const snap = await persistAptSnapshot(host, count);
   if (snap.notify) {
-    await notifyAptUpdates([{ name: host.name, count, hostId: host.id }]);
+    await notifyAptUpdates([
+      { name: host.name, count, hostId: host.id, node: updates.map((u) => u.node).join(", ") || undefined },
+    ]);
   }
   return count;
 }

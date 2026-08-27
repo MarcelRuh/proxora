@@ -141,7 +141,8 @@ export async function runBackupJob(client: ProxmoxClient, jobId: string, nodeHin
   const nodes = await client.nodes.list();
   const node = nodeHint || job.node || nodes[0]?.node;
   if (!node) throw new Error("Kein Node für das Backup");
-  return client.backup.start(node, compactProxmoxBody({ "job-id": jobId, vmid: job.all ? undefined : job.vmid }));
+  const upid = await client.backup.start(node, compactProxmoxBody({ "job-id": jobId, vmid: job.all ? undefined : job.vmid }));
+  return { upid, job, node };
 }
 
 export async function restoreBackup(

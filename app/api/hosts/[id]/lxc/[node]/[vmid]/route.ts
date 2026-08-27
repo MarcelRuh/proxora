@@ -5,6 +5,7 @@ import { clientIp } from "@/server/auth/session";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { notifyTopic } from "@/server/notifications/dispatch";
+import { pickGuestName } from "@/server/notifications/guest-name";
 import { withHostClient } from "@/server/services/host-service";
 
 const actionSchema = z.object({
@@ -61,8 +62,15 @@ export const POST = apiRoute("lxc.view", async (req, session, params) => {
     throw new ValidationError("Confirmation required");
   }
   const vmid = Number(params.vmid);
-  const upid = await withHostClient(params.id, session.user, async (client) => {
+  let hostName = "";
+  let guestName: string | undefined;
+  const upid = await withHostClient(params.id, session.user, async (client, host) => {
+    hostName = host.name;
     const node = params.node;
+    if (body.action === "delete") {
+      const status = await client.lxc.status(node, vmid).catch(() => null);
+      guestName = pickGuestName(status);
+    }
     switch (body.action) {
       case "start":
         return client.lxc.start(node, vmid);
@@ -101,8 +109,12 @@ export const POST = apiRoute("lxc.view", async (req, session, params) => {
     notifyTopic("lxc.deleted", {
       level: "warning",
       title: "Container gelöscht",
-      message: `LXC ${vmid} auf ${params.node}`,
+      message: `LXC ${vmid}${guestName ? ` (${guestName})` : ""} auf ${params.node}`,
       hostId: params.id,
+      name: guestName,
+      id: String(vmid),
+      host: hostName,
+      node: params.node,
     });
   }
   return json({ upid });

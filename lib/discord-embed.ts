@@ -9,6 +9,10 @@ export type DiscordNotificationEvent = {
   title: string;
   message: string;
   hostId?: string;
+  name?: string;
+  id?: string;
+  host?: string;
+  node?: string;
 };
 
 export const DISCORD_EMBED_COLORS: Record<NotificationLevel, number> = {
@@ -44,6 +48,10 @@ export const TEST_NOTIFICATION_EVENT: DiscordNotificationEvent = {
   title: "Proxora Test",
   message:
     "Dieser Kanal ist verbunden. Meldungen erscheinen als strukturiertes Embed — gepostet von Proxora.",
+  name: "web-01",
+  id: "100",
+  host: "pve-lab",
+  node: "pve",
 };
 
 export function proxoraDiscordAvatarUrl(): string {
@@ -56,6 +64,11 @@ function clip(value: string, max: number): string {
   const trimmed = value.trim();
   if (trimmed.length <= max) return trimmed;
   return `${trimmed.slice(0, Math.max(0, max - 1))}…`;
+}
+
+function identityField(label: string, value: string | number | undefined): DiscordEmbedField {
+  const text = value === undefined || String(value).trim() === "" ? "—" : String(value).trim();
+  return { name: label, value: clip(text, 1024), inline: true };
 }
 
 export type DiscordEmbedField = {
@@ -86,6 +99,10 @@ export function buildDiscordWebhookPayload(
   const version = opts?.version ?? APP_VERSION;
   const description = clip(event.message, 4096);
   const fields: DiscordEmbedField[] = [
+    identityField("Name", event.name),
+    identityField("ID", event.id),
+    identityField("Host", event.host),
+    identityField("Node", event.node),
     { name: "Ereignis", value: TOPIC_LABELS[event.topic] ?? event.topic, inline: true },
     { name: "Stufe", value: LEVEL_LABELS[event.level] ?? event.level, inline: true },
   ];

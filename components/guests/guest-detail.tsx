@@ -1,8 +1,8 @@
 "use client";
 
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -35,8 +35,13 @@ function num(value: unknown): number {
 
 export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const { t } = useI18n();
+  const router = useRouter();
+  const qc = useQueryClient();
   const params = useParams<{ hostId: string; node: string; vmid: string }>();
   const search = useSearchParams();
+  const listPath = kind === "vm" ? "/vms" : "/containers";
+  const listQueryKey = kind === "vm" ? ["all-vms"] : ["all-lxc"];
+  const kindLabel = kind === "vm" ? "VM" : "LXC";
   const [snap, setSnap] = useState("");
   const [saving, setSaving] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(search.get("tab") === "console" || search.get("console") === "1");
@@ -62,6 +67,12 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
 
   async function action(name: string, extra: Record<string, unknown> = {}) {
     await api(path, { method: "POST", body: JSON.stringify({ action: name, ...extra }) });
+    if (name === "delete") {
+      toast.success(t("guest.deleted", { kind: kindLabel, id: params.vmid }));
+      await qc.invalidateQueries({ queryKey: listQueryKey });
+      router.push(listPath);
+      return;
+    }
     toast.success(name === "config" ? t("guest.configSaved") : t("common.taskStarted"));
     void refetch();
   }
@@ -83,7 +94,6 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const maxdisk = num(status.maxdisk);
   const netin = num(status.netin);
   const netout = num(status.netout);
-  const kindLabel = kind === "vm" ? "VM" : "LXC";
   const guestFiles = (backups?.files ?? []).filter((f) => f.vmid === Number(params.vmid));
   const latestBackup = guestFiles[0] ?? null;
 

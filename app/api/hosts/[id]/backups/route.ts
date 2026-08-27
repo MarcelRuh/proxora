@@ -9,6 +9,7 @@ import { compactProxmoxBody } from "@/lib/lxc-net";
 import { newBackupJobId, parseBackupVolid } from "@/lib/backup";
 import { jobBody, listHostBackups, restoreBackup, runBackupJob } from "@/server/services/backup-service";
 import { ValidationError } from "@/lib/errors";
+import { lookupGuestName } from "@/server/notifications/guest-name";
 import { notifyTopic } from "@/server/notifications/dispatch";
 
 const jobFields = {
@@ -58,7 +59,12 @@ export const GET = apiRoute(["backup.view", "storage.view"], async (_req, sessio
 
 export const POST = apiRoute(["backup.manage", "storage.manage"], async (req, session, params) => {
   const body = schema.parse(await req.json());
-  const result = await withHostClient(params.id, session.user, async (client) => {
+  let hostName = "";
+  let notifyName: string | undefined;
+  let notifyId: string | undefined;
+  let notifyNode: string | undefined;
+  const result = await withHostClient(params.id, session.user, async (client, host) => {
+    hostName = host.name;
     switch (body.action) {
       case "create-job": {
         const id = body.id?.trim() || newBackupJobId();
@@ -72,10 +78,17 @@ export const POST = apiRoute(["backup.manage", "storage.manage"], async (req, se
         await client.backup.deleteJob(body.id);
         return { id: body.id };
       case "run-job": {
-        const upid = await runBackupJob(client, body.id, body.node);
-        return { upid };
+        const started = await runBackupJob(client, body.id, body.node);
+        notifyName = started.job.all ? "Alle Gäste" : started.job.vmid || started.job.id;
+        notifyId = started.job.all ? started.job.id : started.job.vmid || started.job.id;
+        notifyNode = started.node;
+        return { upid: started.upid };
       }
       case "run": {
+        const first = Number(body.vmid.split(/[,\s]+/).find(Boolean));
+        notifyName = await lookupGuestName(client, body.node, first);
+        notifyId = body.vmid;
+        notifyNode = body.node;
         const upid = await client.backup.start(
           body.node,
           compactProxmoxBody({
@@ -88,6 +101,9 @@ export const POST = apiRoute(["backup.manage", "storage.manage"], async (req, se
         return { upid };
       }
       case "restore": {
+        notifyName = (await lookupGuestName(client, body.node, body.vmid)) || parseBackupVolid(body.volid).filename;
+        notifyId = String(body.vmid);
+        notifyNode = body.node;
         const upid = await restoreBackup(client, body);
         return { upid };
       }
@@ -137,6 +153,10 @@ export const POST = apiRoute(["backup.manage", "storage.manage"], async (req, se
       title: "Backup gestartet",
       message: body.action === "run-job" ? `Job ${"id" in body ? body.id : ""}` : `VM/CT ${"vmid" in body ? body.vmid : ""}`,
       hostId: params.id,
+      name: notifyName,
+      id: notifyId,
+      host: hostName,
+      node: notifyNode,
     });
   }
   if (body.action === "restore") {
@@ -145,6 +165,10 @@ export const POST = apiRoute(["backup.manage", "storage.manage"], async (req, se
       title: "Backup wird eingespielt",
       message: `VM/CT ${body.vmid} ← ${body.volid}`,
       hostId: params.id,
+      name: notifyName,
+      id: notifyId,
+      host: hostName,
+      node: notifyNode,
     });
   }
   return json(result);

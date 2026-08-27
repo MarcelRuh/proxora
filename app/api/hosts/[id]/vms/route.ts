@@ -85,9 +85,11 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
   if (body.efi) payload.efidisk0 = `${body.diskStorage}:1,efitype=4m,pre-enrolled-keys=1`;
   if (body.tpm) payload.tpmstate0 = `${body.diskStorage}:1,version=v2.0`;
 
-  const upid = await withHostClient(params.id, session.user, (client) =>
-    client.vms.create(body.node, payload as VmCreateParams),
-  );
+  let hostName = "";
+  const upid = await withHostClient(params.id, session.user, async (client, host) => {
+    hostName = host.name;
+    return client.vms.create(body.node, payload as VmCreateParams);
+  });
   let started = false;
   if (body.startAfter) {
     const result = await withHostClient(params.id, session.user, (client) =>
@@ -109,6 +111,10 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     title: "VM erstellt",
     message: `VM ${body.vmid} (${body.name})`,
     hostId: params.id,
+    name: body.name,
+    id: String(body.vmid),
+    host: hostName,
+    node: body.node,
   });
   return json({ upid, started }, 201);
 });

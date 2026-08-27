@@ -26,21 +26,24 @@ export async function persistAptSnapshot(
 }
 
 export async function notifyAptUpdates(
-  alerts: Array<{ name: string; count: number; hostId?: string }>,
+  alerts: Array<{ name: string; count: number; hostId?: string; node?: string; preview?: string }>,
 ): Promise<void> {
-  if (alerts.length === 0) return;
-  const total = alerts.reduce((sum, a) => sum + a.count, 0);
-  const lines = alerts.map((a) => `${a.name}: ${a.count} Paket(e)`).join("\n");
-  await dispatchNotification({
-    topic: "host.updates",
-    level: "warning",
-    title: total === 1 ? "1 Host-Update verfügbar" : `${total} Host-Updates verfügbar`,
-    message: lines,
-    hostId: alerts.length === 1 ? alerts[0]?.hostId : undefined,
-  });
+  for (const alert of alerts) {
+    await dispatchNotification({
+      topic: "host.updates",
+      level: "warning",
+      title: alert.count === 1 ? "1 Host-Update verfügbar" : `${alert.count} Host-Updates verfügbar`,
+      message: alert.preview ? `${alert.count} Paket(e): ${alert.preview}` : `${alert.count} Paket(e) auf ${alert.name}`,
+      hostId: alert.hostId,
+      name: alert.name,
+      id: alert.hostId,
+      host: alert.name,
+      node: alert.node,
+    });
+  }
 }
 
-async function refreshOneHost(host: Host): Promise<{ count: number; preview: string[] }> {
+async function refreshOneHost(host: Host): Promise<{ count: number; preview: string[]; nodes: string[] }> {
   const client = await clientForHost(host);
   const nodes = await client.nodes.list();
   let count = 0;
@@ -54,7 +57,7 @@ async function refreshOneHost(host: Host): Promise<{ count: number; preview: str
       if (preview.length < 8 && pkg.Package) preview.push(pkg.Package);
     }
   }
-  return { count, preview };
+  return { count, preview, nodes: nodes.map((n) => n.node) };
 }
 
 export async function refreshAllHostPackageLists(): Promise<{
@@ -63,17 +66,19 @@ export async function refreshAllHostPackageLists(): Promise<{
   notified: number;
 }> {
   const hosts = await prisma.host.findMany({ orderBy: { name: "asc" } });
-  const alerts: Array<{ name: string; count: number; hostId?: string }> = [];
+  const alerts: Array<{ name: string; count: number; hostId?: string; node?: string; preview?: string }> = [];
   let failed = 0;
   for (const host of hosts) {
     try {
-      const { count, preview } = await refreshOneHost(host);
+      const { count, preview, nodes } = await refreshOneHost(host);
       const result = await persistAptSnapshot(host, count);
       if (result.notify) {
         alerts.push({
-          name: preview.length ? `${host.name} (${preview.join(", ")})` : host.name,
+          name: host.name,
           count,
           hostId: host.id,
+          node: nodes.join(", ") || undefined,
+          preview: preview.length ? preview.join(", ") : undefined,
         });
       }
       logger.info({ host: host.name, count }, "APT package list refreshed");
