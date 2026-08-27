@@ -200,29 +200,32 @@ export async function testHost(id: string, user: SessionUser) {
 
 export async function probeAllHosts() {
   const hosts = await prisma.host.findMany({ orderBy: { name: "asc" } });
-  for (const host of hosts) {
-    try {
-      const secret = decryptSecret(host.encryptedSecret);
-      const result = await testRawConnection({
-        name: host.name,
-        url: host.url,
-        authType: host.authType,
-        username: host.username,
-        tokenId: host.tokenId,
-        secret,
-        allowInsecureTls: host.allowInsecureTls,
-      });
-      await applyTestResult(host.id, result);
-      logger.info({ host: host.name, ok: result.ok }, "Host probe finished");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      logger.warn({ host: host.name, err: message }, "Host probe failed");
-      await prisma.host.update({
-        where: { id: host.id },
-        data: { connectionState: HostConnectionState.ERROR, lastError: message },
-      });
-    }
-  }
+  await Promise.all(
+    hosts.map(async (host) => {
+      if (host.connectionState === HostConnectionState.MAINTENANCE) return;
+      try {
+        const secret = decryptSecret(host.encryptedSecret);
+        const result = await testRawConnection({
+          name: host.name,
+          url: host.url,
+          authType: host.authType,
+          username: host.username,
+          tokenId: host.tokenId,
+          secret,
+          allowInsecureTls: host.allowInsecureTls,
+        });
+        await applyTestResult(host.id, result);
+        logger.info({ host: host.name, ok: result.ok }, "Host probe finished");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        logger.warn({ host: host.name, err: message }, "Host probe failed");
+        await prisma.host.update({
+          where: { id: host.id },
+          data: { connectionState: HostConnectionState.ERROR, lastError: message },
+        });
+      }
+    }),
+  );
 }
 
 export async function withHostClient<T>(
@@ -251,6 +254,8 @@ export async function withHostClient<T>(
       where: { id: host.id },
       data: { connectionState: HostConnectionState.ERROR, lastError: message },
     });
+    const { requestHostReconnect } = await import("@/server/services/host-reconnect");
+    requestHostReconnect();
     throw new HostUnreachableError(host.name, message);
   }
 }

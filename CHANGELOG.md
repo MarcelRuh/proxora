@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.20] – 2026-08-27
+
+### Fixed
+
+- After a Proxora or host restart, and after a dropped connection, hosts are probed again until they are online (every 15s while down, every 60s as health check). A live request that marks a host ERROR triggers a reconnect after 3s.
+
 ## [1.0.19] – 2026-08-27
 
 ### Added

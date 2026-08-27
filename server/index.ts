@@ -5,8 +5,8 @@ import next from "next";
 import { WebSocketServer } from "ws";
 import { logger } from "@/lib/logger";
 import { attachConsoleProxy } from "@/server/ws/console-proxy";
-import { probeAllHosts } from "@/server/services/host-service";
 import { startAptRefreshScheduler } from "@/server/services/apt-refresh";
+import { startHostReconnectScheduler } from "@/server/services/host-reconnect";
 
 const dev = process.env.NODE_ENV !== "production";
 const port = Number(process.env.PORT ?? 3000);
@@ -42,9 +42,7 @@ async function main() {
 
   server.listen(port, listenHost, () => {
     logger.info({ port, listenHost, dev }, "Proxora listening");
-    void probeAllHosts().catch((error) => {
-      logger.warn({ err: error }, "Startup host probe failed");
-    });
+    startHostReconnectScheduler();
     startAptRefreshScheduler();
   });
 }
