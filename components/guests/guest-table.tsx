@@ -107,7 +107,7 @@ export function GuestTable({
                         <RotateCcw className="h-4 w-4" />
                       </Button>
                       <Button size="icon" variant="ghost" asChild>
-                        <Link href={`/${detailBase}/${hid}/${g.node}/${g.vmid}?tab=console`}>
+                        <Link href={`/${detailBase}/${hid}/${g.node}/${g.vmid}?console=1`}>
                           <Terminal className="h-4 w-4" />
                         </Link>
                       </Button>

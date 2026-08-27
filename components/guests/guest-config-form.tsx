@@ -41,8 +41,18 @@ const NUMBER_KEYS = new Set([
 function isNet(key: string) {
   return /^net\d+$/.test(key);
 }
+function isMp(key: string) {
+  return /^mp\d+$/.test(key);
+}
 function isDisk(key: string) {
-  return /^(scsi|sata|virtio|ide|efidisk|tpmstate|unused)\d+$/.test(key) || /^(rootfs|mp\d+)$/.test(key);
+  return /^(scsi|sata|virtio|ide|efidisk|tpmstate|unused)\d+$/.test(key) || key === "rootfs";
+}
+
+function nextIndexedKey(prefix: string, form: Record<string, string>, max = 256) {
+  for (let i = 0; i < max; i++) {
+    if (!(`${prefix}${i}` in form)) return `${prefix}${i}`;
+  }
+  return `${prefix}0`;
 }
 
 function stringifyConfig(config: Record<string, unknown>) {
@@ -73,6 +83,10 @@ export function GuestConfigForm({
 }) {
   const original = useMemo(() => stringifyConfig(config), [config]);
   const [form, setForm] = useState(original);
+  const [mpVolume, setMpVolume] = useState("local-lvm:8");
+  const [mpPath, setMpPath] = useState("/mnt/data");
+  const [mpBackup, setMpBackup] = useState(true);
+  const [mpRo, setMpRo] = useState(false);
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
 
@@ -85,7 +99,8 @@ export function GuestConfigForm({
   const flags = Array.from(new Set(["onboot", ...(kind === "vm" ? ["agent", "numa"] : ["unprivileged"]), ...keys.filter((k) => FLAG_KEYS.has(k))]));
   const nets = keys.filter(isNet);
   const disks = keys.filter(isDisk);
-  const rest = keys.filter((k) => !isNet(k) && !isDisk(k) && !FLAG_KEYS.has(k) && !primary.includes(k));
+  const mounts = keys.filter(isMp);
+  const rest = keys.filter((k) => !isNet(k) && !isDisk(k) && !isMp(k) && !FLAG_KEYS.has(k) && !primary.includes(k));
 
   function setField(key: string, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -97,6 +112,21 @@ export function GuestConfigForm({
       delete next[key];
       return next;
     });
+  }
+
+  function addMount() {
+    const volume = mpVolume.trim();
+    const path = mpPath.trim();
+    if (!volume || !path) {
+      toast.error("Volume und Mountpfad angeben");
+      return;
+    }
+    const key = nextIndexedKey("mp", form);
+    const parts = [volume, `mp=${path.startsWith("/") ? path : `/${path}`}`];
+    if (mpBackup) parts.push("backup=1");
+    if (mpRo) parts.push("ro=1");
+    setField(key, parts.join(","));
+    setMpPath("/mnt/data");
   }
 
   function addField() {
@@ -152,6 +182,36 @@ export function GuestConfigForm({
             {disks.map((key) => (
               <RowField key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} onRemove={() => removeField(key)} />
             ))}
+          </div>
+        </Section>
+      ) : null}
+
+      {kind === "lxc" ? (
+        <Section title="Mountpoints">
+          <div className="space-y-2">
+            {mounts.map((key) => (
+              <RowField key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} onRemove={() => removeField(key)} />
+            ))}
+            <div className="grid gap-2 rounded-lg border border-dashed border-border p-3 sm:grid-cols-2">
+              <Field name="volume" value={mpVolume} onChange={setMpVolume} hint="z. B. local-lvm:8" />
+              <Field name="mp" value={mpPath} onChange={setMpPath} hint="Gastpfad" />
+              <label className="flex h-9 items-center gap-2 text-sm">
+                <input type="checkbox" checked={mpBackup} onChange={(e) => setMpBackup(e.target.checked)} />
+                Backup
+              </label>
+              <label className="flex h-9 items-center gap-2 text-sm">
+                <input type="checkbox" checked={mpRo} onChange={(e) => setMpRo(e.target.checked)} />
+                Nur lesen
+              </label>
+              <div className="sm:col-span-2">
+                <Button type="button" variant="outline" onClick={addMount}>
+                  Mountpoint {nextIndexedKey("mp", form)} anlegen
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Volume `storage:größe` legt eine neue Disk an. Danach Config speichern — der Container sollte dafür aus sein.
+            </p>
           </div>
         </Section>
       ) : null}
@@ -213,7 +273,8 @@ function labelFor(key: string) {
     sockets: "Sockets",
     vcpus: "vCPUs",
     cpu: "CPU-Typ",
-    memory: "RAM",
+    mp: "Mountpoint",
+    volume: "Volume",
     balloon: "Balloon",
     swap: "Swap",
     onboot: "Autostart",

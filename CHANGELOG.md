@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.15] – 2026-08-27
+
+### Changed
+
+- Guest detail is one page (no tabs). Power buttons follow running/stopped state. LXC config can add `mpN` mountpoints.
+
 ## [1.0.14] – 2026-08-27
 
 ### Changed
