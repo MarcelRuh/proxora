@@ -81,15 +81,15 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
   }
 
   return (
-    <div className="relative flex min-h-screen bg-background">
+    <div className="relative flex h-dvh overflow-hidden bg-background">
       <NeonAtmosphere />
       <aside
         className={cn(
-          "fixed inset-y-0 z-40 flex w-64 flex-col border-r border-[rgba(131,56,236,0.2)] bg-sidebar text-sidebar-foreground backdrop-blur-md transition-transform lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 flex h-dvh w-64 shrink-0 flex-col overflow-hidden border-r border-[rgba(131,56,236,0.2)] bg-sidebar text-sidebar-foreground backdrop-blur-md transition-transform lg:static lg:h-full lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
-        <div className="flex items-center gap-3 px-4 py-5">
+        <div className="flex shrink-0 items-center gap-3 px-4 py-5">
           <BrandMark className="h-11 w-11 drop-shadow-[0_0_16px_rgba(255,0,110,0.35)]" />
           <div>
             <p className="proxora-logo text-lg leading-none">{APP_NAME.toUpperCase()}</p>
@@ -98,7 +98,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             </p>
           </div>
         </div>
-        <nav className="flex-1 overflow-y-auto px-2 pb-4">
+        <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
           {NAV.map((item) => (
             <NavLink
               key={item.href}
@@ -118,7 +118,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             />
           ))}
         </nav>
-        <div className="space-y-2 border-t border-[rgba(131,56,236,0.2)] p-3">
+        <div className="shrink-0 space-y-2 border-t border-[rgba(131,56,236,0.2)] p-3">
           <button
             onClick={() => setSearchOpen(true)}
             className="flex h-9 w-full items-center gap-2 rounded-[4px] border border-primary/40 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-muted hover:border-primary hover:text-white"
@@ -143,8 +143,8 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
       {open ? (
         <button className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={() => setOpen(false)} />
       ) : null}
-      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 px-4 py-3 lg:hidden">
+      <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        <header className="sticky top-0 z-20 flex items-center gap-3 bg-background/80 px-4 py-3 backdrop-blur-md lg:hidden">
           <Button variant="outline" size="icon" onClick={() => setOpen(true)}>
             {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </Button>

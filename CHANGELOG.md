@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.24] – 2026-08-27
+
+### Fixed
+
+- Sidebar stays pinned to the viewport; only the main content scrolls.
+
 ## [1.0.23] – 2026-08-27
 
 ### Changed
