@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.30] – 2026-08-27
+
+### Added
+
+- Backup jobs can be created, edited, enabled/disabled, run immediately, and deleted.
+- Existing backups can be restored (replace + optional start) or deleted from the Backups page and guest view.
+
 ## [1.0.29] – 2026-08-27
 
 ### Added

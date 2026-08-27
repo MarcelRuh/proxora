@@ -14,6 +14,7 @@ import type {
   ProxmoxVersion,
 } from "@/server/proxmox/types";
 import { VmApi } from "@/server/proxmox/vms";
+import { BackupApi } from "@/server/proxmox/backup";
 
 export class ProxmoxClient {
   readonly http: ProxmoxHttpClient;
@@ -25,6 +26,7 @@ export class ProxmoxClient {
   readonly tasks: TaskApi;
   readonly updates: UpdateApi;
   readonly cluster: ClusterApi;
+  readonly backup: BackupApi;
 
   constructor(config: ProxmoxConnectionConfig) {
     this.http = new ProxmoxHttpClient(config);
@@ -36,6 +38,7 @@ export class ProxmoxClient {
     this.tasks = new TaskApi(this.http);
     this.updates = new UpdateApi(this.http);
     this.cluster = new ClusterApi(this.http);
+    this.backup = new BackupApi(this.http);
   }
 
   version() {

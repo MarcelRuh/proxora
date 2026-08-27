@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Archive,
   Activity,
   Box,
   Boxes,
@@ -41,6 +42,7 @@ const NAV: Array<{ href: string; labelKey: MessageKey; icon: ComponentType<{ cla
   { href: "/vms", labelKey: "nav.vms", icon: Boxes },
   { href: "/containers", labelKey: "nav.containers", icon: Box },
   { href: "/storage", labelKey: "nav.storage", icon: HardDrive },
+  { href: "/backups", labelKey: "nav.backups", icon: Archive },
   { href: "/tasks", labelKey: "nav.tasks", icon: Activity },
   { href: "/updates", labelKey: "nav.updates", icon: Shield },
   { href: "/users", labelKey: "nav.users", icon: Users },

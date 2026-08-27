@@ -5,7 +5,7 @@
 [![CI](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-> Status: **v1.0.29** – self-hosted Proxmox control plane with in-app updates.
+> Status: **v1.0.30** – self-hosted Proxmox control plane with in-app updates.
 
 Proxora talks to each node through the official **Proxmox VE API**. No cluster required.
 
@@ -48,6 +48,7 @@ Preserves `.env` and data volumes, syncs from GitHub, then runs `docker compose 
 - Multi-host inventory (standalone or clustered nodes, treated independently)
 - Live dashboard (CPU/RAM/disk, VM/LXC counts, activity)
 - QEMU + LXC lifecycle, snapshots, clone, config, create wizards
+- Backup jobs, run-now, restore, and backup file delete
 - xterm.js consoles (VM serial, LXC, node shell) via a credential-safe WebSocket proxy
 - Storage overview including ZFS pool health
 - Proxmox APT updates with a job queue

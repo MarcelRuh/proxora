@@ -14,6 +14,9 @@ import { ConfirmAction } from "@/components/confirm-action";
 import { WebConsole } from "@/components/console/web-console";
 import { GuestConfigForm } from "@/components/guests/guest-config-form";
 import { CloneDialog } from "@/components/guests/clone-dialog";
+import { BackupNowDialog } from "@/components/backups/backup-now-dialog";
+import { RestoreDialog } from "@/components/backups/restore-dialog";
+import type { BackupFile, BackupOverview } from "@/components/backups/types";
 import { api } from "@/lib/api";
 import { bytesToSize, formatUptime, percentage } from "@/lib/utils";
 import type { PublicHost } from "@/lib/types";
@@ -51,6 +54,11 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     queryKey: ["options", params.hostId],
     queryFn: () => api<{ nextid: number | null }>(`/api/hosts/${params.hostId}/options`),
   });
+  const { data: backups } = useQuery({
+    queryKey: ["backups", params.hostId],
+    queryFn: () => api<BackupOverview>(`/api/hosts/${params.hostId}/backups`),
+  });
+  const [restoreFile, setRestoreFile] = useState<BackupFile | null>(null);
 
   async function action(name: string, extra: Record<string, unknown> = {}) {
     await api(path, { method: "POST", body: JSON.stringify({ action: name, ...extra }) });
@@ -76,6 +84,8 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const netin = num(status.netin);
   const netout = num(status.netout);
   const kindLabel = kind === "vm" ? "VM" : "LXC";
+  const guestFiles = (backups?.files ?? []).filter((f) => f.vmid === Number(params.vmid));
+  const latestBackup = guestFiles[0] ?? null;
 
   return (
     <div className="space-y-4">
@@ -143,6 +153,18 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           path={path}
           onDone={() => void refetch()}
         />
+        <BackupNowDialog
+          hostId={params.hostId}
+          node={params.node}
+          vmid={Number(params.vmid)}
+          kind={kind}
+          storages={backups?.backupStorages ?? []}
+        />
+        {latestBackup ? (
+          <Button variant="outline" onClick={() => setRestoreFile(latestBackup)}>
+            {t("backup.restore")}
+          </Button>
+        ) : null}
         <Button variant={consoleOpen ? "default" : "outline"} onClick={() => setConsoleOpen((v) => !v)}>
           {consoleOpen ? t("guest.consoleHide") : t("guest.console")}
         </Button>
@@ -236,6 +258,18 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           ))}
         </CardContent>
       </Card>
+      {backups ? (
+        <RestoreDialog
+          hostId={params.hostId}
+          overview={backups}
+          file={restoreFile}
+          open={Boolean(restoreFile)}
+          onOpenChange={(next) => {
+            if (!next) setRestoreFile(null);
+          }}
+          onDone={() => void refetch()}
+        />
+      ) : null}
     </div>
   );
 }

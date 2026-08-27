@@ -23,6 +23,12 @@ export class StorageApi {
       content ? { content } : undefined,
     );
   }
+
+  deleteContent(node: string, storage: string, volume: string) {
+    return this.http.del<null>(
+      `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/content/${encodeURIComponent(volume)}`,
+    );
+  }
 }
 
 export class ZfsApi {

@@ -79,6 +79,9 @@ export default function HostDetailPage() {
         <Button variant="outline" asChild>
           <Link href={`/updates?host=${params.id}`}>Updates</Link>
         </Button>
+        <Button variant="outline" asChild>
+          <Link href="/backups">Backups</Link>
+        </Button>
         <ConfirmAction
           title="Reboot this node?"
           description="Running guests will be interrupted. Confirm you have a maintenance window."

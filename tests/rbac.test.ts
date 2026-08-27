@@ -12,6 +12,8 @@ describe("RBAC", () => {
   it("keeps Viewer read-only", () => {
     const granted = ROLE_PRESETS.viewer.permissions;
     expect(hasPermission(granted, "vm.view")).toBe(true);
+    expect(hasPermission(granted, "backup.view")).toBe(true);
+    expect(hasPermission(granted, "backup.manage")).toBe(false);
     expect(hasPermission(granted, "vm.delete")).toBe(false);
     expect(hasPermission(granted, "hosts.reboot")).toBe(false);
     expect(hasAnyPermission(granted, ["vm.start", "lxc.start"])).toBe(false);
