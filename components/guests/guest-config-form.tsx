@@ -40,10 +40,10 @@ const NUMBER_KEYS = new Set([
   "acpi",
 ]);
 
-const CPU_KEYS = ["cores", "sockets", "vcpus", "memory", "balloon", "swap", "cpuunits"];
+const CPU_KEYS = ["cores", "sockets", "vcpus", "memory", "balloon", "swap"];
 const META_KEYS = ["name", "hostname", "ostype", "tags", "description"];
 /** Keep in form state (so save does not delete them) but do not show. */
-const HIDDEN_UI_KEYS = new Set(["cpu", "cpulimit"]);
+const HIDDEN_UI_KEYS = new Set(["cpu", "cpulimit", "cpuunits"]);
 
 function isNet(key: string) {
   return /^net\d+$/.test(key);
@@ -321,7 +321,7 @@ export function GuestConfigForm({
 
 function preferredOrder(kind: "vm" | "lxc") {
   return kind === "lxc"
-    ? ["hostname", "ostype", "cores", "memory", "swap", "cpuunits", "tags", "description"]
+    ? ["hostname", "ostype", "cores", "memory", "swap", "tags", "description"]
     : ["name", "ostype", "cores", "sockets", "vcpus", "memory", "balloon", "tags", "description"];
 }
 

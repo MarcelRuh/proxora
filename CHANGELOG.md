@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.18] – 2026-08-27
+
+### Changed
+
+- Guest config also hides CPU-Units (`cpuunits`).
+
 ## [1.0.17] – 2026-08-27
 
 ### Fixed
