@@ -6,7 +6,7 @@ import { collectUsedGuestIps } from "@/server/services/guest-ips";
 import { networksForHostId } from "@/server/services/guest-ip-settings";
 import { withHostClient } from "@/server/services/host-service";
 
-export const GET = apiRoute(["vm.create", "lxc.create"], async (req, session, params) => {
+export const GET = apiRoute(["vm.create", "lxc.create", "vm.clone", "lxc.clone"], async (req, session, params) => {
   const url = new URL(req.url);
   const node = url.searchParams.get("node");
   const networks = await networksForHostId(params.id);

@@ -9,7 +9,7 @@ export const GET = apiRoute("users.view", async () => {
   return json({ users: await listUsers() });
 });
 
-export const POST = apiRoute("users.manage", async (req, session) => {
+export const POST = apiRoute("users.create", async (req, session) => {
   const body = createUserSchema.parse(await req.json());
   const user = await createUser(body);
   await writeAuditLog({

@@ -6,6 +6,9 @@ import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { pickGuestName } from "@/server/notifications/guest-name";
+import { permissionForGuestAction, hasPermission } from "@/lib/permissions";
+import { ForbiddenError } from "@/lib/errors";
+import { assertGuestAccess } from "@/server/auth/session-core";
 import { withHostClient } from "@/server/services/host-service";
 import { waitGuestAction } from "@/server/proxmox/task-wait";
 import { durationLabel } from "@/lib/duration";
@@ -48,6 +51,7 @@ const ACTION_AUDIT: Record<string, string> = {
 
 export const GET = apiRoute("lxc.view", async (_req, session, params) => {
   const vmid = Number(params.vmid);
+  assertGuestAccess(session.user, params.id, "lxc", vmid);
   const data = await withHostClient(params.id, session.user, async (client) => {
     const [status, config, snapshots] = await Promise.all([
       client.lxc.status(params.node, vmid),
@@ -61,11 +65,16 @@ export const GET = apiRoute("lxc.view", async (_req, session, params) => {
 
 export const POST = apiRoute("lxc.view", async (req, session, params) => {
   const body = actionSchema.parse(await req.json());
+  const needed = permissionForGuestAction("lxc", body.action);
+  if (!hasPermission(session.user.role.permissions, needed)) {
+    throw new ForbiddenError();
+  }
   if (body.action === "delete" && body.confirm !== true) {
     const { ValidationError } = await import("@/lib/errors");
     throw new ValidationError("Confirmation required");
   }
   const vmid = Number(params.vmid);
+  assertGuestAccess(session.user, params.id, "lxc", vmid);
   let hostName = "";
   let guestName: string | undefined;
   const t0 = Date.now();

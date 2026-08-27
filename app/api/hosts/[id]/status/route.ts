@@ -5,6 +5,9 @@ import { clientIp } from "@/server/auth/session";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
+import { filterGuestsForUser } from "@/server/auth/session-core";
+import { hasPermission } from "@/lib/permissions";
+import { ForbiddenError } from "@/lib/errors";
 
 const actionSchema = z.object({
   action: z.enum(["reboot", "shutdown"]),
@@ -26,13 +29,21 @@ export const GET = apiRoute("hosts.view", async (_req, session, params) => {
       client.listContainers().catch(() => []),
       client.storage.list(nodes[0]?.node).catch(() => []),
     ]);
-    return { host: host.name, nodes: details, vms, containers, storage };
+    return {
+      host: host.name,
+      nodes: details,
+      vms: filterGuestsForUser(session.user, params.id, "vm", vms),
+      containers: filterGuestsForUser(session.user, params.id, "lxc", containers),
+      storage,
+    };
   });
   return json(data);
 });
 
-export const POST = apiRoute("hosts.reboot", async (req, session, params) => {
+export const POST = apiRoute(["hosts.reboot", "hosts.shutdown"], async (req, session, params) => {
   const body = actionSchema.parse(await req.json());
+  const needed = body.action === "reboot" ? "hosts.reboot" : "hosts.shutdown";
+  if (!hasPermission(session.user.role.permissions, needed)) throw new ForbiddenError();
   const upid = await withHostClient(params.id, session.user, async (client) => {
     if (body.action === "reboot") return client.nodes.reboot(body.node);
     return client.nodes.shutdown(body.node);

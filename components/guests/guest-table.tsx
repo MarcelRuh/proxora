@@ -14,6 +14,7 @@ import { api } from "@/lib/api";
 import { bytesToSize, formatUptime } from "@/lib/utils";
 import type { Guest } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { useCan } from "@/components/auth/session-user";
 
 export function GuestTable({
   kind,
@@ -25,6 +26,11 @@ export function GuestTable({
   hostId?: string;
 }) {
   const { t } = useI18n();
+  const canStart = useCan(kind === "vm" ? "vm.start" : "lxc.start");
+  const canShutdown = useCan(kind === "vm" ? "vm.shutdown" : "lxc.shutdown");
+  const canReboot = useCan(kind === "vm" ? "vm.reboot" : "lxc.reboot");
+  const canConsole = useCan(kind === "vm" ? "vm.console" : "lxc.console");
+  const canDelete = useCan(kind === "vm" ? "vm.delete" : "lxc.delete");
   const qc = useQueryClient();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
@@ -115,31 +121,41 @@ export function GuestTable({
                   <td className="px-3 py-2">{formatUptime(g.uptime)}</td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" title={t("guest.start")} onClick={() => void guestAction(hid, g.node, g.vmid, "start")}>
-                        <Play className="h-4 w-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" title={t("guest.shutdown")} onClick={() => void guestAction(hid, g.node, g.vmid, "shutdown")}>
-                        <Square className="h-4 w-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" title={t("guest.reboot")} onClick={() => void guestAction(hid, g.node, g.vmid, "reboot")}>
-                        <RotateCcw className="h-4 w-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" asChild>
-                        <Link href={`/${detailBase}/${hid}/${g.node}/${g.vmid}?console=1`}>
-                          <Terminal className="h-4 w-4" />
-                        </Link>
-                      </Button>
-                      <ConfirmAction
-                        title={t("guest.deleteTitle", { kind: kindLabel, id: g.vmid })}
-                        description={t("guest.deleteBody", { id: g.vmid, name: g.name })}
-                        actionLabel={t("guest.delete")}
-                        destructive
-                        onConfirm={() => guestAction(hid, g.node, g.vmid, "delete")}
-                      >
-                        <Button size="sm" variant="destructive">
-                          {t("guest.delete")}
+                      {canStart ? (
+                        <Button size="icon" variant="ghost" title={t("guest.start")} onClick={() => void guestAction(hid, g.node, g.vmid, "start")}>
+                          <Play className="h-4 w-4" />
                         </Button>
-                      </ConfirmAction>
+                      ) : null}
+                      {canShutdown ? (
+                        <Button size="icon" variant="ghost" title={t("guest.shutdown")} onClick={() => void guestAction(hid, g.node, g.vmid, "shutdown")}>
+                          <Square className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                      {canReboot ? (
+                        <Button size="icon" variant="ghost" title={t("guest.reboot")} onClick={() => void guestAction(hid, g.node, g.vmid, "reboot")}>
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                      {canConsole ? (
+                        <Button size="icon" variant="ghost" asChild>
+                          <Link href={`/${detailBase}/${hid}/${g.node}/${g.vmid}?console=1`}>
+                            <Terminal className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      ) : null}
+                      {canDelete ? (
+                        <ConfirmAction
+                          title={t("guest.deleteTitle", { kind: kindLabel, id: g.vmid })}
+                          description={t("guest.deleteBody", { id: g.vmid, name: g.name })}
+                          actionLabel={t("guest.delete")}
+                          destructive
+                          onConfirm={() => guestAction(hid, g.node, g.vmid, "delete")}
+                        >
+                          <Button size="sm" variant="destructive">
+                            {t("guest.delete")}
+                          </Button>
+                        </ConfirmAction>
+                      ) : null}
                     </div>
                   </td>
                 </tr>

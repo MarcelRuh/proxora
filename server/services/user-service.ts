@@ -1,8 +1,15 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
-import { ALL_PERMISSIONS, type Permission } from "@/lib/permissions";
+import { sanitizePermissions } from "@/lib/permissions";
 import { hashPassword } from "@/lib/password";
+import { parseGuestKind } from "@/lib/guest-scope";
+
+const guestScopeSchema = z.object({
+  hostId: z.string().min(1),
+  kind: z.enum(["vm", "lxc"]),
+  vmid: z.number().int().positive(),
+});
 
 export const createUserSchema = z.object({
   username: z.string().min(2).max(40).regex(/^[a-zA-Z0-9._-]+$/),
@@ -10,6 +17,7 @@ export const createUserSchema = z.object({
   password: z.string().min(10).max(200),
   roleId: z.string().min(1),
   hostIds: z.array(z.string()).optional(),
+  guests: z.array(guestScopeSchema).optional(),
 });
 
 export const updateUserSchema = z.object({
@@ -18,6 +26,7 @@ export const updateUserSchema = z.object({
   roleId: z.string().min(1).optional(),
   status: z.enum(["ACTIVE", "DISABLED"]).optional(),
   hostIds: z.array(z.string()).optional(),
+  guests: z.array(guestScopeSchema).optional(),
 });
 
 export const createRoleSchema = z.object({
@@ -38,14 +47,22 @@ function sanitizeUser<T extends { passwordHash: string; totpSecret: string | nul
   return rest;
 }
 
+function toGuestScope(rows: Array<{ hostId: string; kind: string; vmid: number }>) {
+  return rows.flatMap((g) => {
+    const kind = parseGuestKind(g.kind);
+    return kind ? [{ hostId: g.hostId, kind, vmid: g.vmid }] : [];
+  });
+}
+
 export async function listUsers() {
   const users = await prisma.user.findMany({
-    include: { role: true, hostAccess: true },
+    include: { role: true, hostAccess: true, guestAccess: true },
     orderBy: { username: "asc" },
   });
   return users.map((u) => ({
     ...sanitizeUser(u),
     hostIds: u.hostAccess.map((h) => h.hostId),
+    guests: toGuestScope(u.guestAccess),
   }));
 }
 
@@ -65,12 +82,16 @@ export async function createUser(input: z.infer<typeof createUserSchema>) {
       hostAccess: input.hostIds?.length
         ? { create: input.hostIds.map((hostId) => ({ hostId })) }
         : undefined,
+      guestAccess: input.guests?.length
+        ? { create: input.guests.map((g) => ({ hostId: g.hostId, kind: g.kind, vmid: g.vmid })) }
+        : undefined,
     },
-    include: { role: true, hostAccess: true },
+    include: { role: true, hostAccess: true, guestAccess: true },
   });
   return {
     ...sanitizeUser(user),
     hostIds: user.hostAccess.map((h) => h.hostId),
+    guests: toGuestScope(user.guestAccess),
   };
 }
 
@@ -94,13 +115,22 @@ export async function updateUser(id: string, input: z.infer<typeof updateUserSch
       });
     }
   }
+  if (input.guests) {
+    await prisma.userGuestAccess.deleteMany({ where: { userId: id } });
+    if (input.guests.length) {
+      await prisma.userGuestAccess.createMany({
+        data: input.guests.map((g) => ({ userId: id, hostId: g.hostId, kind: g.kind, vmid: g.vmid })),
+      });
+    }
+  }
   const fresh = await prisma.user.findUniqueOrThrow({
     where: { id },
-    include: { role: true, hostAccess: true },
+    include: { role: true, hostAccess: true, guestAccess: true },
   });
   return {
     ...sanitizeUser(fresh),
     hostIds: fresh.hostAccess.map((h) => h.hostId),
+    guests: toGuestScope(fresh.guestAccess),
   };
 }
 
@@ -119,9 +149,7 @@ export async function listRoles() {
 }
 
 export async function createRole(input: z.infer<typeof createRoleSchema>) {
-  const permissions = input.permissions.filter((p) =>
-    ALL_PERMISSIONS.includes(p as Permission),
-  );
+  const permissions = sanitizePermissions(input.permissions);
   return prisma.role.create({
     data: {
       name: input.name,
@@ -144,7 +172,7 @@ export async function updateRole(id: string, input: Partial<z.infer<typeof creat
     data: {
       name: input.name,
       description: input.description,
-      permissions: input.permissions?.filter((p) => ALL_PERMISSIONS.includes(p as Permission)),
+      permissions: input.permissions ? sanitizePermissions(input.permissions) : undefined,
     },
   });
 }

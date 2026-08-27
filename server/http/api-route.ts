@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import type { Permission } from "@/lib/permissions";
 import type { AuthSession } from "@/server/auth/session";
 import { requirePermission, requireSession } from "@/server/auth/session";
+import { hasAnyPermission } from "@/lib/permissions";
 import { assertSameOrigin, handleRouteError } from "@/server/http/respond";
 
 type Ctx = { params?: Promise<Record<string, string>> };
@@ -28,8 +29,7 @@ export function apiRoute(
 
 async function requireAny(permissions: Permission[]) {
   const session = await requireSession();
-  const granted = session.user.role.permissions;
-  if (!permissions.some((p) => granted.includes(p))) {
+  if (!hasAnyPermission(session.user.role.permissions, permissions)) {
     const { ForbiddenError } = await import("@/lib/errors");
     throw new ForbiddenError();
   }

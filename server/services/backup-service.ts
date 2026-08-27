@@ -9,6 +9,7 @@ import {
 } from "@/lib/backup";
 import { withHostClient } from "@/server/services/host-service";
 import type { SessionUser } from "@/server/auth/session";
+import { filterGuestsForUser } from "@/server/auth/session-core";
 import type { ProxmoxClient } from "@/server/proxmox/client";
 
 export type BackupGuest = { vmid: number; name: string; kind: "vm" | "lxc"; node: string };
@@ -89,9 +90,23 @@ export async function listHostBackups(hostId: string, user: SessionUser) {
     files.sort((a, b) => b.ctime - a.ctime);
 
     const guests: BackupGuest[] = [
-      ...vms.map((g) => ({ vmid: g.vmid, name: g.name, kind: "vm" as const, node: g.node })),
-      ...containers.map((g) => ({ vmid: g.vmid, name: g.name, kind: "lxc" as const, node: g.node })),
+      ...filterGuestsForUser(user, hostId, "vm", vms).map((g) => ({
+        vmid: g.vmid,
+        name: g.name,
+        kind: "vm" as const,
+        node: g.node,
+      })),
+      ...filterGuestsForUser(user, hostId, "lxc", containers).map((g) => ({
+        vmid: g.vmid,
+        name: g.name,
+        kind: "lxc" as const,
+        node: g.node,
+      })),
     ].sort((a, b) => a.vmid - b.vmid);
+    const allowedVmids =
+      user.allowedGuests === null
+        ? null
+        : new Set(user.allowedGuests.filter((g) => g.hostId === hostId).map((g) => g.vmid));
 
     return {
       nodes: nodeNames,
@@ -99,7 +114,7 @@ export async function listHostBackups(hostId: string, user: SessionUser) {
       backupStorages,
       diskStorages,
       jobs: (Array.isArray(jobsRaw) ? jobsRaw : []).map((job) => normalizeBackupJob(job)).filter((j) => j.id),
-      files,
+      files: allowedVmids ? files.filter((f) => f.vmid != null && allowedVmids.has(f.vmid)) : files,
       guests,
     };
   });

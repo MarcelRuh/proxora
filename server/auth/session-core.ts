@@ -1,6 +1,11 @@
-import { ForbiddenError } from "@/lib/errors";
+import { ForbiddenError, NotFoundError } from "@/lib/errors";
 import { prisma } from "@/lib/db";
 import { randomToken, sha256 } from "@/lib/crypto";
+import type { GuestScope } from "@/lib/guest-scope";
+import { parseGuestKind, canAccessGuest, canAccessHost } from "@/lib/guest-scope";
+import { ensureSystemRoles } from "@/server/services/role-sync";
+
+export { canAccessGuest, canAccessHost, filterGuestsForUser } from "@/lib/guest-scope";
 
 export { hashPassword, verifyPassword } from "@/lib/password";
 
@@ -15,6 +20,7 @@ export type SessionUser = {
     permissions: string[];
   };
   allowedHostIds: string[] | null;
+  allowedGuests: GuestScope[] | null;
 };
 
 export type AuthSession = {
@@ -47,6 +53,7 @@ export async function destroySession(token: string) {
 
 export async function getSessionFromToken(token: string | undefined | null): Promise<AuthSession | null> {
   if (!token) return null;
+  await ensureSystemRoles();
   const record = await prisma.session.findUnique({
     where: { tokenHash: sha256(token) },
     include: {
@@ -54,6 +61,7 @@ export async function getSessionFromToken(token: string | undefined | null): Pro
         include: {
           role: true,
           hostAccess: true,
+          guestAccess: true,
         },
       },
     },
@@ -66,8 +74,15 @@ export async function getSessionFromToken(token: string | undefined | null): Pro
   }
   if (record.user.status !== "ACTIVE") return null;
 
-  const allowedHostIds =
-    record.user.hostAccess.length > 0 ? record.user.hostAccess.map((h) => h.hostId) : null;
+  const guests: GuestScope[] = record.user.guestAccess.flatMap((row) => {
+    const kind = parseGuestKind(row.kind);
+    return kind ? [{ hostId: row.hostId, kind, vmid: row.vmid }] : [];
+  });
+  const hostFromAccess = record.user.hostAccess.map((h) => h.hostId);
+  const hostFromGuests = guests.map((g) => g.hostId);
+  let allowedHostIds: string[] | null = null;
+  if (hostFromAccess.length > 0) allowedHostIds = [...new Set(hostFromAccess)];
+  else if (hostFromGuests.length > 0) allowedHostIds = [...new Set(hostFromGuests)];
 
   return {
     id: record.id,
@@ -82,18 +97,20 @@ export async function getSessionFromToken(token: string | undefined | null): Pro
         permissions: record.user.role.permissions,
       },
       allowedHostIds,
+      allowedGuests: guests.length ? guests : null,
     },
   };
-}
-
-export function canAccessHost(user: SessionUser, hostId: string): boolean {
-  if (user.allowedHostIds === null) return true;
-  return user.allowedHostIds.includes(hostId);
 }
 
 export function assertHostAccess(user: SessionUser, hostId: string) {
   if (!canAccessHost(user, hostId)) {
     throw new ForbiddenError("You are not allowed to access this host");
+  }
+}
+
+export function assertGuestAccess(user: SessionUser, hostId: string, kind: "vm" | "lxc", vmid: number) {
+  if (!canAccessGuest(user, hostId, kind, vmid)) {
+    throw new NotFoundError(kind === "vm" ? "VM not found" : "Container not found");
   }
 }
 

@@ -1,5 +1,6 @@
 import type { SessionUser } from "@/server/auth/session";
 import { listHosts, withHostClient } from "@/server/services/host-service";
+import { filterGuestsForUser } from "@/server/auth/session-core";
 import type { GuestListItem } from "@/server/proxmox/types";
 
 export type HostOverview = {
@@ -98,7 +99,12 @@ export async function getDashboard(user: SessionUser) {
             client.listVms().catch(() => [] as GuestListItem[]),
             client.listContainers().catch(() => [] as GuestListItem[]),
           ]);
-          return { hostId: host.id, hostName: host.name, vms, containers };
+          return {
+            hostId: host.id,
+            hostName: host.name,
+            vms: filterGuestsForUser(user, host.id, "vm", vms),
+            containers: filterGuestsForUser(user, host.id, "lxc", containers),
+          };
         });
       } catch {
         return { hostId: host.id, hostName: host.name, vms: [] as GuestListItem[], containers: [] as GuestListItem[] };

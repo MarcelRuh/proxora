@@ -5,7 +5,7 @@ import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { createRoleSchema, deleteRole, updateRole } from "@/server/services/user-service";
 
-export const PATCH = apiRoute("roles.manage", async (req, session, params) => {
+export const PATCH = apiRoute("roles.update", async (req, session, params) => {
   const body = createRoleSchema.partial().parse(await req.json());
   const role = await updateRole(params.id, body);
   await writeAuditLog({
@@ -18,7 +18,7 @@ export const PATCH = apiRoute("roles.manage", async (req, session, params) => {
   return json({ role });
 });
 
-export const DELETE = apiRoute("roles.manage", async (_req, session, params) => {
+export const DELETE = apiRoute("roles.delete", async (_req, session, params) => {
   await deleteRole(params.id);
   await writeAuditLog({
     userId: session.user.id,

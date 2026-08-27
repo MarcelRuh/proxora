@@ -8,9 +8,11 @@ import { api } from "@/lib/api";
 import type { Guest, PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { useCan } from "@/components/auth/session-user";
 
 export default function ContainersPage() {
   const { t } = useI18n();
+  const canCreate = useCan("lxc.create");
   const { data: hosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
@@ -41,9 +43,11 @@ export default function ContainersPage() {
         title={t("lxc.title")}
         description={t("lxc.description")}
         actions={
-          <Button asChild>
-            <Link href="/containers/create">{t("lxc.create")}</Link>
-          </Button>
+          canCreate ? (
+            <Button asChild>
+              <Link href="/containers/create">{t("lxc.create")}</Link>
+            </Button>
+          ) : undefined
         }
       />
       <GuestTable kind="lxc" items={data ?? []} />

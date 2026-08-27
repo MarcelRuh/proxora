@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.37] – 2026-08-27
+
+### Changed
+
+- Roles are per-action (start vs shutdown vs force-stop vs config vs snapshot, …) instead of coarse `hosts.edit` / `vm.edit`.
+- Users can be limited to selected hosts **and** individual VMs/containers.
+- Navigation and action buttons follow the same fine permissions.
+
 ## [1.0.36] – 2026-08-27
 
 ### Added

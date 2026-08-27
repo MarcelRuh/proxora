@@ -10,7 +10,7 @@ export const GET = apiRoute("settings.view", async () => {
   return json({ settings, channels });
 });
 
-export const PATCH = apiRoute("settings.manage", async (req) => {
+export const PATCH = apiRoute("settings.update", async (req) => {
   const body = (await req.json()) as { key: string; value: unknown };
   const setting = await prisma.setting.upsert({
     where: { key: body.key },

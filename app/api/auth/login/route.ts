@@ -18,6 +18,7 @@ import { verifyPassword } from "@/lib/password";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { decryptSecret } from "@/lib/crypto";
 import { createTotpTicket, readTotpTicket, verifyTotp } from "@/lib/totp";
+import { parseGuestKind } from "@/lib/guest-scope";
 
 const loginSchema = z.object({
   username: z.string().min(1).optional(),
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
       const ticket = readTotpTicket(body.ticket);
       const user = await prisma.user.findUnique({
         where: { id: ticket.userId },
-        include: { role: true, hostAccess: true },
+        include: { role: true, hostAccess: true, guestAccess: true },
       });
       if (!user || user.status !== "ACTIVE" || !user.totpEnabled || !user.totpSecret) {
         return json({ error: "Invalid username or password", code: "INVALID_CREDENTIALS" }, 401);
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { username: body.username },
-      include: { role: true, hostAccess: true },
+      include: { role: true, hostAccess: true, guestAccess: true },
     });
     const valid = user ? await verifyPassword(body.password, user.passwordHash) : false;
     if (!user || !valid || user.status !== "ACTIVE") {
@@ -100,6 +101,7 @@ async function finishLogin(
     email: string;
     role: { slug: string; name: string; permissions: string[] };
     hostAccess: Array<{ hostId: string }>;
+    guestAccess: Array<{ hostId: string; kind: string; vmid: number }>;
   },
   ip: string | undefined,
 ) {
@@ -112,6 +114,10 @@ async function finishLogin(
     target: user.username,
     result: "SUCCESS",
   });
+  const guests = user.guestAccess.flatMap((row) => {
+    const kind = parseGuestKind(row.kind);
+    return kind ? [{ hostId: row.hostId, kind, vmid: row.vmid }] : [];
+  });
   const store = await cookies();
   store.set(SESSION_COOKIE, token, sessionCookieOptions(expiresAt));
   return json({
@@ -121,6 +127,7 @@ async function finishLogin(
       email: user.email,
       role: { slug: user.role.slug, name: user.role.name, permissions: user.role.permissions },
       allowedHostIds: user.hostAccess.length ? user.hostAccess.map((h) => h.hostId) : null,
+      allowedGuests: guests.length ? guests : null,
     },
   });
 }

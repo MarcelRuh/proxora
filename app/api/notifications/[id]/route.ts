@@ -13,7 +13,7 @@ const patchSchema = z.object({
   url: z.string().min(8).optional(),
 });
 
-export const PATCH = apiRoute("settings.manage", async (req, _session, params) => {
+export const PATCH = apiRoute("notifications.update", async (req, _session, params) => {
   const body = patchSchema.parse(await req.json());
   const existing = await prisma.notificationChannel.findUnique({ where: { id: params.id } });
   if (!existing) throw new NotFoundError("Notification channel not found");
@@ -45,7 +45,7 @@ export const PATCH = apiRoute("settings.manage", async (req, _session, params) =
   });
 });
 
-export const DELETE = apiRoute("settings.manage", async (_req, _session, params) => {
+export const DELETE = apiRoute("notifications.delete", async (_req, _session, params) => {
   const existing = await prisma.notificationChannel.findUnique({ where: { id: params.id } });
   if (!existing) throw new NotFoundError("Notification channel not found");
   await prisma.notificationChannel.delete({ where: { id: existing.id } });

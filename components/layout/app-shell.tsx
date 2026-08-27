@@ -28,7 +28,8 @@ import { AptUpdateBanner, useAptSummary } from "@/components/layout/apt-update-a
 import { NeonAtmosphere } from "@/components/layout/neon-atmosphere";
 import { BrandMark } from "@/components/layout/brand-mark";
 import type { SessionUser } from "@/lib/types";
-import { hasPermission } from "@/lib/permissions";
+import { hasAnyPermission, hasPermission } from "@/lib/permissions";
+import type { Permission } from "@/lib/permissions";
 import { APP_NAME, APP_VERSION } from "@/lib/version";
 import { useQuery } from "@tanstack/react-query";
 import type { SelfUpdateStatus } from "@/components/settings/self-update-section";
@@ -36,19 +37,24 @@ import { ProgressBar } from "@/components/ui/misc";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { MessageKey } from "@/lib/i18n/messages";
 
-const NAV: Array<{ href: string; labelKey: MessageKey; icon: ComponentType<{ className?: string }> }> = [
-  { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
-  { href: "/hosts", labelKey: "nav.hosts", icon: Server },
-  { href: "/vms", labelKey: "nav.vms", icon: Boxes },
-  { href: "/containers", labelKey: "nav.containers", icon: Box },
-  { href: "/storage", labelKey: "nav.storage", icon: HardDrive },
-  { href: "/backups", labelKey: "nav.backups", icon: Archive },
-  { href: "/tasks", labelKey: "nav.tasks", icon: Activity },
-  { href: "/updates", labelKey: "nav.updates", icon: Shield },
-  { href: "/users", labelKey: "nav.users", icon: Users },
-  { href: "/roles", labelKey: "nav.roles", icon: Shield },
-  { href: "/audit", labelKey: "nav.audit", icon: ClipboardList },
-  { href: "/settings", labelKey: "nav.settings", icon: Settings },
+const NAV: Array<{
+  href: string;
+  labelKey: MessageKey;
+  icon: ComponentType<{ className?: string }>;
+  anyOf: Permission[];
+}> = [
+  { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard, anyOf: ["hosts.view"] },
+  { href: "/hosts", labelKey: "nav.hosts", icon: Server, anyOf: ["hosts.view"] },
+  { href: "/vms", labelKey: "nav.vms", icon: Boxes, anyOf: ["vm.view"] },
+  { href: "/containers", labelKey: "nav.containers", icon: Box, anyOf: ["lxc.view"] },
+  { href: "/storage", labelKey: "nav.storage", icon: HardDrive, anyOf: ["storage.view", "zfs.view"] },
+  { href: "/backups", labelKey: "nav.backups", icon: Archive, anyOf: ["backup.view"] },
+  { href: "/tasks", labelKey: "nav.tasks", icon: Activity, anyOf: ["tasks.view"] },
+  { href: "/updates", labelKey: "nav.updates", icon: Shield, anyOf: ["updates.view"] },
+  { href: "/users", labelKey: "nav.users", icon: Users, anyOf: ["users.view"] },
+  { href: "/roles", labelKey: "nav.roles", icon: Shield, anyOf: ["roles.view"] },
+  { href: "/audit", labelKey: "nav.audit", icon: ClipboardList, anyOf: ["audit.view"] },
+  { href: "/settings", labelKey: "nav.settings", icon: Settings, anyOf: ["settings.view", "notifications.view", "proxora.update"] },
 ];
 
 export function AppShell({ children, user }: { children: ReactNode; user: SessionUser }) {
@@ -98,7 +104,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
           </div>
         </div>
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-          {NAV.map((item) => (
+          {NAV.filter((item) => hasAnyPermission(user.role.permissions, item.anyOf)).map((item) => (
             <NavLink
               key={item.href}
               href={item.href}

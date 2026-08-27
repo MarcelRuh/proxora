@@ -14,6 +14,7 @@ import { api } from "@/lib/api";
 import { formatUptime, percentage } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { useState } from "react";
+import { useCan } from "@/components/auth/session-user";
 
 type Status = {
   host: string;
@@ -28,6 +29,9 @@ type Status = {
 
 export default function HostDetailPage() {
   const params = useParams<{ id: string }>();
+  const canConsole = useCan("hosts.console");
+  const canReboot = useCan("hosts.reboot");
+  const canShutdown = useCan("hosts.shutdown");
   const [consoleNode, setConsoleNode] = useState<string | null>(null);
   const { data, error, refetch, isLoading } = useQuery({
     queryKey: ["host", params.id],
@@ -75,13 +79,14 @@ export default function HostDetailPage() {
         </Card>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button onClick={() => setConsoleNode(node?.node ?? null)}>Console</Button>
+        {canConsole ? <Button onClick={() => setConsoleNode(node?.node ?? null)}>Console</Button> : null}
         <Button variant="outline" asChild>
           <Link href={`/updates?host=${params.id}`}>Updates</Link>
         </Button>
         <Button variant="outline" asChild>
           <Link href="/backups">Backups</Link>
         </Button>
+        {canReboot ? (
         <ConfirmAction
           title="Reboot this node?"
           description="Running guests will be interrupted. Confirm you have a maintenance window."
@@ -97,6 +102,8 @@ export default function HostDetailPage() {
         >
           <Button variant="destructive">Reboot</Button>
         </ConfirmAction>
+        ) : null}
+        {canShutdown ? (
         <ConfirmAction
           title="Shutdown this node?"
           description="The host will power off. You must start it out-of-band."
@@ -112,8 +119,9 @@ export default function HostDetailPage() {
         >
           <Button variant="destructive">Shutdown</Button>
         </ConfirmAction>
+        ) : null}
       </div>
-      {consoleNode ? <WebConsole hostId={params.id} node={consoleNode} kind="node" /> : null}
+      {consoleNode && canConsole ? <WebConsole hostId={params.id} node={consoleNode} kind="node" /> : null}
       <Section title="Virtual Machines" href="/vms">
         {(data?.vms ?? []).map((vm) => (
           <Row key={vm.vmid} href={`/vms/${params.id}/${vm.node}/${vm.vmid}`} id={vm.vmid} name={vm.name} status={vm.status} />

@@ -1,18 +1,20 @@
 import { cookies, headers } from "next/headers";
 import { SESSION_COOKIE } from "@/lib/env";
 import { ForbiddenError, UnauthorizedError } from "@/lib/errors";
-import type { Permission } from "@/lib/permissions";
-import { hasPermission } from "@/lib/permissions";
+import { hasAnyPermission, hasPermission, type Permission } from "@/lib/permissions";
 import {
   getSessionFromToken,
   type AuthSession,
 } from "@/server/auth/session-core";
 
 export {
+  assertGuestAccess,
   assertHostAccess,
+  canAccessGuest,
   canAccessHost,
   createSession,
   destroySession,
+  filterGuestsForUser,
   getSessionFromToken,
   hashPassword,
   sessionCookieOptions,

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { SESSION_COOKIE } from "@/lib/env";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { hasPermission } from "@/lib/permissions";
-import { getSessionFromToken } from "@/server/auth/session-core";
+import { getSessionFromToken, assertGuestAccess, canAccessHost } from "@/server/auth/session-core";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { clientForHost } from "@/server/services/host-service";
 
@@ -59,6 +59,18 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
     if (!host) {
       browser.close(4404, "Host not found");
       return;
+    }
+    if (!canAccessHost(session.user, hostId)) {
+      browser.close(4404, "Host not found");
+      return;
+    }
+    if ((kind === "vm" || kind === "lxc") && vmid) {
+      try {
+        assertGuestAccess(session.user, hostId, kind, Number(vmid));
+      } catch {
+        browser.close(4404, "Guest not found");
+        return;
+      }
     }
 
     const proxmox = await clientForHost(host);

@@ -14,6 +14,7 @@ import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { useCan } from "@/components/auth/session-user";
 
 type FormState = {
   name: string;
@@ -37,6 +38,8 @@ const empty: FormState = {
 
 export default function HostsPage() {
   const { t } = useI18n();
+  const canCreate = useCan("hosts.create");
+  const canDelete = useCan("hosts.delete");
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["hosts"],
@@ -64,7 +67,7 @@ export default function HostsPage() {
         kicker={t("hosts.kicker")}
         title={t("hosts.title")}
         description={t("hosts.description")}
-        actions={<Button onClick={() => setOpen(true)}>{t("hosts.add")}</Button>}
+        actions={canCreate ? <Button onClick={() => setOpen(true)}>{t("hosts.add")}</Button> : undefined}
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {(data?.hosts ?? []).map((host) => (
@@ -98,6 +101,7 @@ export default function HostsPage() {
                 >
                   {t("hosts.test")}
                 </Button>
+                {canDelete ? (
                 <ConfirmAction
                   title={t("hosts.removeTitle", { name: host.name })}
                   description={t("hosts.removeBody")}
@@ -113,6 +117,7 @@ export default function HostsPage() {
                     {t("hosts.remove")}
                   </Button>
                 </ConfirmAction>
+                ) : null}
               </div>
             </CardContent>
           </Card>

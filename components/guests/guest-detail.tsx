@@ -21,6 +21,7 @@ import { api } from "@/lib/api";
 import { bytesToSize, formatUptime, percentage } from "@/lib/utils";
 import type { PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { useCan } from "@/components/auth/session-user";
 
 type GuestPayload = {
   status: Record<string, unknown>;
@@ -35,6 +36,24 @@ function num(value: unknown): number {
 
 export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const { t } = useI18n();
+  const can = {
+    start: useCan(kind === "vm" ? "vm.start" : "lxc.start"),
+    shutdown: useCan(kind === "vm" ? "vm.shutdown" : "lxc.shutdown"),
+    stop: useCan(kind === "vm" ? "vm.force-stop" : "lxc.force-stop"),
+    snapshotCreate: useCan(kind === "vm" ? "vm.snapshot.create" : "lxc.snapshot.create"),
+    snapshotDelete: useCan(kind === "vm" ? "vm.snapshot.delete" : "lxc.snapshot.delete"),
+    snapshotRollback: useCan(kind === "vm" ? "vm.snapshot.rollback" : "lxc.snapshot.rollback"),
+    reboot: useCan(kind === "vm" ? "vm.reboot" : "lxc.reboot"),
+    pause: useCan("vm.pause"),
+    resume: useCan("vm.resume"),
+    reset: useCan("vm.reset"),
+    clone: useCan(kind === "vm" ? "vm.clone" : "lxc.clone"),
+    delete: useCan(kind === "vm" ? "vm.delete" : "lxc.delete"),
+    console: useCan(kind === "vm" ? "vm.console" : "lxc.console"),
+    config: useCan(kind === "vm" ? "vm.config" : "lxc.config"),
+    backup: useCan("backup.run"),
+    restore: useCan("backup.restore"),
+  };
   const router = useRouter();
   const qc = useQueryClient();
   const params = useParams<{ hostId: string; node: string; vmid: string }>();
@@ -118,81 +137,103 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button disabled={!stopped} onClick={() => void action("start")}>
-          {t("guest.start")}
-        </Button>
-        <Button variant="outline" disabled={!running} onClick={() => void action("shutdown")}>
-          {t("guest.shutdown")}
-        </Button>
-        <Button variant="outline" disabled={stopped} onClick={() => void action("stop")}>
-          {t("guest.stop")}
-        </Button>
-        <Button variant="outline" disabled={!running} onClick={() => void action("reboot")}>
-          {t("guest.reboot")}
-        </Button>
+        {can.start ? (
+          <Button disabled={!stopped} onClick={() => void action("start")}>
+            {t("guest.start")}
+          </Button>
+        ) : null}
+        {can.shutdown ? (
+          <Button variant="outline" disabled={!running} onClick={() => void action("shutdown")}>
+            {t("guest.shutdown")}
+          </Button>
+        ) : null}
+        {can.stop ? (
+          <Button variant="outline" disabled={stopped} onClick={() => void action("stop")}>
+            {t("guest.stop")}
+          </Button>
+        ) : null}
+        {can.reboot ? (
+          <Button variant="outline" disabled={!running} onClick={() => void action("reboot")}>
+            {t("guest.reboot")}
+          </Button>
+        ) : null}
         {kind === "vm" ? (
           <>
-            <Button variant="outline" disabled={!running} onClick={() => void action("pause")}>
-              {t("guest.pause")}
-            </Button>
-            <Button variant="outline" disabled={!paused} onClick={() => void action("resume")}>
-              {t("guest.resume")}
-            </Button>
-            {stopped ? (
-              <Button variant="destructive" disabled>
-                {t("guest.reset")}
+            {can.pause ? (
+              <Button variant="outline" disabled={!running} onClick={() => void action("pause")}>
+                {t("guest.pause")}
               </Button>
-            ) : (
-              <ConfirmAction
-                title={t("guest.resetTitle")}
-                description={t("guest.resetBody")}
-                actionLabel={t("guest.reset")}
-                destructive
-                onConfirm={() => action("reset", { confirm: true })}
-              >
-                <Button variant="destructive">{t("guest.reset")}</Button>
-              </ConfirmAction>
-            )}
+            ) : null}
+            {can.resume ? (
+              <Button variant="outline" disabled={!paused} onClick={() => void action("resume")}>
+                {t("guest.resume")}
+              </Button>
+            ) : null}
+            {can.reset ? (
+              stopped ? (
+                <Button variant="destructive" disabled>
+                  {t("guest.reset")}
+                </Button>
+              ) : (
+                <ConfirmAction
+                  title={t("guest.resetTitle")}
+                  description={t("guest.resetBody")}
+                  actionLabel={t("guest.reset")}
+                  destructive
+                  onConfirm={() => action("reset", { confirm: true })}
+                >
+                  <Button variant="destructive">{t("guest.reset")}</Button>
+                </ConfirmAction>
+              )
+            ) : null}
           </>
         ) : null}
-        <CloneDialog
-          kind={kind}
-          vmid={Number(params.vmid)}
-          name={name}
-          nextid={options?.nextid}
-          path={path}
-          onDone={() => void refetch()}
-        />
-        <BackupNowDialog
-          hostId={params.hostId}
-          node={params.node}
-          vmid={Number(params.vmid)}
-          kind={kind}
-          storages={backups?.backupStorages ?? []}
-        />
-        {latestBackup ? (
+        {can.clone ? (
+          <CloneDialog
+            kind={kind}
+            vmid={Number(params.vmid)}
+            name={name}
+            nextid={options?.nextid}
+            path={path}
+            onDone={() => void refetch()}
+          />
+        ) : null}
+        {can.backup ? (
+          <BackupNowDialog
+            hostId={params.hostId}
+            node={params.node}
+            vmid={Number(params.vmid)}
+            kind={kind}
+            storages={backups?.backupStorages ?? []}
+          />
+        ) : null}
+        {latestBackup && can.restore ? (
           <Button variant="outline" onClick={() => setRestoreFile(latestBackup)}>
             {t("backup.restore")}
           </Button>
         ) : null}
-        <Button variant={consoleOpen ? "default" : "outline"} onClick={() => setConsoleOpen((v) => !v)}>
-          {consoleOpen ? t("guest.consoleHide") : t("guest.console")}
-        </Button>
-        {running || paused ? (
-          <Button variant="destructive" disabled>
-            {t("guest.delete")}
+        {can.console ? (
+          <Button variant={consoleOpen ? "default" : "outline"} onClick={() => setConsoleOpen((v) => !v)}>
+            {consoleOpen ? t("guest.consoleHide") : t("guest.console")}
           </Button>
-        ) : (
-          <ConfirmAction
-            title={t("guest.deleteTitle", { kind: kindLabel, id: params.vmid })}
-            description={t("guest.deleteBody", { id: params.vmid, name })}
-            actionLabel={t("guest.delete")}
-            destructive
-            onConfirm={() => action("delete", { confirm: true })}
-          >
-            <Button variant="destructive">{t("guest.delete")}</Button>
-          </ConfirmAction>
-        )}
+        ) : null}
+        {can.delete ? (
+          running || paused ? (
+            <Button variant="destructive" disabled>
+              {t("guest.delete")}
+            </Button>
+          ) : (
+            <ConfirmAction
+              title={t("guest.deleteTitle", { kind: kindLabel, id: params.vmid })}
+              description={t("guest.deleteBody", { id: params.vmid, name })}
+              actionLabel={t("guest.delete")}
+              destructive
+              onConfirm={() => action("delete", { confirm: true })}
+            >
+              <Button variant="destructive">{t("guest.delete")}</Button>
+            </ConfirmAction>
+          )
+        ) : null}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -214,7 +255,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
         </Card>
       </div>
 
-      {consoleOpen ? (
+      {consoleOpen && can.console ? (
         <WebConsole hostId={params.hostId} node={params.node} kind={kind} vmid={Number(params.vmid)} />
       ) : null}
 
@@ -226,6 +267,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           vmid={Number(params.vmid)}
           config={data.config}
           busy={saving}
+          readOnly={!can.config}
           onSave={async (payload) => {
             setSaving(true);
             try {
@@ -245,23 +287,29 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           <CardTitle>{t("guest.snapshots")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex gap-2">
-            <Input placeholder={t("guest.snapshotName")} value={snap} onChange={(e) => setSnap(e.target.value)} />
-            <Button onClick={() => void action("snapshot", { snapname: snap || `snap-${Date.now()}` })}>
-              {t("guest.createSnapshot")}
-            </Button>
-          </div>
+          {can.snapshotCreate ? (
+            <div className="flex gap-2">
+              <Input placeholder={t("guest.snapshotName")} value={snap} onChange={(e) => setSnap(e.target.value)} />
+              <Button onClick={() => void action("snapshot", { snapname: snap || `snap-${Date.now()}` })}>
+                {t("guest.createSnapshot")}
+              </Button>
+            </div>
+          ) : null}
           {(data?.snapshots ?? []).map((s) => (
             <div key={String(s.name)} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
               <span>{String(s.name)}</span>
               {String(s.name) === "current" ? null : (
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => void action("snapshot-rollback", { snapname: s.name })}>
-                    {t("guest.restore")}
-                  </Button>
-                  <Button size="sm" variant="destructive" onClick={() => void action("snapshot-delete", { snapname: s.name })}>
-                    {t("guest.delete")}
-                  </Button>
+                  {can.snapshotRollback ? (
+                    <Button size="sm" variant="outline" onClick={() => void action("snapshot-rollback", { snapname: s.name })}>
+                      {t("guest.restore")}
+                    </Button>
+                  ) : null}
+                  {can.snapshotDelete ? (
+                    <Button size="sm" variant="destructive" onClick={() => void action("snapshot-delete", { snapname: s.name })}>
+                      {t("guest.delete")}
+                    </Button>
+                  ) : null}
                 </div>
               )}
             </div>

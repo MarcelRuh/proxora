@@ -56,6 +56,7 @@ model User {
   sessions     Session[]
   auditLogs    AuditLog[]
   hostAccess   UserHostAccess[]
+  guestAccess  UserGuestAccess[]
 }
 
 model Role {
@@ -106,6 +107,7 @@ model Host {
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   userAccess       UserHostAccess[]
+  guestAccess      UserGuestAccess[]
   auditLogs        AuditLog[]
   jobs             Job[]
 
@@ -119,6 +121,19 @@ model UserHostAccess {
   host   Host @relation(fields: [hostId], references: [id], onDelete: Cascade)
 
   @@id([userId, hostId])
+}
+
+model UserGuestAccess {
+  userId String
+  hostId String
+  kind   String
+  vmid   Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  host   Host @relation(fields: [hostId], references: [id], onDelete: Cascade)
+
+  @@id([userId, hostId, kind, vmid])
+  @@index([userId])
+  @@index([hostId])
 }
 
 model AuditLog {

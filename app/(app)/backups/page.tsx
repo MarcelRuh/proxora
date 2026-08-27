@@ -14,6 +14,7 @@ import { bytesToSize } from "@/lib/utils";
 import { filterBackupFiles, type BackupFileFilter } from "@/lib/backup";
 import type { PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { useCan } from "@/components/auth/session-user";
 import { JobDialog } from "@/components/backups/job-dialog";
 import { RestoreDialog } from "@/components/backups/restore-dialog";
 import type { BackupFile, BackupJob, BackupOverview } from "@/components/backups/types";
@@ -83,6 +84,12 @@ function HostBackups({
   onDone: () => void;
 }) {
   const { t } = useI18n();
+  const canCreateJob = useCan("backup.job.create");
+  const canUpdateJob = useCan("backup.job.update");
+  const canDeleteJob = useCan("backup.job.delete");
+  const canRun = useCan("backup.run");
+  const canRestore = useCan("backup.restore");
+  const canDeleteFile = useCan("backup.delete");
   const [jobOpen, setJobOpen] = useState(false);
   const [editJob, setEditJob] = useState<BackupJob | null>(null);
   const [restoreFile, setRestoreFile] = useState<BackupFile | null>(null);
@@ -136,7 +143,7 @@ function HostBackups({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3">
         <CardTitle>{hostName}</CardTitle>
-        {overview ? (
+        {overview && canCreateJob ? (
           <Button
             size="sm"
             onClick={() => {
@@ -185,34 +192,40 @@ function HostBackups({
                           </td>
                           <td>
                             <div className="flex flex-wrap gap-1">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setEditJob(job);
-                                  setJobOpen(true);
-                                }}
-                              >
-                                {t("backup.editJob")}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => void post({ action: "run-job", id: job.id, node: job.node || overview.primaryNode }, "backup.started")}
-                              >
-                                {t("backup.runJob")}
-                              </Button>
-                              <ConfirmAction
-                                title={t("backup.deleteJobTitle", { id: job.id })}
-                                description={t("backup.deleteJobBody")}
-                                actionLabel={t("backup.deleteJob")}
-                                destructive
-                                onConfirm={() => post({ action: "delete-job", id: job.id }, "backup.jobDeleted")}
-                              >
-                                <Button size="sm" variant="destructive">
-                                  {t("backup.deleteJob")}
+                              {canUpdateJob ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setEditJob(job);
+                                    setJobOpen(true);
+                                  }}
+                                >
+                                  {t("backup.editJob")}
                                 </Button>
-                              </ConfirmAction>
+                              ) : null}
+                              {canRun ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => void post({ action: "run-job", id: job.id, node: job.node || overview.primaryNode }, "backup.started")}
+                                >
+                                  {t("backup.runJob")}
+                                </Button>
+                              ) : null}
+                              {canDeleteJob ? (
+                                <ConfirmAction
+                                  title={t("backup.deleteJobTitle", { id: job.id })}
+                                  description={t("backup.deleteJobBody")}
+                                  actionLabel={t("backup.deleteJob")}
+                                  destructive
+                                  onConfirm={() => post({ action: "delete-job", id: job.id }, "backup.jobDeleted")}
+                                >
+                                  <Button size="sm" variant="destructive">
+                                    {t("backup.deleteJob")}
+                                  </Button>
+                                </ConfirmAction>
+                              ) : null}
                             </div>
                           </td>
                         </tr>
@@ -303,22 +316,26 @@ function HostBackups({
                               </td>
                               <td>
                                 <div className="flex flex-wrap gap-1">
-                                  <Button size="sm" variant="outline" onClick={() => setRestoreFile(file)}>
-                                    {t("backup.restore")}
-                                  </Button>
-                                  <ConfirmAction
-                                    title={t("backup.deleteFileTitle")}
-                                    description={t("backup.deleteFileBody", { volid: file.volid })}
-                                    actionLabel={t("backup.deleteFile")}
-                                    destructive
-                                    onConfirm={() =>
-                                      post({ action: "delete-file", node: file.node, volid: file.volid }, "backup.fileDeleted")
-                                    }
-                                  >
-                                    <Button size="sm" variant="destructive">
-                                      {t("backup.deleteFile")}
+                                  {canRestore ? (
+                                    <Button size="sm" variant="outline" onClick={() => setRestoreFile(file)}>
+                                      {t("backup.restore")}
                                     </Button>
-                                  </ConfirmAction>
+                                  ) : null}
+                                  {canDeleteFile ? (
+                                    <ConfirmAction
+                                      title={t("backup.deleteFileTitle")}
+                                      description={t("backup.deleteFileBody", { volid: file.volid })}
+                                      actionLabel={t("backup.deleteFile")}
+                                      destructive
+                                      onConfirm={() =>
+                                        post({ action: "delete-file", node: file.node, volid: file.volid }, "backup.fileDeleted")
+                                      }
+                                    >
+                                      <Button size="sm" variant="destructive">
+                                        {t("backup.deleteFile")}
+                                      </Button>
+                                    </ConfirmAction>
+                                  ) : null}
                                 </div>
                               </td>
                             </tr>

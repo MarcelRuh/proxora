@@ -76,12 +76,14 @@ export function GuestConfigForm({
   config,
   onSave,
   busy,
+  readOnly,
 }: {
   kind: "vm" | "lxc";
   vmid: number;
   config: Record<string, unknown>;
   onSave: (payload: Record<string, unknown>) => Promise<void>;
   busy?: boolean;
+  readOnly?: boolean;
 }) {
   const original = useMemo(() => stringifyConfig(config), [config]);
   const [form, setForm] = useState(original);
@@ -182,7 +184,7 @@ export function GuestConfigForm({
   const metaKeys = primary.filter((k) => META_KEYS.includes(k));
 
   return (
-    <div className="space-y-4">
+    <fieldset disabled={readOnly} className="space-y-4 border-0 p-0">
       <Section title="CPU & RAM" description="Kerne und Speicher des Gastes.">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {cpuKeys.map((key) => (
@@ -241,6 +243,7 @@ export function GuestConfigForm({
               </div>
             )}
 
+            {readOnly ? null : (
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-3 rounded-lg border border-border p-4">
                 <div>
@@ -276,9 +279,7 @@ export function GuestConfigForm({
                 </Button>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Danach Config speichern. Für neue Mountpoints sollte der Container aus sein.
-            </p>
+            )}
           </div>
         </Section>
       ) : null}
@@ -297,6 +298,7 @@ export function GuestConfigForm({
           {rest.map((key) => (
             <RowField key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} onRemove={() => removeField(key)} />
           ))}
+          {readOnly ? null : (
           <div className="flex flex-wrap gap-2 pt-2">
             <Input placeholder="Schlüssel" value={newKey} onChange={(e) => setNewKey(e.target.value)} className="max-w-48 font-mono" />
             <Input placeholder="Wert" value={newValue} onChange={(e) => setNewValue(e.target.value)} className="min-w-48 flex-1 font-mono" />
@@ -304,9 +306,11 @@ export function GuestConfigForm({
               Hinzufügen
             </Button>
           </div>
+          )}
         </div>
       </Section>
 
+      {readOnly ? null : (
       <div className="sticky bottom-4 flex justify-end gap-2 rounded-xl border border-border bg-card/95 p-3 shadow-sm backdrop-blur">
         <Button type="button" variant="outline" onClick={() => setForm(original)} disabled={busy}>
           Zurücksetzen
@@ -315,7 +319,8 @@ export function GuestConfigForm({
           {busy ? "Speichern…" : "Config speichern"}
         </Button>
       </div>
-    </div>
+      )}
+    </fieldset>
   );
 }
 

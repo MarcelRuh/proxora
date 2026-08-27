@@ -8,7 +8,7 @@ const schema = z.object({
   type: z.enum(["discord", "webhook"]).optional(),
 });
 
-export const POST = apiRoute("settings.manage", async (req) => {
+export const POST = apiRoute("notifications.update", async (req) => {
   const body = schema.parse(await req.json());
   await sendNotificationTest(body.type ?? "discord", { url: body.url });
   return json({ ok: true });

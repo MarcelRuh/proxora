@@ -21,11 +21,19 @@ export const GET = apiRoute("updates.view", async (_req, session, params) => {
   return json(data);
 });
 
-export const POST = apiRoute("updates.execute", async (req, session, params) => {
+export const POST = apiRoute(["updates.check", "updates.upgrade"], async (req, session, params) => {
   const body = bodySchema.parse(await req.json());
   if (body.action === "check") {
+    const { hasPermission } = await import("@/lib/permissions");
+    const { ForbiddenError } = await import("@/lib/errors");
+    if (!hasPermission(session.user.role.permissions, "updates.check")) throw new ForbiddenError();
     const data = await refreshHostUpdates(params.id, session.user, body.node);
     return json(data);
+  }
+  {
+    const { hasPermission } = await import("@/lib/permissions");
+    const { ForbiddenError } = await import("@/lib/errors");
+    if (!hasPermission(session.user.role.permissions, "updates.upgrade")) throw new ForbiddenError();
   }
   if (body.confirm !== true) {
     const { ValidationError } = await import("@/lib/errors");

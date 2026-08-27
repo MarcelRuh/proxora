@@ -5,6 +5,7 @@ import { clientIp } from "@/server/auth/session";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
+import { filterGuestsForUser } from "@/server/auth/session-core";
 import { buildLxcNet0, compactProxmoxBody, normalizeLxcCidr } from "@/lib/lxc-net";
 import { completeGuestCreate } from "@/server/services/guest-start";
 import { notifyTopic } from "@/server/notifications/dispatch";
@@ -42,7 +43,7 @@ const createLxcSchema = z.object({
 
 export const GET = apiRoute("lxc.view", async (_req, session, params) => {
   const containers = await withHostClient(params.id, session.user, (client) => client.listContainers());
-  return json({ containers });
+  return json({ containers: filterGuestsForUser(session.user, params.id, "lxc", containers) });
 });
 
 export const POST = apiRoute("lxc.create", async (req, session, params) => {

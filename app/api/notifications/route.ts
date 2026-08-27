@@ -24,12 +24,12 @@ function publicChannel(row: { id: string; type: string; name: string; enabled: b
   return { id: row.id, type: row.type, name: row.name, enabled: row.enabled, createdAt: row.createdAt, events };
 }
 
-export const GET = apiRoute("settings.view", async () => {
+export const GET = apiRoute("notifications.view", async () => {
   const rows = await prisma.notificationChannel.findMany({ orderBy: { createdAt: "asc" } });
   return json({ channels: rows.map(publicChannel), topics: [...NOTIFICATION_TOPICS] });
 });
 
-export const POST = apiRoute("settings.manage", async (req) => {
+export const POST = apiRoute("notifications.create", async (req) => {
   const body = schema.parse(await req.json());
   const config = { ...body.config };
   if (body.events !== undefined) config.events = body.events;

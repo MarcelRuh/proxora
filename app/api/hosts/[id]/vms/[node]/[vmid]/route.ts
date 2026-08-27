@@ -6,6 +6,9 @@ import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { pickGuestName } from "@/server/notifications/guest-name";
+import { hasPermission, permissionForGuestAction } from "@/lib/permissions";
+import { ForbiddenError } from "@/lib/errors";
+import { assertGuestAccess } from "@/server/auth/session-core";
 import { withHostClient } from "@/server/services/host-service";
 import { waitGuestAction } from "@/server/proxmox/task-wait";
 import { durationLabel } from "@/lib/duration";
@@ -56,18 +59,12 @@ const ACTION_AUDIT: Record<string, string> = {
 };
 
 function permissionFor(action: string) {
-  if (["start", "stop", "shutdown", "reboot", "reset", "pause", "resume"].includes(action)) {
-    return action === "start" ? ("vm.start" as const) : ("vm.stop" as const);
-  }
-  if (action === "delete") return "vm.delete" as const;
-  if (action === "clone") return "vm.clone" as const;
-  if (action === "migrate") return "vm.migrate" as const;
-  if (action.startsWith("snapshot")) return "vm.snapshot" as const;
-  return "vm.edit" as const;
+  return permissionForGuestAction("vm", action);
 }
 
 export const GET = apiRoute("vm.view", async (_req, session, params) => {
   const vmid = Number(params.vmid);
+  assertGuestAccess(session.user, params.id, "vm", vmid);
   const data = await withHostClient(params.id, session.user, async (client) => {
     const [status, config, snapshots] = await Promise.all([
       client.vms.status(params.node, vmid),
@@ -82,8 +79,7 @@ export const GET = apiRoute("vm.view", async (_req, session, params) => {
 export const POST = apiRoute("vm.view", async (req, session, params) => {
   const body = actionSchema.parse(await req.json());
   const needed = permissionFor(body.action);
-  if (!session.user.role.permissions.includes(needed)) {
-    const { ForbiddenError } = await import("@/lib/errors");
+  if (!hasPermission(session.user.role.permissions, needed)) {
     throw new ForbiddenError();
   }
   if (["delete", "reset"].includes(body.action) && body.confirm !== true) {
@@ -91,6 +87,7 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
     throw new ValidationError("Confirmation required");
   }
   const vmid = Number(params.vmid);
+  assertGuestAccess(session.user, params.id, "vm", vmid);
   let hostName = "";
   let guestName: string | undefined;
   const t0 = Date.now();

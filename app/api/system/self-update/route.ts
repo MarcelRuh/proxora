@@ -8,7 +8,7 @@ export const GET = apiRoute("updates.view", async () => {
   return json(await getSelfUpdateStatus());
 });
 
-export const POST = apiRoute("updates.execute", async (_req, session) => {
+export const POST = apiRoute("proxora.update", async (_req, session) => {
   const result = await applySelfUpdate();
   await writeAuditLog({
     userId: session.user.id,

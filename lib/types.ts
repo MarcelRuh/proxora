@@ -42,4 +42,5 @@ export type SessionUser = {
   email: string;
   role: { id: string; slug: string; name: string; permissions: string[] };
   allowedHostIds: string[] | null;
+  allowedGuests: Array<{ hostId: string; kind: "vm" | "lxc"; vmid: number }> | null;
 };

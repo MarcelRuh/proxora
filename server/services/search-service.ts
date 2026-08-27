@@ -1,5 +1,6 @@
 import type { SessionUser } from "@/server/auth/session";
 import { listHosts, withHostClient } from "@/server/services/host-service";
+import { filterGuestsForUser } from "@/server/auth/session-core";
 
 export async function globalSearch(user: SessionUser, query: string) {
   const q = query.trim().toLowerCase();
@@ -20,7 +21,7 @@ export async function globalSearch(user: SessionUser, query: string) {
             client.storage.list().catch(() => []),
           ]);
           return {
-            vms: vms
+            vms: filterGuestsForUser(user, host.id, "vm", vms)
               .filter((v) => v.name.toLowerCase().includes(q) || String(v.vmid).includes(q))
               .map((v) => ({
                 type: "vm" as const,
@@ -29,7 +30,7 @@ export async function globalSearch(user: SessionUser, query: string) {
                 subtitle: `${host.name} / ${v.node}`,
                 href: `/vms/${host.id}/${v.node}/${v.vmid}`,
               })),
-            containers: containers
+            containers: filterGuestsForUser(user, host.id, "lxc", containers)
               .filter((v) => v.name.toLowerCase().includes(q) || String(v.vmid).includes(q))
               .map((v) => ({
                 type: "lxc" as const,
