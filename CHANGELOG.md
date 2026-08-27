@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.31] – 2026-08-27
+
+### Added
+
+- Existing backups can be filtered by search, type, storage, and time range.
+
 ## [1.0.30] – 2026-08-27
 
 ### Added

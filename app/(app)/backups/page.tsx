@@ -6,10 +6,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { ConfirmAction } from "@/components/confirm-action";
 import { PageHeader } from "@/components/layout/page-header";
 import { api } from "@/lib/api";
 import { bytesToSize } from "@/lib/utils";
+import { filterBackupFiles, type BackupFileFilter } from "@/lib/backup";
 import type { PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { JobDialog } from "@/components/backups/job-dialog";
@@ -84,7 +86,25 @@ function HostBackups({
   const [jobOpen, setJobOpen] = useState(false);
   const [editJob, setEditJob] = useState<BackupJob | null>(null);
   const [restoreFile, setRestoreFile] = useState<BackupFile | null>(null);
+  const [fileQuery, setFileQuery] = useState("");
+  const [fileKind, setFileKind] = useState<BackupFileFilter["kind"]>("all");
+  const [fileStorage, setFileStorage] = useState("all");
+  const [filePeriod, setFilePeriod] = useState<BackupFileFilter["period"]>("all");
   const dateLocale = locale === "en" ? "en-GB" : "de-DE";
+  const guestNames = useMemo(() => new Map((overview?.guests ?? []).map((g) => [g.vmid, g.name])), [overview?.guests]);
+  const storageOptions = useMemo(
+    () => [...new Set([...(overview?.backupStorages ?? []), ...(overview?.files ?? []).map((f) => f.storage)])].filter(Boolean).sort(),
+    [overview],
+  );
+  const filteredFiles = useMemo(
+    () =>
+      filterBackupFiles(
+        overview?.files ?? [],
+        { query: fileQuery, kind: fileKind, storage: fileStorage, period: filePeriod },
+        guestNames,
+      ),
+    [overview?.files, fileQuery, fileKind, fileStorage, filePeriod, guestNames],
+  );
 
   const guestLabel = useMemo(() => {
     const map = new Map((overview?.guests ?? []).map((g) => [g.vmid, g.name]));
@@ -203,57 +223,111 @@ function HostBackups({
               )}
             </section>
             <section>
-              <p className="proxora-section mb-2">{t("backup.files")}</p>
+              <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+                <p className="proxora-section">{t("backup.files")}</p>
+                {overview.files.length ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t("backup.filterCount", { shown: filteredFiles.length, total: overview.files.length })}
+                  </p>
+                ) : null}
+              </div>
               {overview.files.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{t("backup.noFiles")}</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[720px] text-left text-sm">
-                    <thead className="font-[family-name:var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                      <tr>
-                        <th className="py-2 font-medium">{t("table.id")}</th>
-                        <th className="font-medium">{t("table.type")}</th>
-                        <th className="font-medium">{t("backup.date")}</th>
-                        <th className="font-medium">{t("backup.size")}</th>
-                        <th className="font-medium">{t("backup.storage")}</th>
-                        <th className="font-medium">{t("table.actions")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {overview.files.map((file) => (
-                        <tr key={file.volid} className="border-t border-border">
-                          <td className="py-2 font-mono">{file.vmid ?? "—"}</td>
-                          <td>{file.kind === "lxc" ? "LXC" : file.kind === "vm" ? "VM" : "—"}</td>
-                          <td>{file.ctime ? new Date(file.ctime).toLocaleString(dateLocale) : "—"}</td>
-                          <td>{bytesToSize(file.size)}</td>
-                          <td className="max-w-[220px] truncate text-muted-foreground" title={file.volid}>
-                            {file.storage}
-                          </td>
-                          <td>
-                            <div className="flex flex-wrap gap-1">
-                              <Button size="sm" variant="outline" onClick={() => setRestoreFile(file)}>
-                                {t("backup.restore")}
-                              </Button>
-                              <ConfirmAction
-                                title={t("backup.deleteFileTitle")}
-                                description={t("backup.deleteFileBody", { volid: file.volid })}
-                                actionLabel={t("backup.deleteFile")}
-                                destructive
-                                onConfirm={() =>
-                                  post({ action: "delete-file", node: file.node, volid: file.volid }, "backup.fileDeleted")
-                                }
-                              >
-                                <Button size="sm" variant="destructive">
-                                  {t("backup.deleteFile")}
-                                </Button>
-                              </ConfirmAction>
-                            </div>
-                          </td>
-                        </tr>
+                <>
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    <Input
+                      placeholder={t("backup.filterSearch")}
+                      value={fileQuery}
+                      onChange={(e) => setFileQuery(e.target.value)}
+                      className="max-w-xs"
+                    />
+                    <select
+                      className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+                      value={fileKind}
+                      onChange={(e) => setFileKind(e.target.value as BackupFileFilter["kind"])}
+                    >
+                      <option value="all">{t("backup.allTypes")}</option>
+                      <option value="vm">VM</option>
+                      <option value="lxc">LXC</option>
+                    </select>
+                    <select
+                      className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+                      value={fileStorage}
+                      onChange={(e) => setFileStorage(e.target.value)}
+                    >
+                      <option value="all">{t("backup.allStorages")}</option>
+                      {storageOptions.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                    </select>
+                    <select
+                      className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+                      value={filePeriod}
+                      onChange={(e) => setFilePeriod(e.target.value as BackupFileFilter["period"])}
+                    >
+                      <option value="all">{t("backup.period.all")}</option>
+                      <option value="day">{t("backup.period.day")}</option>
+                      <option value="week">{t("backup.period.week")}</option>
+                      <option value="month">{t("backup.period.month")}</option>
+                    </select>
+                  </div>
+                  {filteredFiles.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">{t("backup.filterEmpty")}</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[720px] text-left text-sm">
+                        <thead className="font-[family-name:var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                          <tr>
+                            <th className="py-2 font-medium">{t("table.id")}</th>
+                            <th className="font-medium">{t("table.name")}</th>
+                            <th className="font-medium">{t("table.type")}</th>
+                            <th className="font-medium">{t("backup.date")}</th>
+                            <th className="font-medium">{t("backup.size")}</th>
+                            <th className="font-medium">{t("backup.storage")}</th>
+                            <th className="font-medium">{t("table.actions")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredFiles.map((file) => (
+                            <tr key={file.volid} className="border-t border-border">
+                              <td className="py-2 font-mono">{file.vmid ?? "—"}</td>
+                              <td className="max-w-[180px] truncate">{file.vmid != null ? guestNames.get(file.vmid) ?? "—" : "—"}</td>
+                              <td>{file.kind === "lxc" ? "LXC" : file.kind === "vm" ? "VM" : "—"}</td>
+                              <td>{file.ctime ? new Date(file.ctime).toLocaleString(dateLocale) : "—"}</td>
+                              <td>{bytesToSize(file.size)}</td>
+                              <td className="max-w-[220px] truncate text-muted-foreground" title={file.volid}>
+                                {file.storage}
+                              </td>
+                              <td>
+                                <div className="flex flex-wrap gap-1">
+                                  <Button size="sm" variant="outline" onClick={() => setRestoreFile(file)}>
+                                    {t("backup.restore")}
+                                  </Button>
+                                  <ConfirmAction
+                                    title={t("backup.deleteFileTitle")}
+                                    description={t("backup.deleteFileBody", { volid: file.volid })}
+                                    actionLabel={t("backup.deleteFile")}
+                                    destructive
+                                    onConfirm={() =>
+                                      post({ action: "delete-file", node: file.node, volid: file.volid }, "backup.fileDeleted")
+                                    }
+                                  >
+                                    <Button size="sm" variant="destructive">
+                                      {t("backup.deleteFile")}
+                                    </Button>
+                                  </ConfirmAction>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
               )}
             </section>
             <JobDialog

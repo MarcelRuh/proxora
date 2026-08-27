@@ -90,3 +90,34 @@ export function normalizeBackupJob(raw: Record<string, unknown>): {
 export function newBackupJobId(): string {
   return `backup-${Date.now().toString(36)}`;
 }
+
+export type BackupFileFilter = {
+  query: string;
+  kind: "all" | "vm" | "lxc";
+  storage: string;
+  period: "all" | "day" | "week" | "month";
+  now?: number;
+};
+
+const PERIOD_MS: Record<Exclude<BackupFileFilter["period"], "all">, number> = {
+  day: 24 * 60 * 60 * 1000,
+  week: 7 * 24 * 60 * 60 * 1000,
+  month: 30 * 24 * 60 * 60 * 1000,
+};
+
+export function filterBackupFiles<T extends { volid: string; storage: string; vmid: number | null; kind: BackupKind; ctime: number }>(
+  files: T[],
+  filter: BackupFileFilter,
+  names?: Map<number, string>,
+): T[] {
+  const q = filter.query.trim().toLowerCase();
+  const minCtime = filter.period === "all" ? 0 : (filter.now ?? Date.now()) - PERIOD_MS[filter.period];
+  return files.filter((file) => {
+    if (filter.kind !== "all" && file.kind !== filter.kind) return false;
+    if (filter.storage !== "all" && filter.storage && file.storage !== filter.storage) return false;
+    if (minCtime > 0 && file.ctime > 0 && file.ctime < minCtime) return false;
+    if (!q) return true;
+    const name = file.vmid != null ? names?.get(file.vmid) ?? "" : "";
+    return [String(file.vmid ?? ""), name, file.volid, file.storage].join(" ").toLowerCase().includes(q);
+  });
+}

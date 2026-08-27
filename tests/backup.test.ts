@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   backupCtimeMs,
+  filterBackupFiles,
   jobSchedulePayload,
   normalizeBackupJob,
   parseBackupVolid,
@@ -43,5 +44,23 @@ describe("backup job helpers", () => {
   it("treats unix seconds as milliseconds", () => {
     expect(backupCtimeMs(1_700_000_000)).toBe(1_700_000_000_000);
     expect(backupCtimeMs(1_700_000_000_000)).toBe(1_700_000_000_000);
+  });
+});
+
+describe("backup file filter", () => {
+  const files = [
+    { volid: "local:backup/vzdump-qemu-100-a.vma.zst", storage: "local", vmid: 100, kind: "vm" as const, ctime: 1_700_000_000_000 },
+    { volid: "pbs:backup/ct/204/snap", storage: "pbs", vmid: 204, kind: "lxc" as const, ctime: 1_700_050_000_000 },
+    { volid: "local:backup/vzdump-qemu-110-b.vma.zst", storage: "local", vmid: 110, kind: "vm" as const, ctime: 1_600_000_000_000 },
+  ];
+  const names = new Map([[100, "web"], [204, "db"]]);
+
+  it("filters by query, kind, storage and period", () => {
+    expect(filterBackupFiles(files, { query: "web", kind: "all", storage: "all", period: "all" }, names)).toHaveLength(1);
+    expect(filterBackupFiles(files, { query: "", kind: "lxc", storage: "all", period: "all" }).map((f) => f.vmid)).toEqual([204]);
+    expect(filterBackupFiles(files, { query: "", kind: "all", storage: "pbs", period: "all" })).toHaveLength(1);
+    expect(
+      filterBackupFiles(files, { query: "", kind: "all", storage: "all", period: "week", now: 1_700_060_000_000 }).map((f) => f.vmid),
+    ).toEqual([100, 204]);
   });
 });
