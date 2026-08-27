@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 type Task = {
   upid: string;
@@ -21,6 +22,7 @@ type Task = {
 };
 
 export default function TasksPage() {
+  const { t } = useI18n();
   const { data: hosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
@@ -55,7 +57,7 @@ export default function TasksPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader kicker="Betrieb" title="Tasks" description="Proxmox-Aufgaben auf allen verbundenen Hosts." />
+      <PageHeader kicker={t("page.ops")} title={t("tasks.title")} description={t("tasks.description")} />
       <Card>
         <CardHeader>
           <CardTitle>Proxmox tasks</CardTitle>

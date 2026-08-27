@@ -2,29 +2,35 @@
 
 import { Badge } from "@/components/ui/badge";
 import type { ConnectionState } from "@/lib/types";
+import { useI18n } from "@/components/i18n/locale-provider";
+import type { MessageKey } from "@/lib/i18n/messages";
 
-const MAP: Record<ConnectionState, { label: string; variant: "success" | "danger" | "warning" | "muted" }> = {
-  ONLINE: { label: "Online", variant: "success" },
-  OFFLINE: { label: "Offline", variant: "muted" },
-  CONNECTING: { label: "Verbinden", variant: "warning" },
-  ERROR: { label: "Fehler", variant: "danger" },
-  MAINTENANCE: { label: "Wartung", variant: "warning" },
+const HOST_KEYS: Record<ConnectionState, MessageKey> = {
+  ONLINE: "host.state.ONLINE",
+  OFFLINE: "host.state.OFFLINE",
+  CONNECTING: "host.state.CONNECTING",
+  ERROR: "host.state.ERROR",
+  MAINTENANCE: "host.state.MAINTENANCE",
 };
 
 export function HostStateBadge({ state }: { state: ConnectionState }) {
-  const item = MAP[state] ?? MAP.ERROR;
-  return <Badge variant={item.variant}>{item.label}</Badge>;
+  const { t } = useI18n();
+  const key = HOST_KEYS[state] ?? HOST_KEYS.ERROR;
+  const variant =
+    state === "ONLINE" ? "success" : state === "ERROR" ? "danger" : state === "OFFLINE" ? "muted" : "warning";
+  return <Badge variant={variant}>{t(key)}</Badge>;
 }
 
-const GUEST_STATUS: Record<string, string> = {
-  running: "Laufend",
-  stopped: "Gestoppt",
-  paused: "Pausiert",
-  unknown: "Unbekannt",
+const GUEST_KEYS: Record<string, MessageKey> = {
+  running: "guest.status.running",
+  stopped: "guest.status.stopped",
+  paused: "guest.status.paused",
+  unknown: "guest.status.unknown",
 };
 
 export function GuestStateBadge({ status }: { status: string }) {
+  const { t } = useI18n();
   const variant =
     status === "running" ? "success" : status === "paused" ? "warning" : status === "stopped" ? "muted" : "danger";
-  return <Badge variant={variant}>{GUEST_STATUS[status] ?? status}</Badge>;
+  return <Badge variant={variant}>{t(GUEST_KEYS[status] ?? "guest.status.unknown")}</Badge>;
 }

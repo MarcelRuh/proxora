@@ -9,8 +9,10 @@ import { api } from "@/lib/api";
 import { NeonAtmosphere } from "@/components/layout/neon-atmosphere";
 import { BrandMark } from "@/components/layout/brand-mark";
 import { APP_NAME } from "@/lib/version";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 export default function LoginPage() {
+  const { t, locale, setLocale } = useI18n();
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +28,7 @@ export default function LoginPage() {
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login fehlgeschlagen");
+      setError(err instanceof Error ? err.message : t("login.failed"));
     } finally {
       setBusy(false);
     }
@@ -39,22 +41,31 @@ export default function LoginPage() {
         <CardHeader>
           <BrandMark className="mb-3 h-12 w-12 drop-shadow-[0_0_16px_rgba(255,0,110,0.35)]" />
           <CardTitle className="proxora-logo text-2xl">{APP_NAME.toUpperCase()}</CardTitle>
-          <CardDescription>Anmelden, um Proxmox-Hosts zu verwalten.</CardDescription>
+          <CardDescription>{t("login.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={onSubmit}>
             <div className="space-y-1.5">
-              <Label htmlFor="username">Benutzername</Label>
+              <Label htmlFor="username">{t("login.username")}</Label>
               <Input id="username" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password">Passwort</Label>
+              <Label htmlFor="password">{t("login.password")}</Label>
               <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
             <Button className="w-full uppercase tracking-wider" disabled={busy}>
-              {busy ? "Anmelden…" : "Anmelden"}
+              {busy ? t("login.busy") : t("login.submit")}
             </Button>
+            <div className="flex justify-center gap-2 text-xs font-semibold uppercase tracking-wider">
+              <button type="button" className={locale === "de" ? "text-primary" : "text-muted-foreground"} onClick={() => setLocale("de")}>
+                DE
+              </button>
+              <span className="text-muted-foreground">/</span>
+              <button type="button" className={locale === "en" ? "text-primary" : "text-muted-foreground"} onClick={() => setLocale("en")}>
+                EN
+              </button>
+            </div>
           </form>
         </CardContent>
       </Card>

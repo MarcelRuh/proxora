@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import type { LxcIpMode } from "@/lib/lxc-net";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 type Options = {
   nodes: Array<{ node: string }>;
@@ -24,6 +25,7 @@ const selectClass =
   "mt-1 h-9 w-full rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm";
 
 export default function CreateLxcPage() {
+  const { t } = useI18n();
   const router = useRouter();
   const { data: hosts } = useQuery({
     queryKey: ["hosts"],
@@ -44,6 +46,7 @@ export default function CreateLxcPage() {
     ipMode: "dhcp" as LxcIpMode,
     cidr: "",
     gateway: "",
+    startAfter: true,
   });
 
   const { data: options } = useQuery({
@@ -113,11 +116,12 @@ export default function CreateLxcPage() {
           gateway: form.ipMode === "static" ? form.gateway : undefined,
           unprivileged: true,
           nesting: true,
+          startAfter: form.startAfter,
         }),
       });
     },
     onSuccess: () => {
-      toast.success("Container-Erstellung gestartet");
+      toast.success(t("lxc.created"));
       router.push("/containers");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -136,11 +140,11 @@ export default function CreateLxcPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <PageHeader kicker="Virtualisierung" title="Container erstellen" />
+      <PageHeader kicker={t("vms.kicker")} title={t("lxc.create")} />
       <Card>
         <CardContent className="grid gap-3 pt-5 md:grid-cols-2">
           <label className="text-sm md:col-span-2">
-            Host
+            {t("create.host")}
             <select
               className={selectClass}
               value={form.hostId}
@@ -148,7 +152,7 @@ export default function CreateLxcPage() {
                 setForm({ ...form, hostId: e.target.value, node: "", ostemplate: "", storage: "", bridge: "", vmid: 0 })
               }
             >
-              <option value="">Host wählen</option>
+              <option value="">{t("common.chooseHost")}</option>
               {(hosts?.hosts ?? []).map((h) => (
                 <option key={h.id} value={h.id}>
                   {h.name}
@@ -158,7 +162,7 @@ export default function CreateLxcPage() {
           </label>
           {(options?.nodes.length ?? 0) > 1 ? (
             <label className="text-sm">
-              Node
+              {t("create.node")}
               <select className={selectClass} value={form.node} onChange={(e) => setForm({ ...form, node: e.target.value })}>
                 {(options?.nodes ?? []).map((n) => (
                   <option key={n.node} value={n.node}>
@@ -169,26 +173,26 @@ export default function CreateLxcPage() {
             </label>
           ) : null}
           <Field
-            label="CT-ID"
+            label={t("create.id")}
             value={form.vmid ? String(form.vmid) : ""}
             onChange={(v) => setForm({ ...form, vmid: Number(v) || 0 })}
           />
-          <Field label="Hostname" value={form.hostname} onChange={(hostname) => setForm({ ...form, hostname })} />
+          <Field label={t("create.hostname")} value={form.hostname} onChange={(hostname) => setForm({ ...form, hostname })} />
           <Field
-            label="Passwort"
+            label={t("create.password")}
             type="password"
             value={form.password}
             onChange={(password) => setForm({ ...form, password })}
           />
           <label className="text-sm md:col-span-2">
-            Template
+            {t("create.template")}
             <select
               className={selectClass}
               value={form.ostemplate}
               onChange={(e) => setForm({ ...form, ostemplate: e.target.value })}
               disabled={!form.hostId}
             >
-              <option value="">{templates.length ? "Template wählen" : "Kein Template gefunden"}</option>
+              <option value="">{templates.length ? t("common.chooseTemplate") : t("common.noTemplate")}</option>
               {templates.map((volid) => (
                 <option key={volid} value={volid}>
                   {volid.split("/").pop() ?? volid}
@@ -197,7 +201,7 @@ export default function CreateLxcPage() {
             </select>
           </label>
           <label className="text-sm">
-            Storage
+            {t("create.storage")}
             <select
               className={selectClass}
               value={form.storage}
@@ -211,11 +215,11 @@ export default function CreateLxcPage() {
               ))}
             </select>
           </label>
-          <Field label="Disk (GiB)" value={form.diskSize} onChange={(diskSize) => setForm({ ...form, diskSize })} />
-          <Field label="Kerne" value={String(form.cores)} onChange={(v) => setForm({ ...form, cores: Number(v) || 1 })} />
-          <Field label="RAM (MiB)" value={String(form.memory)} onChange={(v) => setForm({ ...form, memory: Number(v) || 512 })} />
+          <Field label={t("create.disk")} value={form.diskSize} onChange={(diskSize) => setForm({ ...form, diskSize })} />
+          <Field label={t("create.cores")} value={String(form.cores)} onChange={(v) => setForm({ ...form, cores: Number(v) || 1 })} />
+          <Field label={t("create.memory")} value={String(form.memory)} onChange={(v) => setForm({ ...form, memory: Number(v) || 512 })} />
           <label className="text-sm">
-            Bridge
+            {t("create.bridge")}
             <select
               className={selectClass}
               value={form.bridge}
@@ -230,35 +234,43 @@ export default function CreateLxcPage() {
             </select>
           </label>
           <label className="text-sm">
-            IPv4
+            {t("create.ipv4")}
             <select
               className={selectClass}
               value={form.ipMode}
               onChange={(e) => setForm({ ...form, ipMode: e.target.value as LxcIpMode })}
             >
-              <option value="dhcp">DHCP</option>
-              <option value="static">Statisch</option>
+              <option value="dhcp">{t("create.dhcp")}</option>
+              <option value="static">{t("create.static")}</option>
             </select>
           </label>
           {form.ipMode === "static" ? (
             <>
               <Field
-                label="Adresse"
+                label={t("create.address")}
                 value={form.cidr}
                 onChange={(cidr) => setForm({ ...form, cidr })}
                 placeholder="192.168.1.50/24"
               />
               <Field
-                label="Gateway"
+                label={t("create.gateway")}
                 value={form.gateway}
                 onChange={(gateway) => setForm({ ...form, gateway })}
                 placeholder="192.168.1.1"
               />
             </>
           ) : null}
+          <label className="flex items-center gap-2 text-sm md:col-span-2">
+            <input
+              type="checkbox"
+              checked={form.startAfter}
+              onChange={(e) => setForm({ ...form, startAfter: e.target.checked })}
+            />
+            {t("create.startAfter")}
+          </label>
           <div className="md:col-span-2">
             <Button onClick={() => create.mutate()} disabled={create.isPending || !canSubmit}>
-              {create.isPending ? "Erstelle…" : "Container erstellen"}
+              {create.isPending ? t("create.creating") : t("create.submitLxc")}
             </Button>
           </div>
         </CardContent>

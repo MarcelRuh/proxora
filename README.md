@@ -5,7 +5,7 @@
 [![CI](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-> Status: **v1.0.28** – self-hosted Proxmox control plane with in-app updates.
+> Status: **v1.0.29** – self-hosted Proxmox control plane with in-app updates.
 
 Proxora talks to each node through the official **Proxmox VE API**. No cluster required.
 
@@ -31,7 +31,7 @@ curl -fsSL https://raw.githubusercontent.com/MarcelRuh/proxora/main/scripts/inst
 
 ## Update
 
-**In the UI (recommended):** Updates → **Proxora Self-Update** → *Jetzt aktualisieren* (admin).
+**In the UI (recommended):** Settings → **Proxora** → *Jetzt aktualisieren* (admin).
 
 The dashboard and sidebar show `current → latest` plus a live progress bar while the stack rebuilds.
 

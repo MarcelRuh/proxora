@@ -13,6 +13,7 @@ import { ConfirmAction } from "@/components/confirm-action";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 type FormState = {
   name: string;
@@ -35,6 +36,7 @@ const empty: FormState = {
 };
 
 export default function HostsPage() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["hosts"],
@@ -48,7 +50,7 @@ export default function HostsPage() {
   const create = useMutation({
     mutationFn: () => api("/api/hosts", { method: "POST", body: JSON.stringify(form) }),
     onSuccess: () => {
-      toast.success("Host added");
+      toast.success(t("hosts.added"));
       setOpen(false);
       setForm(empty);
       void qc.invalidateQueries({ queryKey: ["hosts"] });
@@ -59,10 +61,10 @@ export default function HostsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        kicker="Inventar"
-        title="Hosts"
-        description="Unabhängige Proxmox-VE-Nodes — kein Cluster nötig."
-        actions={<Button onClick={() => setOpen(true)}>Host hinzufügen</Button>}
+        kicker={t("hosts.kicker")}
+        title={t("hosts.title")}
+        description={t("hosts.description")}
+        actions={<Button onClick={() => setOpen(true)}>{t("hosts.add")}</Button>}
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {(data?.hosts ?? []).map((host) => (
@@ -79,7 +81,7 @@ export default function HostsPage() {
               {host.lastError ? <p className="text-sm text-destructive">{host.lastError}</p> : null}
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" asChild>
-                  <Link href={`/hosts/${host.id}`}>Open</Link>
+                  <Link href={`/hosts/${host.id}`}>{t("hosts.open")}</Link>
                 </Button>
                 <Button
                   size="sm"
@@ -87,28 +89,28 @@ export default function HostsPage() {
                   onClick={async () => {
                     try {
                       await api(`/api/hosts/${host.id}/test`, { method: "POST" });
-                      toast.success("Connection OK");
+                      toast.success(t("hosts.testOk"));
                       void qc.invalidateQueries({ queryKey: ["hosts"] });
                     } catch (e) {
-                      toast.error(e instanceof Error ? e.message : "Test failed");
+                      toast.error(e instanceof Error ? e.message : t("common.failed"));
                     }
                   }}
                 >
-                  Test
+                  {t("hosts.test")}
                 </Button>
                 <ConfirmAction
-                  title={`Remove ${host.name}?`}
-                  description="Credentials and host metadata will be deleted from Proxora. Guests on the host are not affected."
-                  actionLabel="Remove host"
+                  title={t("hosts.removeTitle", { name: host.name })}
+                  description={t("hosts.removeBody")}
+                  actionLabel={t("hosts.removeAction")}
                   destructive
                   onConfirm={async () => {
                     await api(`/api/hosts/${host.id}`, { method: "DELETE" });
-                    toast.success("Host removed");
+                    toast.success(t("hosts.removed"));
                     void qc.invalidateQueries({ queryKey: ["hosts"] });
                   }}
                 >
                   <Button size="sm" variant="destructive">
-                    Remove
+                    {t("hosts.remove")}
                   </Button>
                 </ConfirmAction>
               </div>
@@ -120,13 +122,13 @@ export default function HostsPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add Proxmox host</DialogTitle>
+            <DialogTitle>{t("hosts.addTitle")}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
-            <Field label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
-            <Field label="Host" value={form.url} onChange={(v) => setForm({ ...form, url: v })} />
+            <Field label={t("create.name")} value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
+            <Field label={t("create.host")} value={form.url} onChange={(v) => setForm({ ...form, url: v })} />
             <div className="space-y-1">
-              <Label>Authentication</Label>
+              <Label>{t("hosts.auth")}</Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={form.authType}
@@ -140,21 +142,21 @@ export default function HostsPage() {
                   });
                 }}
               >
-                <option value="PASSWORD">Password (root@pam)</option>
-                <option value="API_TOKEN">API token</option>
+                <option value="PASSWORD">{t("hosts.authPassword")}</option>
+                <option value="API_TOKEN">{t("hosts.authToken")}</option>
               </select>
             </div>
             <Field
-              label="User"
+              label={t("hosts.user")}
               value={form.username}
               onChange={(v) => setForm({ ...form, username: v })}
               placeholder="root@pam"
             />
             {form.authType === "API_TOKEN" ? (
-              <Field label="Token ID" value={form.tokenId} onChange={(v) => setForm({ ...form, tokenId: v })} />
+              <Field label={t("hosts.tokenId")} value={form.tokenId} onChange={(v) => setForm({ ...form, tokenId: v })} />
             ) : null}
             <Field
-              label={form.authType === "PASSWORD" ? "Password" : "Token secret"}
+              label={form.authType === "PASSWORD" ? t("create.password") : t("hosts.tokenSecret")}
               type="password"
               value={form.secret}
               onChange={(v) => setForm({ ...form, secret: v })}
@@ -165,7 +167,7 @@ export default function HostsPage() {
                 checked={form.allowInsecureTls}
                 onChange={(e) => setForm({ ...form, allowInsecureTls: e.target.checked })}
               />
-              Allow self-signed TLS certificates
+              {t("hosts.allowTls")}
             </label>
             {test ? <p className="text-sm text-muted-foreground">{test}</p> : null}
             <div className="flex justify-end gap-2">
@@ -177,16 +179,16 @@ export default function HostsPage() {
                       "/api/hosts/test",
                       { method: "POST", body: JSON.stringify(form) },
                     );
-                    setTest(r.ok ? `Connected · Proxmox ${r.version?.version}` : r.error ?? "Failed");
+                    setTest(r.ok ? `${t("hosts.testOk")} · Proxmox ${r.version?.version}` : r.error ?? t("common.failed"));
                   } catch (e) {
-                    setTest(e instanceof Error ? e.message : "Failed");
+                    setTest(e instanceof Error ? e.message : t("common.failed"));
                   }
                 }}
               >
-                Test connection
+                {t("hosts.testConnection")}
               </Button>
               <Button onClick={() => create.mutate()} disabled={create.isPending}>
-                Save host
+                {t("hosts.saveHost")}
               </Button>
             </div>
           </div>

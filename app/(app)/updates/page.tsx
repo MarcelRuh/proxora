@@ -11,6 +11,7 @@ import { WebConsole } from "@/components/console/web-console";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 type AptPackage = { Package: string; Version?: string; OldVersion?: string };
 type HostUpdates = {
@@ -21,6 +22,7 @@ type HostUpdates = {
 };
 
 export default function UpdatesPage() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const [shell, setShell] = useState<{ hostId: string; node: string; name: string } | null>(null);
   const { data: hosts } = useQuery({
@@ -100,8 +102,8 @@ export default function UpdatesPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        kicker="Wartung"
-        title="Updates"
+        kicker={t("page.maintenance")}
+        title={t("updates.title")}
         description="Paketlisten werden alle 3 Stunden geprüft. Bei neuen Updates kommt eine Meldung. Upgrade öffnet die Node-Shell wie in der Proxmox-GUI."
         actions={
           <Button

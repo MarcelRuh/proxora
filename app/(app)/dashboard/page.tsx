@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { bytesToSize, formatPercent, formatUptime, percentage } from "@/lib/utils";
 import { useAptSummary } from "@/components/layout/apt-update-alert";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 type Guest = {
   vmid: number;
@@ -53,6 +54,7 @@ type Dashboard = {
 };
 
 export default function DashboardPage() {
+  const { t, locale } = useI18n();
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => api<Dashboard>("/api/dashboard"),
@@ -77,10 +79,10 @@ export default function DashboardPage() {
   if (error || !data) {
     return (
       <div className="proxora-panel p-6">
-        <p className="font-medium">Dashboard konnte nicht geladen werden</p>
-        <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : "Unknown error"}</p>
+        <p className="font-medium">{t("dashboard.loadError")}</p>
+        <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : t("guest.status.unknown")}</p>
         <button className="mt-3 text-sm text-primary" onClick={() => void refetch()}>
-          Erneut versuchen
+          {t("common.retry")}
         </button>
       </div>
     );
@@ -101,23 +103,23 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="proxora-section">Übersicht</p>
-          <h1 className="proxora-title mt-1 text-4xl md:text-5xl">Dashboard</h1>
+          <p className="proxora-section">{t("dashboard.kicker")}</p>
+          <h1 className="proxora-title mt-1 text-4xl md:text-5xl">{t("dashboard.title")}</h1>
         </div>
         <div className="flex items-center gap-3 text-xs uppercase tracking-wider">
           <span className="flex items-center gap-2 text-success">
             <span className="proxora-pulse inline-block h-2 w-2 rounded-full bg-success" />
-            Live Stand {now.toLocaleTimeString("de-DE")}
+            {t("common.live", { time: now.toLocaleTimeString(locale === "en" ? "en-US" : "de-DE") })}
           </span>
           <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={isFetching}>
-            Aktualisieren
+            {t("common.refresh")}
           </Button>
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <MiniStat label="Host-Status" value={allOnline ? "Online" : `${data.hosts.online}/${data.hosts.total}`} ok={allOnline} />
-        <MiniStat label="Hosts" value={String(data.hosts.total)} />
+        <MiniStat label={t("dashboard.hostStatus")} value={allOnline ? t("dashboard.online") : `${data.hosts.online}/${data.hosts.total}`} ok={allOnline} />
+        <MiniStat label={t("dashboard.hosts")} value={String(data.hosts.total)} />
         <MiniStat
           label="Proxmox VE"
           value={data.hosts.items[0]?.proxmoxVersion ?? "—"}
@@ -125,27 +127,27 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <CountStat label="Gesamt" value={guests.length} />
-        <CountStat label="Laufend" value={running} />
-        <CountStat label="Gestoppt" value={stopped} />
-        <CountStat label="Fehlerhaft" value={bad} />
+        <CountStat label={t("dashboard.total")} value={guests.length} />
+        <CountStat label={t("dashboard.running")} value={running} />
+        <CountStat label={t("dashboard.stopped")} value={stopped} />
+        <CountStat label={t("dashboard.error")} value={bad} />
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
         <ResourceStat
-          label="CPU"
+          label={t("dashboard.cpu")}
           primary={formatPercent(Math.round(data.resources.cpu * 1000) / 10)}
-          secondary={cpuCores ? `${cpuCores} Kerne` : undefined}
+          secondary={cpuCores ? t("dashboard.cores", { n: cpuCores }) : undefined}
           ratio={data.resources.cpu * 100}
         />
         <ResourceStat
-          label="RAM"
+          label={t("dashboard.ram")}
           primary={formatPercent(percentage(data.resources.memUsed, data.resources.memTotal))}
           secondary={`${bytesToSize(data.resources.memUsed)} / ${bytesToSize(data.resources.memTotal)}`}
           ratio={percentage(data.resources.memUsed, data.resources.memTotal)}
         />
         <ResourceStat
-          label="Festplatte"
+          label={t("dashboard.disk")}
           primary={formatPercent(percentage(data.resources.diskUsed, data.resources.diskTotal))}
           secondary={`${bytesToSize(data.resources.diskUsed)} / ${bytesToSize(data.resources.diskTotal)}`}
           ratio={percentage(data.resources.diskUsed, data.resources.diskTotal)}
@@ -154,15 +156,15 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <p className="proxora-section">Update-Hinweise</p>
+          <p className="proxora-section">{t("dashboard.updates")}</p>
         </CardHeader>
         <CardContent>
           <p className={apt.data?.total ? "text-warning" : "text-muted-foreground"}>
-            {apt.data?.total ? `${apt.data.total} Update(s) verfügbar` : "Keine Host-Updates"}
+            {apt.data?.total ? t("dashboard.updatesCount", { n: apt.data.total }) : t("dashboard.noUpdates")}
           </p>
           {apt.data?.total ? (
             <Link href="/updates" className="mt-2 inline-block text-sm text-primary">
-              Zu den Updates
+              {t("dashboard.toUpdates")}
             </Link>
           ) : null}
         </CardContent>
@@ -170,14 +172,14 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <p className="proxora-section">Hosts</p>
+          <p className="proxora-section">{t("dashboard.hosts")}</p>
         </CardHeader>
         <CardContent className="space-y-4">
           {data.hosts.items.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Noch keine Hosts.{" "}
+              {t("dashboard.noHosts")}{" "}
               <Link className="text-primary" href="/hosts">
-                Proxmox-Host hinzufügen
+                {t("dashboard.addHost")}
               </Link>
               .
             </p>
@@ -187,30 +189,30 @@ export default function DashboardPage() {
                 <div className="mb-2 flex items-center justify-between">
                   <div>
                     <p className="font-medium">{h.name}</p>
-                    <p className="text-xs text-muted-foreground">Proxmox VE {h.proxmoxVersion ?? "unbekannt"}</p>
+                    <p className="text-xs text-muted-foreground">Proxmox VE {h.proxmoxVersion ?? t("dashboard.unknown")}</p>
                   </div>
                   <HostStateBadge state={h.connectionState as never} />
                 </div>
                 {h.connectionState === "ONLINE" ? (
                   <div className="grid gap-2 sm:grid-cols-3">
                     <Metric
-                      label="CPU"
+                      label={t("dashboard.cpu")}
                       value={(h.cpu ?? 0) * 100}
-                      detail={h.cpuCores ? `${h.cpuCores} Kerne · ${Math.round((h.cpu ?? 0) * 100)}%` : `${Math.round((h.cpu ?? 0) * 100)}%`}
+                      detail={h.cpuCores ? `${t("dashboard.cores", { n: h.cpuCores })} · ${Math.round((h.cpu ?? 0) * 100)}%` : `${Math.round((h.cpu ?? 0) * 100)}%`}
                     />
                     <Metric
-                      label="RAM"
+                      label={t("dashboard.ram")}
                       value={percentage(h.memUsed, h.memTotal)}
                       detail={`${bytesToSize(h.memUsed)} / ${bytesToSize(h.memTotal)}`}
                     />
                     <Metric
-                      label="Speicher"
+                      label={t("dashboard.storage")}
                       value={percentage(h.diskUsed, h.diskTotal)}
                       detail={`${bytesToSize(h.diskUsed)} / ${bytesToSize(h.diskTotal)}`}
                     />
                   </div>
                 ) : (
-                  <p className="text-sm text-destructive">{h.lastError ?? "Nicht erreichbar"}</p>
+                  <p className="text-sm text-destructive">{h.lastError ?? t("dashboard.unreachable")}</p>
                 )}
                 {h.uptime ? <p className="mt-2 text-xs text-muted-foreground">Uptime {formatUptime(h.uptime)}</p> : null}
               </Link>
@@ -221,22 +223,22 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <p className="proxora-section">VMs &amp; Container</p>
+          <p className="proxora-section">{t("dashboard.guests")}</p>
           <span className="text-xs text-muted-foreground">{guests.length}</span>
         </CardHeader>
         <CardContent>
           {guests.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Keine VMs oder Container.</p>
+            <p className="text-sm text-muted-foreground">{t("dashboard.noGuests")}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="font-[family-name:var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                   <tr>
-                    <th className="px-2 py-2 font-medium">ID</th>
-                    <th className="px-2 py-2 font-medium">Typ</th>
-                    <th className="px-2 py-2 font-medium">Name</th>
-                    <th className="px-2 py-2 font-medium">Host</th>
-                    <th className="px-2 py-2 font-medium">Status</th>
+                    <th className="px-2 py-2 font-medium">{t("table.id")}</th>
+                    <th className="px-2 py-2 font-medium">{t("table.type")}</th>
+                    <th className="px-2 py-2 font-medium">{t("table.name")}</th>
+                    <th className="px-2 py-2 font-medium">{t("table.host")}</th>
+                    <th className="px-2 py-2 font-medium">{t("table.status")}</th>
                   </tr>
                 </thead>
                 <tbody>

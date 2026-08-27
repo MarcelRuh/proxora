@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.29] – 2026-08-27
+
+### Added
+
+- German/English UI with a DE/EN switcher in the sidebar and on the login page.
+- Clone a VM or container from the guest detail view.
+- Optional start after create for VMs and containers.
+- Change the signed-in user's password under Settings.
+
+### Changed
+
+- Creating a VM uses a short single-page form (same idea as LXC).
+- Sidebar settings are one entry: Proxora self-update, notifications, and password live on `/settings`. `/proxora`, `/settings/notifications`, and `/settings/security` redirect there.
+
 ## [1.0.28] – 2026-08-27
 
 ### Changed

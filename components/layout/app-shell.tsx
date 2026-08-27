@@ -11,7 +11,6 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
-  RefreshCw,
   Search,
   Server,
   Settings,
@@ -33,25 +32,25 @@ import { APP_NAME, APP_VERSION } from "@/lib/version";
 import { useQuery } from "@tanstack/react-query";
 import type { SelfUpdateStatus } from "@/components/settings/self-update-section";
 import { ProgressBar } from "@/components/ui/misc";
+import { useI18n } from "@/components/i18n/locale-provider";
+import type { MessageKey } from "@/lib/i18n/messages";
 
-const NAV: Array<{ href: string; label: string; icon: ComponentType<{ className?: string }> }> = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/hosts", label: "Hosts", icon: Server },
-  { href: "/vms", label: "VMs", icon: Boxes },
-  { href: "/containers", label: "Container", icon: Box },
-  { href: "/storage", label: "Storage", icon: HardDrive },
-  { href: "/tasks", label: "Tasks", icon: Activity },
-  { href: "/updates", label: "Updates", icon: Shield },
-  { href: "/users", label: "Benutzer", icon: Users },
-  { href: "/roles", label: "Rollen", icon: Shield },
-  { href: "/audit", label: "Audit", icon: ClipboardList },
-  { href: "/settings", label: "Einstellungen", icon: Settings },
-  { href: "/proxora", label: "Proxora", icon: RefreshCw },
-  { href: "/settings/notifications", label: "Meldungen", icon: Activity },
-  { href: "/settings/security", label: "Sicherheit", icon: Shield },
+const NAV: Array<{ href: string; labelKey: MessageKey; icon: ComponentType<{ className?: string }> }> = [
+  { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
+  { href: "/hosts", labelKey: "nav.hosts", icon: Server },
+  { href: "/vms", labelKey: "nav.vms", icon: Boxes },
+  { href: "/containers", labelKey: "nav.containers", icon: Box },
+  { href: "/storage", labelKey: "nav.storage", icon: HardDrive },
+  { href: "/tasks", labelKey: "nav.tasks", icon: Activity },
+  { href: "/updates", labelKey: "nav.updates", icon: Shield },
+  { href: "/users", labelKey: "nav.users", icon: Users },
+  { href: "/roles", labelKey: "nav.roles", icon: Shield },
+  { href: "/audit", labelKey: "nav.audit", icon: ClipboardList },
+  { href: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
 
 export function AppShell({ children, user }: { children: ReactNode; user: SessionUser }) {
+  const { t, locale, setLocale } = useI18n();
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -92,7 +91,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
           <div>
             <p className="proxora-logo text-lg leading-none">{APP_NAME.toUpperCase()}</p>
             <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.22em] text-sidebar-muted">
-              Proxmox Control Plane
+              {t("nav.subtitle")}
             </p>
           </div>
         </div>
@@ -101,12 +100,14 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             <NavLink
               key={item.href}
               href={item.href}
-              label={item.label}
+              label={t(item.labelKey)}
               icon={item.icon}
               active={
-                item.href === "/dashboard" || item.href === "/settings"
+                item.href === "/dashboard"
                   ? pathname === item.href
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`)
+                  : item.href === "/settings"
+                    ? pathname === item.href || pathname.startsWith("/settings") || pathname === "/proxora"
+                    : pathname === item.href || pathname.startsWith(`${item.href}/`)
               }
               badge={
                 item.href === "/updates" && hasPermission(user.role.permissions, "updates.view") ? (
@@ -122,10 +123,25 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             className="flex h-9 w-full items-center gap-2 rounded-[4px] border border-primary/40 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-muted hover:border-primary hover:text-white"
           >
             <Search className="h-3.5 w-3.5" />
-            Suchen
+            {t("nav.search")}
             <kbd className="ml-auto text-[10px] text-sidebar-muted">⌘K</kbd>
           </button>
           <SidebarVersion />
+          <div className="flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider">
+            <button
+              className={locale === "de" ? "text-primary" : "text-sidebar-muted hover:text-white"}
+              onClick={() => setLocale("de")}
+            >
+              DE
+            </button>
+            <span className="text-sidebar-muted">/</span>
+            <button
+              className={locale === "en" ? "text-primary" : "text-sidebar-muted hover:text-white"}
+              onClick={() => setLocale("en")}
+            >
+              EN
+            </button>
+          </div>
           <p className="px-1 text-[10px] text-sidebar-muted">
             {user.username} · {user.role.name}
           </p>
@@ -134,7 +150,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-sidebar-muted hover:text-primary"
           >
             <LogOut className="h-3.5 w-3.5" />
-            Abmelden
+            {t("nav.logout")}
           </button>
         </div>
       </aside>
@@ -206,7 +222,7 @@ function SidebarVersion() {
   const updating = Boolean(status?.updating);
   const percent = status?.progress?.percent ?? (updating ? 2 : status?.updateAvailable ? 8 : 100);
   return (
-    <Link href="/proxora" className="block rounded-[4px] border border-[rgba(131,56,236,0.28)] px-2 py-2 hover:border-primary/50">
+    <Link href="/settings" className="block rounded-[4px] border border-[rgba(131,56,236,0.28)] px-2 py-2 hover:border-primary/50">
       <div className="flex items-center justify-between gap-2 text-[11px]">
         <span className="font-mono text-sidebar-foreground">
           {status?.updateAvailable ? `${current} → ${target}` : `v${current}`}

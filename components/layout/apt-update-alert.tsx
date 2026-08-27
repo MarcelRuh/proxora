@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 export type AptSummary = {
   total: number;
@@ -25,6 +26,7 @@ export function useAptSummary() {
 }
 
 export function AptUpdateBanner() {
+  const { t } = useI18n();
   const pathname = usePathname();
   const { data } = useAptSummary();
   const [hidden, setHidden] = useState(false);
@@ -38,14 +40,14 @@ export function AptUpdateBanner() {
         .filter((h) => h.count > 0)
         .map((h) => `${h.name} (${h.count})`)
         .join(", ");
-      toast.warning(`${data.total} Host-Update${data.total === 1 ? "" : "s"} verfügbar`, {
+      toast.warning(t("apt.available", { n: data.total }), {
         description: names,
         duration: 12_000,
       });
     }
     const bannerKey = `proxora-apt-banner:${data.fingerprint}`;
     setHidden(typeof sessionStorage !== "undefined" && sessionStorage.getItem(bannerKey) === "1");
-  }, [data?.fingerprint, data?.total, data?.hosts]);
+  }, [data?.fingerprint, data?.total, data?.hosts, t]);
 
   if (!data?.total || hidden || pathname === "/updates") return null;
 
@@ -65,18 +67,16 @@ export function AptUpdateBanner() {
     <div className="flex flex-wrap items-center gap-3 border-b border-warning/35 bg-warning/10 px-4 py-2 text-sm">
       <p className="min-w-0 flex-1">
         <span className="font-[family-name:var(--font-display)] text-[10px] tracking-[0.22em] text-warning">
-          Update-Hinweise
+          {t("apt.banner")}
         </span>
-        <span className="ml-3 font-medium text-warning">
-          {data.total} Update{data.total === 1 ? "" : "s"} verfügbar
-        </span>
+        <span className="ml-3 font-medium text-warning">{t("apt.available", { n: data.total })}</span>
         <span className="text-muted-foreground"> · {names}</span>
       </p>
       <Button size="sm" variant="outline" asChild>
-        <Link href="/updates">Anzeigen</Link>
+        <Link href="/updates">{t("apt.show")}</Link>
       </Button>
       <Button size="sm" variant="ghost" onClick={dismiss}>
-        Schließen
+        {t("apt.close")}
       </Button>
     </div>
   );

@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { bytesToSize, percentage } from "@/lib/utils";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
+import { useI18n } from "@/components/i18n/locale-provider";
 import { ZfsSection, type ZfsHostBlock } from "@/components/storage/zfs-section";
 
 type StorageResp = {
@@ -26,6 +27,7 @@ type StorageResp = {
 };
 
 export default function StoragePage() {
+  const { t } = useI18n();
   const { data: hosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
@@ -71,9 +73,9 @@ export default function StoragePage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        kicker="Speicher"
-        title="Storage"
-        description="Datastores und ZFS-Pools der verbundenen Hosts."
+        kicker={t("page.storage")}
+        title={t("storage.title")}
+        description={t("storage.description")}
       />
       {(data ?? []).map((block) => (
         <Card key={block.host.id}>

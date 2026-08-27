@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 type Log = {
   id: string;
@@ -19,6 +20,7 @@ type Log = {
 };
 
 export default function AuditPage() {
+  const { t } = useI18n();
   const { data } = useQuery({
     queryKey: ["audit"],
     queryFn: () => api<{ logs: Log[] }>("/api/audit"),
@@ -28,9 +30,9 @@ export default function AuditPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        kicker="Sicherheit"
-        title="Audit"
-        description="Unveränderliche Historie der Manager-Aktionen."
+        kicker={t("page.security")}
+        title={t("audit.title")}
+        description={t("audit.description")}
       />
       <Card>
         <CardHeader>

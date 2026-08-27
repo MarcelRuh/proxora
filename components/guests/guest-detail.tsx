@@ -13,9 +13,11 @@ import { GuestStateBadge } from "@/components/status-badge";
 import { ConfirmAction } from "@/components/confirm-action";
 import { WebConsole } from "@/components/console/web-console";
 import { GuestConfigForm } from "@/components/guests/guest-config-form";
+import { CloneDialog } from "@/components/guests/clone-dialog";
 import { api } from "@/lib/api";
 import { bytesToSize, formatUptime, percentage } from "@/lib/utils";
 import type { PublicHost } from "@/lib/types";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 type GuestPayload = {
   status: Record<string, unknown>;
@@ -29,6 +31,7 @@ function num(value: unknown): number {
 }
 
 export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
+  const { t } = useI18n();
   const params = useParams<{ hostId: string; node: string; vmid: string }>();
   const search = useSearchParams();
   const [snap, setSnap] = useState("");
@@ -44,10 +47,14 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
   });
+  const { data: options } = useQuery({
+    queryKey: ["options", params.hostId],
+    queryFn: () => api<{ nextid: number | null }>(`/api/hosts/${params.hostId}/options`),
+  });
 
   async function action(name: string, extra: Record<string, unknown> = {}) {
     await api(path, { method: "POST", body: JSON.stringify({ action: name, ...extra }) });
-    toast.success(name === "config" ? "Config gespeichert" : "Task gestartet");
+    toast.success(name === "config" ? t("guest.configSaved") : t("common.taskStarted"));
     void refetch();
   }
 
@@ -68,12 +75,13 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const maxdisk = num(status.maxdisk);
   const netin = num(status.netin);
   const netout = num(status.netout);
+  const kindLabel = kind === "vm" ? "VM" : "LXC";
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="proxora-section">{kind === "vm" ? "VM" : "LXC"}</p>
+          <p className="proxora-section">{kindLabel}</p>
           <h1 className="proxora-title mt-1 text-3xl md:text-4xl">
             {params.vmid} · {name}
           </h1>
@@ -83,7 +91,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             </Link>
             {" / "}
             {params.node}
-            {num(status.uptime) ? ` · Uptime ${formatUptime(num(status.uptime))}` : null}
+            {num(status.uptime) ? ` · ${t("guest.uptime", { time: formatUptime(num(status.uptime)) })}` : null}
           </p>
         </div>
         <GuestStateBadge status={runState} />
@@ -91,69 +99,77 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
 
       <div className="flex flex-wrap gap-2">
         <Button disabled={!stopped} onClick={() => void action("start")}>
-          Start
+          {t("guest.start")}
         </Button>
         <Button variant="outline" disabled={!running} onClick={() => void action("shutdown")}>
-          Shutdown
+          {t("guest.shutdown")}
         </Button>
         <Button variant="outline" disabled={stopped} onClick={() => void action("stop")}>
-          Stop
+          {t("guest.stop")}
         </Button>
         <Button variant="outline" disabled={!running} onClick={() => void action("reboot")}>
-          Reboot
+          {t("guest.reboot")}
         </Button>
         {kind === "vm" ? (
           <>
             <Button variant="outline" disabled={!running} onClick={() => void action("pause")}>
-              Pause
+              {t("guest.pause")}
             </Button>
             <Button variant="outline" disabled={!paused} onClick={() => void action("resume")}>
-              Resume
+              {t("guest.resume")}
             </Button>
             {stopped ? (
               <Button variant="destructive" disabled>
-                Reset
+                {t("guest.reset")}
               </Button>
             ) : (
               <ConfirmAction
-                title="Hard reset?"
-                description="Entspricht Strom ziehen und wieder einschalten."
-                actionLabel="Reset"
+                title={t("guest.resetTitle")}
+                description={t("guest.resetBody")}
+                actionLabel={t("guest.reset")}
                 destructive
                 onConfirm={() => action("reset", { confirm: true })}
               >
-                <Button variant="destructive">Reset</Button>
+                <Button variant="destructive">{t("guest.reset")}</Button>
               </ConfirmAction>
             )}
           </>
         ) : null}
+        <CloneDialog
+          kind={kind}
+          vmid={Number(params.vmid)}
+          name={name}
+          nextid={options?.nextid}
+          path={path}
+          onDone={() => void refetch()}
+        />
         <Button variant={consoleOpen ? "default" : "outline"} onClick={() => setConsoleOpen((v) => !v)}>
-          {consoleOpen ? "Konsole ausblenden" : "Konsole"}
+          {consoleOpen ? t("guest.consoleHide") : t("guest.console")}
         </Button>
         {running || paused ? (
           <Button variant="destructive" disabled>
-            Löschen
+            {t("guest.delete")}
           </Button>
         ) : (
           <ConfirmAction
-            title={`${kind === "vm" ? "VM" : "LXC"} ${params.vmid} löschen?`}
-            description={`Kann nicht rückgängig gemacht werden. ${params.vmid} — ${name}`}
-            actionLabel="Löschen"
+            title={t("guest.deleteTitle", { kind: kindLabel, id: params.vmid })}
+            description={t("guest.deleteBody", { id: params.vmid, name })}
+            actionLabel={t("guest.delete")}
             destructive
             onConfirm={() => action("delete", { confirm: true })}
           >
-            <Button variant="destructive">Löschen</Button>
+            <Button variant="destructive">{t("guest.delete")}</Button>
           </ConfirmAction>
         )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Resource label="CPU" value={cpuPercent} detail={`${cores || "—"} Kerne · ${Math.round(cpuPercent)}%`} />
-        <Resource label="RAM" value={percentage(mem, maxmem)} detail={`${bytesToSize(mem)} / ${bytesToSize(maxmem)}`} />
-        <Resource label="Disk" value={percentage(disk, maxdisk)} detail={`${bytesToSize(disk)} / ${bytesToSize(maxdisk)}`} />
+        <Resource label={t("dashboard.cpu")} value={cpuPercent} detail={t("dashboard.cores", { n: cores || "—" }) + ` · ${Math.round(cpuPercent)}%`} />
+        <Resource label={t("dashboard.ram")} value={percentage(mem, maxmem)} detail={`${bytesToSize(mem)} / ${bytesToSize(maxmem)}`} />
+        <Resource label={t("dashboard.disk")} value={percentage(disk, maxdisk)} detail={`${bytesToSize(disk)} / ${bytesToSize(maxdisk)}`} />
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-muted-foreground">Netzwerk</CardTitle>
+            <CardTitle className="text-muted-foreground">{t("guest.network")}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm">
@@ -170,7 +186,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
         <WebConsole hostId={params.hostId} node={params.node} kind={kind} vmid={Number(params.vmid)} />
       ) : null}
 
-      {isLoading ? <p className="text-sm text-muted-foreground">Lade…</p> : null}
+      {isLoading ? <p className="text-sm text-muted-foreground">{t("common.loading")}</p> : null}
 
       {data?.config ? (
         <GuestConfigForm
@@ -183,7 +199,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             try {
               await action("config", { config: payload });
             } catch (e) {
-              toast.error(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
+              toast.error(e instanceof Error ? e.message : t("common.failed"));
               throw e;
             } finally {
               setSaving(false);
@@ -194,12 +210,14 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Snapshots</CardTitle>
+          <CardTitle>{t("guest.snapshots")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex gap-2">
-            <Input placeholder="Snapshot-Name" value={snap} onChange={(e) => setSnap(e.target.value)} />
-            <Button onClick={() => void action("snapshot", { snapname: snap || `snap-${Date.now()}` })}>Erstellen</Button>
+            <Input placeholder={t("guest.snapshotName")} value={snap} onChange={(e) => setSnap(e.target.value)} />
+            <Button onClick={() => void action("snapshot", { snapname: snap || `snap-${Date.now()}` })}>
+              {t("guest.createSnapshot")}
+            </Button>
           </div>
           {(data?.snapshots ?? []).map((s) => (
             <div key={String(s.name)} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
@@ -207,10 +225,10 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
               {String(s.name) === "current" ? null : (
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" onClick={() => void action("snapshot-rollback", { snapname: s.name })}>
-                    Restore
+                    {t("guest.restore")}
                   </Button>
                   <Button size="sm" variant="destructive" onClick={() => void action("snapshot-delete", { snapname: s.name })}>
-                    Löschen
+                    {t("guest.delete")}
                   </Button>
                 </div>
               )}

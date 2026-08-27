@@ -7,8 +7,10 @@ import { GuestTable } from "@/components/guests/guest-table";
 import { api } from "@/lib/api";
 import type { Guest, PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 export default function VmsPage() {
+  const { t } = useI18n();
   const { data: hosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
@@ -35,12 +37,12 @@ export default function VmsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        kicker="Virtualisierung"
-        title="VMs"
-        description="Alle QEMU-Gäste auf verbundenen Hosts."
+        kicker={t("vms.kicker")}
+        title={t("vms.title")}
+        description={t("vms.description")}
         actions={
           <Button asChild>
-            <Link href="/vms/create">VM erstellen</Link>
+            <Link href="/vms/create">{t("vms.create")}</Link>
           </Button>
         }
       />

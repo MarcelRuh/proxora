@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { ALL_PERMISSIONS } from "@/lib/permissions";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 type Role = {
   id: string;
@@ -22,6 +23,7 @@ type Role = {
 };
 
 export default function RolesPage() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["roles"], queryFn: () => api<{ roles: Role[] }>("/api/roles") });
   const [name, setName] = useState("");
@@ -38,7 +40,7 @@ export default function RolesPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader kicker="Zugriff" title="Rollen" />
+      <PageHeader kicker={t("page.access")} title={t("roles.title")} />
       <div className="grid gap-4 lg:grid-cols-2">
         {(data?.roles ?? []).map((role) => (
           <Card key={role.id}>

@@ -10,6 +10,7 @@ import { Input, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 type UserRow = {
   id: string;
@@ -25,6 +26,7 @@ type UserRow = {
 type RoleRow = { id: string; name: string; slug: string };
 
 export default function UsersPage() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["users"], queryFn: () => api<{ users: UserRow[] }>("/api/users") });
   const { data: roles } = useQuery({ queryKey: ["roles"], queryFn: () => api<{ roles: RoleRow[] }>("/api/roles") });
@@ -43,9 +45,9 @@ export default function UsersPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        kicker="Zugriff"
-        title="Benutzer"
-        actions={<Button onClick={() => setOpen(true)}>Benutzer hinzufügen</Button>}
+        kicker={t("page.access")}
+        title={t("users.title")}
+        actions={<Button onClick={() => setOpen(true)}>{t("users.add")}</Button>}
       />
       <Card>
         <CardHeader>

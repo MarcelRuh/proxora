@@ -6,6 +6,7 @@ import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { buildLxcNet0, compactProxmoxBody, normalizeLxcCidr } from "@/lib/lxc-net";
+import { startGuestAfterCreate } from "@/server/services/guest-start";
 import type { LxcCreateParams } from "@/server/proxmox/lxc";
 
 const createLxcSchema = z.object({
@@ -29,6 +30,7 @@ const createLxcSchema = z.object({
   unprivileged: z.boolean().optional(),
   nesting: z.boolean().optional(),
   description: z.string().optional(),
+  startAfter: z.boolean().optional(),
 });
 
 export const GET = apiRoute("lxc.view", async (_req, session, params) => {
@@ -69,6 +71,13 @@ export const POST = apiRoute("lxc.create", async (req, session, params) => {
       }) as LxcCreateParams,
     ),
   );
+  let started = false;
+  if (body.startAfter) {
+    const result = await withHostClient(params.id, session.user, (client) =>
+      startGuestAfterCreate(client, "lxc", body.node, body.vmid, typeof upid === "string" ? upid : undefined),
+    );
+    started = result.started;
+  }
   await writeAuditLog({
     userId: session.user.id,
     ip: await clientIp(),
@@ -78,5 +87,5 @@ export const POST = apiRoute("lxc.create", async (req, session, params) => {
     result: "SUCCESS",
     metadata: { upid },
   });
-  return json({ upid }, 201);
+  return json({ upid, started }, 201);
 });

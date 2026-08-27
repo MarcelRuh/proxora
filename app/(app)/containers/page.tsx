@@ -7,8 +7,10 @@ import { GuestTable } from "@/components/guests/guest-table";
 import { api } from "@/lib/api";
 import type { Guest, PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 export default function ContainersPage() {
+  const { t } = useI18n();
   const { data: hosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
@@ -35,12 +37,12 @@ export default function ContainersPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        kicker="Virtualisierung"
-        title="Container"
-        description="LXC-Container auf verbundenen Hosts."
+        kicker={t("vms.kicker")}
+        title={t("lxc.title")}
+        description={t("lxc.description")}
         actions={
           <Button asChild>
-            <Link href="/containers/create">Container erstellen</Link>
+            <Link href="/containers/create">{t("lxc.create")}</Link>
           </Button>
         }
       />

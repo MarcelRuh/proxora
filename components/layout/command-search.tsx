@@ -6,6 +6,8 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
+import { useI18n } from "@/components/i18n/locale-provider";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 type SearchResponse = {
   hosts: Array<{ type: string; id: string; title: string; subtitle?: string; href?: string }>;
@@ -15,6 +17,7 @@ type SearchResponse = {
 };
 
 export function CommandSearch({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { t } = useI18n();
   const [q, setQ] = useState("");
   const router = useRouter();
   const { data } = useQuery({
@@ -23,11 +26,11 @@ export function CommandSearch({ open, onOpenChange }: { open: boolean; onOpenCha
     enabled: open && q.length > 0,
   });
 
-  const groups = [
-    { label: "Hosts", items: data?.hosts ?? [] },
-    { label: "VMs", items: data?.vms ?? [] },
-    { label: "Container", items: data?.containers ?? [] },
-    { label: "Storage", items: data?.storage ?? [] },
+  const groups: Array<{ labelKey: MessageKey; items: SearchResponse[keyof SearchResponse] }> = [
+    { labelKey: "search.hosts", items: data?.hosts ?? [] },
+    { labelKey: "search.vms", items: data?.vms ?? [] },
+    { labelKey: "search.containers", items: data?.containers ?? [] },
+    { labelKey: "search.storage", items: data?.storage ?? [] },
   ];
 
   return (
@@ -40,15 +43,15 @@ export function CommandSearch({ open, onOpenChange }: { open: boolean; onOpenCha
     >
       <DialogContent className="max-w-xl p-0">
         <DialogHeader className="p-4 pb-0">
-          <DialogTitle className="proxora-section text-xs">Suchen</DialogTitle>
+          <DialogTitle className="proxora-section text-xs">{t("search.title")}</DialogTitle>
         </DialogHeader>
         <div className="p-4 pt-2">
-          <Input autoFocus placeholder="Suchen: VM, Host, Storage…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input autoFocus placeholder={t("search.placeholder")} value={q} onChange={(e) => setQ(e.target.value)} />
           <div className="mt-3 max-h-80 overflow-y-auto">
             {groups.map((g) =>
               g.items.length ? (
-                <div key={g.label} className="mb-3">
-                  <p className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">{g.label}</p>
+                <div key={g.labelKey} className="mb-3">
+                  <p className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">{t(g.labelKey)}</p>
                   {g.items.map((item) => (
                     <button
                       key={item.id}
@@ -66,7 +69,7 @@ export function CommandSearch({ open, onOpenChange }: { open: boolean; onOpenCha
               ) : null,
             )}
             {q && !groups.some((g) => g.items.length) ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">Keine Treffer</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">{t("search.empty")}</p>
             ) : null}
           </div>
         </div>

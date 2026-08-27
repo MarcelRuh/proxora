@@ -5,6 +5,7 @@ import { clientIp } from "@/server/auth/session";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
+import { startGuestAfterCreate } from "@/server/services/guest-start";
 import type { VmCreateParams } from "@/server/proxmox/vms";
 
 const createVmSchema = z.object({
@@ -35,6 +36,7 @@ const createVmSchema = z.object({
   machine: z.string().optional(),
   efi: z.boolean().optional(),
   tpm: z.boolean().optional(),
+  startAfter: z.boolean().optional(),
 });
 
 export const GET = apiRoute("vm.view", async (_req, session, params) => {
@@ -85,6 +87,13 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
   const upid = await withHostClient(params.id, session.user, (client) =>
     client.vms.create(body.node, payload as VmCreateParams),
   );
+  let started = false;
+  if (body.startAfter) {
+    const result = await withHostClient(params.id, session.user, (client) =>
+      startGuestAfterCreate(client, "vm", body.node, body.vmid, typeof upid === "string" ? upid : undefined),
+    );
+    started = result.started;
+  }
   await writeAuditLog({
     userId: session.user.id,
     ip: await clientIp(),
@@ -94,5 +103,5 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     result: "SUCCESS",
     metadata: { upid },
   });
-  return json({ upid }, 201);
+  return json({ upid, started }, 201);
 });
