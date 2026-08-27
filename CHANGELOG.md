@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.33] – 2026-08-27
+
+### Changed
+
+- Discord notifications are structured embeds posted as **Proxora** (name + icon), not plain text.
+
+### Added
+
+- Test button on Discord channels (and on the add form) to send a sample embed.
+
 ## [1.0.32] – 2026-08-27
 
 ### Added

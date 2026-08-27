@@ -115,9 +115,12 @@ export function NotificationsSection() {
             <Input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
           </div>
           <EventChecks value={form.events} onChange={(events) => setForm({ ...form, events })} />
-          <Button onClick={() => create.mutate()} disabled={create.isPending || !form.url}>
-            {t("settings.saveChannel")}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => create.mutate()} disabled={create.isPending || !form.url}>
+              {t("settings.saveChannel")}
+            </Button>
+            <TestUrlButton url={form.url} />
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -183,16 +186,56 @@ function ChannelEditor({ channel }: { channel: Channel }) {
         value={events}
         onChange={setEvents}
       />
-      <Button
-        size="sm"
-        onClick={() =>
-          void save().catch((err: unknown) => {
-            toast.error(err instanceof Error ? err.message : t("common.failed"));
-          })
-        }
-      >
-        {t("common.save")}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          onClick={() =>
+            void save().catch((err: unknown) => {
+              toast.error(err instanceof Error ? err.message : t("common.failed"));
+            })
+          }
+        >
+          {t("common.save")}
+        </Button>
+        <TestChannelButton channelId={channel.id} />
+      </div>
     </div>
+  );
+}
+
+function TestUrlButton({ url }: { url: string }) {
+  const { t } = useI18n();
+  const test = useMutation({
+    mutationFn: () =>
+      api("/api/notifications/test", {
+        method: "POST",
+        body: JSON.stringify({ url, type: "discord" }),
+      }),
+    onSuccess: () => toast.success(t("settings.testSent")),
+    onError: (e: Error) => toast.error(e.message),
+  });
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      disabled={test.isPending || url.trim().length < 12}
+      onClick={() => test.mutate()}
+    >
+      {test.isPending ? t("common.loading") : t("settings.testChannel")}
+    </Button>
+  );
+}
+
+function TestChannelButton({ channelId }: { channelId: string }) {
+  const { t } = useI18n();
+  const test = useMutation({
+    mutationFn: () => api(`/api/notifications/${channelId}/test`, { method: "POST" }),
+    onSuccess: () => toast.success(t("settings.testSent")),
+    onError: (e: Error) => toast.error(e.message),
+  });
+  return (
+    <Button type="button" size="sm" variant="outline" disabled={test.isPending} onClick={() => test.mutate()}>
+      {test.isPending ? t("common.loading") : t("settings.testChannel")}
+    </Button>
   );
 }
