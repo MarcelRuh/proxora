@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
@@ -15,24 +15,32 @@ import { formatUptime, percentage } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { useState } from "react";
 import { useCan } from "@/components/auth/session-user";
+import { useI18n } from "@/components/i18n/locale-provider";
+import type { PublicHost } from "@/lib/types";
+import { HostEditorDialog } from "@/components/hosts/host-editor";
 
 type Status = {
   host: string;
   nodes: Array<{
     node: string;
+    online: string;
     status: { cpu: number; memory: { used: number; total: number }; rootfs?: { used: number; total: number }; uptime: number } | null;
   }>;
   vms: Array<{ vmid: number; name: string; status: string; node: string }>;
   containers: Array<{ vmid: number; name: string; status: string; node: string }>;
-  storage: Array<{ storage: string; type: string; used?: number; total?: number }>;
+  storage: Array<{ storage: string; type: string; node?: string }>;
 };
 
 export default function HostDetailPage() {
+  const { t } = useI18n();
   const params = useParams<{ id: string }>();
+  const qc = useQueryClient();
   const canConsole = useCan("hosts.console");
   const canReboot = useCan("hosts.reboot");
   const canShutdown = useCan("hosts.shutdown");
+  const canEdit = useCan("hosts.update") || useCan("hosts.credentials");
   const [consoleNode, setConsoleNode] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
   const { data, error, refetch, isLoading } = useQuery({
     queryKey: ["host", params.id],
     queryFn: () => api<Status>(`/api/hosts/${params.id}/status`),
@@ -40,107 +48,152 @@ export default function HostDetailPage() {
   });
   const { data: meta } = useQuery({
     queryKey: ["host-meta", params.id],
-    queryFn: () => api<{ host: { name: string; connectionState: "ONLINE"; proxmoxVersion: string | null } }>(
-      `/api/hosts/${params.id}`,
-    ),
+    queryFn: () => api<{ host: PublicHost }>(`/api/hosts/${params.id}`),
   });
 
   if (error) {
     return (
       <div className="proxora-panel p-6">
-        <p className="font-medium">Verbindung zum Host fehlgeschlagen</p>
-        <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : "Zeitüberschreitung"}</p>
+        <p className="font-medium">{t("hosts.connectionFailed")}</p>
+        <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : t("common.failed")}</p>
         <Button className="mt-3" variant="outline" onClick={() => void refetch()}>
-          Erneut versuchen
+          {t("common.retry")}
         </Button>
       </div>
     );
   }
 
-  const node = data?.nodes[0];
-  const st = node?.status;
+  const nodes = data?.nodes ?? [];
+
+  async function power(action: "reboot" | "shutdown", node: string) {
+    await api(`/api/hosts/${params.id}/status`, {
+      method: "POST",
+      body: JSON.stringify({ action, node, confirm: true }),
+    });
+    toast.success(action === "reboot" ? t("hosts.rebootStarted") : t("hosts.shutdownStarted"));
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
-        kicker="Host"
-        title={meta?.host.name ?? data?.host ?? "Host"}
+        kicker={t("hosts.kicker")}
+        title={meta?.host.name ?? data?.host ?? t("nav.hosts")}
         description={`Proxmox VE ${meta?.host.proxmoxVersion ?? "—"}`}
-        actions={meta ? <HostStateBadge state={meta.host.connectionState} /> : undefined}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {meta ? <HostStateBadge state={meta.host.connectionState} /> : null}
+            {canEdit && meta ? (
+              <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+                {t("hosts.edit")}
+              </Button>
+            ) : null}
+          </div>
+        }
       />
-      {st ? (
-        <Card>
-          <CardContent className="grid gap-4 p-5 sm:grid-cols-3">
-            <Metric label="CPU" value={st.cpu * 100} />
-            <Metric label="Memory" value={percentage(st.memory.used, st.memory.total)} />
-            <Metric label="Storage" value={percentage(st.rootfs?.used, st.rootfs?.total)} />
-            <p className="text-sm text-muted-foreground sm:col-span-3">Uptime {formatUptime(st.uptime)}</p>
-          </CardContent>
-        </Card>
-      ) : null}
-      <div className="flex flex-wrap gap-2">
-        {canConsole ? <Button onClick={() => setConsoleNode(node?.node ?? null)}>Console</Button> : null}
-        <Button variant="outline" asChild>
-          <Link href={`/updates?host=${params.id}`}>Updates</Link>
-        </Button>
-        <Button variant="outline" asChild>
-          <Link href="/backups">Backups</Link>
-        </Button>
-        {canReboot ? (
-        <ConfirmAction
-          title="Reboot this node?"
-          description="Running guests will be interrupted. Confirm you have a maintenance window."
-          actionLabel="Reboot"
-          destructive
-          onConfirm={async () => {
-            await api(`/api/hosts/${params.id}/status`, {
-              method: "POST",
-              body: JSON.stringify({ action: "reboot", node: node?.node, confirm: true }),
-            });
-            toast.success("Reboot task started");
-          }}
-        >
-          <Button variant="destructive">Reboot</Button>
-        </ConfirmAction>
-        ) : null}
-        {canShutdown ? (
-        <ConfirmAction
-          title="Shutdown this node?"
-          description="The host will power off. You must start it out-of-band."
-          actionLabel="Shutdown"
-          destructive
-          onConfirm={async () => {
-            await api(`/api/hosts/${params.id}/status`, {
-              method: "POST",
-              body: JSON.stringify({ action: "shutdown", node: node?.node, confirm: true }),
-            });
-            toast.success("Shutdown task started");
-          }}
-        >
-          <Button variant="destructive">Shutdown</Button>
-        </ConfirmAction>
-        ) : null}
-      </div>
+      {nodes.map((item) => {
+        const st = item.status;
+        return (
+          <Card key={item.node}>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+              <CardTitle>
+                {t("hosts.node")} {item.node}
+                <span className="ml-2 text-sm font-normal text-muted-foreground">{item.online}</span>
+              </CardTitle>
+              <div className="flex flex-wrap gap-2">
+                {canConsole ? (
+                  <Button size="sm" onClick={() => setConsoleNode(item.node)}>
+                    {t("guest.console")}
+                  </Button>
+                ) : null}
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={`/updates?host=${params.id}`}>{t("nav.updates")}</Link>
+                </Button>
+                <Button size="sm" variant="outline" asChild>
+                  <Link href="/backups">{t("nav.backups")}</Link>
+                </Button>
+                {canReboot ? (
+                  <ConfirmAction
+                    title={t("hosts.rebootTitle", { node: item.node })}
+                    description={t("hosts.rebootBody")}
+                    actionLabel={t("guest.reboot")}
+                    destructive
+                    onConfirm={() => power("reboot", item.node)}
+                  >
+                    <Button size="sm" variant="destructive">
+                      {t("guest.reboot")}
+                    </Button>
+                  </ConfirmAction>
+                ) : null}
+                {canShutdown ? (
+                  <ConfirmAction
+                    title={t("hosts.shutdownTitle", { node: item.node })}
+                    description={t("hosts.shutdownBody")}
+                    actionLabel={t("guest.shutdown")}
+                    destructive
+                    onConfirm={() => power("shutdown", item.node)}
+                  >
+                    <Button size="sm" variant="destructive">
+                      {t("guest.shutdown")}
+                    </Button>
+                  </ConfirmAction>
+                ) : null}
+              </div>
+            </CardHeader>
+            {st ? (
+              <CardContent className="grid gap-4 sm:grid-cols-3">
+                <Metric label={t("table.cpu")} value={st.cpu * 100} />
+                <Metric label={t("table.ram")} value={percentage(st.memory.used, st.memory.total)} />
+                <Metric label={t("hosts.rootfs")} value={percentage(st.rootfs?.used, st.rootfs?.total)} />
+                <p className="text-sm text-muted-foreground sm:col-span-3">{t("guest.uptime", { time: formatUptime(st.uptime) })}</p>
+              </CardContent>
+            ) : null}
+          </Card>
+        );
+      })}
       {consoleNode && canConsole ? <WebConsole hostId={params.id} node={consoleNode} kind="node" /> : null}
-      <Section title="Virtual Machines" href="/vms">
+      <Section title={t("nav.vms")} href="/vms" viewAll={t("hosts.viewAll")}>
         {(data?.vms ?? []).map((vm) => (
-          <Row key={vm.vmid} href={`/vms/${params.id}/${vm.node}/${vm.vmid}`} id={vm.vmid} name={vm.name} status={vm.status} />
+          <Row
+            key={`${vm.node}-${vm.vmid}`}
+            href={`/vms/${params.id}/${vm.node}/${vm.vmid}`}
+            id={vm.vmid}
+            name={`${vm.name} · ${vm.node}`}
+            status={vm.status}
+          />
         ))}
       </Section>
-      <Section title="Containers" href="/containers">
+      <Section title={t("nav.containers")} href="/containers" viewAll={t("hosts.viewAll")}>
         {(data?.containers ?? []).map((ct) => (
-          <Row key={ct.vmid} href={`/containers/${params.id}/${ct.node}/${ct.vmid}`} id={ct.vmid} name={ct.name} status={ct.status} />
+          <Row
+            key={`${ct.node}-${ct.vmid}`}
+            href={`/containers/${params.id}/${ct.node}/${ct.vmid}`}
+            id={ct.vmid}
+            name={`${ct.name} · ${ct.node}`}
+            status={ct.status}
+          />
         ))}
       </Section>
-      <Section title="Storage" href="/storage">
+      <Section title={t("nav.storage")} href="/storage" viewAll={t("hosts.viewAll")}>
         {(data?.storage ?? []).map((s) => (
-          <div key={s.storage} className="flex items-center justify-between border-t border-border py-2 text-sm">
+          <div key={`${s.node ?? ""}-${s.storage}`} className="flex items-center justify-between border-t border-border py-2 text-sm">
             <span>{s.storage}</span>
             <span className="text-muted-foreground">{s.type}</span>
           </div>
         ))}
       </Section>
-      {isLoading ? <p className="text-sm text-muted-foreground">Loading host telemetry…</p> : null}
+      {isLoading ? <p className="text-sm text-muted-foreground">{t("hosts.loadingTelemetry")}</p> : null}
+      {meta?.host ? (
+        <HostEditorDialog
+          mode="edit"
+          host={meta.host}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          onSaved={() => {
+            void qc.invalidateQueries({ queryKey: ["hosts"] });
+            void qc.invalidateQueries({ queryKey: ["host-meta", params.id] });
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -157,13 +210,13 @@ function Metric({ label, value }: { label: string; value: number }) {
   );
 }
 
-function Section({ title, href, children }: { title: string; href: string; children: React.ReactNode }) {
+function Section({ title, href, viewAll, children }: { title: string; href: string; viewAll: string; children: React.ReactNode }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>{title}</CardTitle>
         <Link href={href} className="text-xs text-muted-foreground hover:underline">
-          View all
+          {viewAll}
         </Link>
       </CardHeader>
       <CardContent>{children}</CardContent>

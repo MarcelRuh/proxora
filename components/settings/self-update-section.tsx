@@ -8,8 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/misc";
 import { ConfirmAction } from "@/components/confirm-action";
 import { api } from "@/lib/api";
-import { APP_NAME } from "@/lib/version";
 import { useCan } from "@/components/auth/session-user";
+import { useI18n } from "@/components/i18n/locale-provider";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 export type SelfUpdateStatus = {
   enabled: boolean;
@@ -30,19 +31,20 @@ export type SelfUpdateStatus = {
   targetVersion: string | null;
 };
 
-const STEP_LABELS: Record<string, string> = {
-  cleanup: "Cleaning disk space",
-  start: "Starting",
-  resolve: "Resolving GitHub revision",
-  sync: "Syncing source",
-  build: "Rebuilding stack",
-  buildWeb: "Building image",
-  export: "Exporting image",
-  startWeb: "Starting container",
-  finalize: "Finalizing",
-  done: "Done",
-  error: "Failed",
-};
+const STEP_IDS = new Set([
+  "cleanup",
+  "start",
+  "resolve",
+  "sync",
+  "build",
+  "buildWeb",
+  "export",
+  "startWeb",
+  "finalize",
+  "done",
+  "error",
+  "apply",
+]);
 
 function shortRev(value: string | null | undefined): string {
   if (!value) return "—";
@@ -64,6 +66,7 @@ async function waitForHealth(timeoutMs = 180_000): Promise<boolean> {
 }
 
 export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const canApply = useCan("proxora.update");
   const [busy, setBusy] = useState(false);
@@ -80,7 +83,8 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
   const progress = status?.progress ?? optimisticProgress;
   const showProgress = Boolean(busy || status?.updating || progress?.step === "error");
   const percent = progress?.percent ?? (showProgress ? 2 : 0);
-  const stepLabel = (progress?.step && STEP_LABELS[progress.step]) || "Applying update";
+  const stepId = progress?.step && STEP_IDS.has(progress.step) ? progress.step : "apply";
+  const stepLabel = t(`proxora.step.${stepId}` as MessageKey);
 
   const handleApply = async () => {
     setBusy(true);
@@ -99,7 +103,7 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
       }
     } catch (err) {
       setBusy(false);
-      setError(err instanceof Error ? err.message : "Update failed");
+      setError(err instanceof Error ? err.message : t("proxora.failed"));
       throw err;
     }
 
@@ -115,7 +119,7 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
       }
     }
     const ok = await waitForHealth();
-    setSuccess(ok ? "Health check passed — reloading…" : "Update finished. Refresh manually if the UI looks stale.");
+    setSuccess(ok ? t("proxora.healthOk") : t("proxora.healthManual"));
     setBusy(false);
     if (ok) window.setTimeout(() => window.location.reload(), 1500);
   };
@@ -123,9 +127,9 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>{APP_NAME} self-update</CardTitle>
+        <CardTitle>{t("proxora.cardTitle")}</CardTitle>
         {status?.updateAvailable ? (
-          <Badge variant="warning">Update available</Badge>
+          <Badge variant="warning">{t("proxora.available")}</Badge>
         ) : (
           <Badge variant="success">v{status?.currentVersion ?? "—"}</Badge>
         )}
@@ -149,15 +153,15 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
             </div>
             {!compact ? (
               <dl className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
-                <dt>Repo</dt>
+                <dt>{t("proxora.repo")}</dt>
                 <dd>
                   {status.repo}@{status.branch}
                 </dd>
-                <dt>Install dir</dt>
+                <dt>{t("proxora.installDir")}</dt>
                 <dd>{status.installDir ?? "—"}</dd>
-                <dt>Local revision</dt>
+                <dt>{t("proxora.localRev")}</dt>
                 <dd className="font-mono">{shortRev(status.localRevision)}</dd>
-                <dt>Remote revision</dt>
+                <dt>{t("proxora.remoteRev")}</dt>
                 <dd className="font-mono">{shortRev(status.remoteRevision)}</dd>
               </dl>
             ) : null}
@@ -177,21 +181,24 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
             ) : null}
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={() => void qc.invalidateQueries({ queryKey: ["self-update"] })}>
-                Check
+                {t("proxora.check")}
               </Button>
               {canApply ? (
                 <ConfirmAction
-                  title={`Update ${APP_NAME}?`}
+                  title={t("proxora.confirmTitle")}
                   description={
                     status.updateAvailable
-                      ? `This syncs from GitHub and rebuilds the Compose stack. ${status.currentVersion} → ${status.targetVersion ?? "latest"}.`
-                      : "No newer version was detected. Rebuild from GitHub anyway?"
+                      ? t("proxora.confirmBody", {
+                          from: status.currentVersion,
+                          to: status.targetVersion ?? t("proxora.latest"),
+                        })
+                      : t("proxora.confirmAnyway")
                   }
-                  actionLabel="Jetzt aktualisieren"
+                  actionLabel={t("proxora.apply")}
                   onConfirm={handleApply}
                 >
                   <Button size="sm" disabled={busy || status.updating}>
-                    {busy || status.updating ? "Updating…" : "Jetzt aktualisieren"}
+                    {busy || status.updating ? t("proxora.applying") : t("proxora.apply")}
                   </Button>
                 </ConfirmAction>
               ) : null}
@@ -203,7 +210,7 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
             ) : null}
           </>
         ) : (
-          <p className="text-muted-foreground">Loading version…</p>
+          <p className="text-muted-foreground">{t("proxora.loading")}</p>
         )}
       </CardContent>
     </Card>

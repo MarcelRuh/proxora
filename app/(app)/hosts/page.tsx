@@ -1,13 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input, Label } from "@/components/ui/input";
 import { HostStateBadge } from "@/components/status-badge";
 import { ConfirmAction } from "@/components/confirm-action";
 import { api } from "@/lib/api";
@@ -15,51 +13,25 @@ import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
-
-type FormState = {
-  name: string;
-  url: string;
-  authType: "API_TOKEN" | "PASSWORD";
-  username: string;
-  tokenId: string;
-  secret: string;
-  allowInsecureTls: boolean;
-};
-
-const empty: FormState = {
-  name: "",
-  url: "https://192.168.1.10:8006",
-  authType: "PASSWORD",
-  username: "root@pam",
-  tokenId: "",
-  secret: "",
-  allowInsecureTls: true,
-};
+import { HostEditorDialog } from "@/components/hosts/host-editor";
 
 export default function HostsPage() {
   const { t } = useI18n();
   const canCreate = useCan("hosts.create");
   const canDelete = useCan("hosts.delete");
+  const canEdit = useCan("hosts.update") || useCan("hosts.credentials");
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
     refetchInterval: 20_000,
   });
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(empty);
-  const [test, setTest] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<PublicHost | null>(null);
 
-  const create = useMutation({
-    mutationFn: () => api("/api/hosts", { method: "POST", body: JSON.stringify(form) }),
-    onSuccess: () => {
-      toast.success(t("hosts.added"));
-      setOpen(false);
-      setForm(empty);
-      void qc.invalidateQueries({ queryKey: ["hosts"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
+  function refresh() {
+    void qc.invalidateQueries({ queryKey: ["hosts"] });
+  }
 
   return (
     <div className="space-y-6">
@@ -67,7 +39,7 @@ export default function HostsPage() {
         kicker={t("hosts.kicker")}
         title={t("hosts.title")}
         description={t("hosts.description")}
-        actions={canCreate ? <Button onClick={() => setOpen(true)}>{t("hosts.add")}</Button> : undefined}
+        actions={canCreate ? <Button onClick={() => setCreateOpen(true)}>{t("hosts.add")}</Button> : undefined}
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {(data?.hosts ?? []).map((host) => (
@@ -86,6 +58,11 @@ export default function HostsPage() {
                 <Button size="sm" asChild>
                   <Link href={`/hosts/${host.id}`}>{t("hosts.open")}</Link>
                 </Button>
+                {canEdit ? (
+                  <Button size="sm" variant="outline" onClick={() => setEditing(host)}>
+                    {t("hosts.edit")}
+                  </Button>
+                ) : null}
                 <Button
                   size="sm"
                   variant="outline"
@@ -93,7 +70,7 @@ export default function HostsPage() {
                     try {
                       await api(`/api/hosts/${host.id}/test`, { method: "POST" });
                       toast.success(t("hosts.testOk"));
-                      void qc.invalidateQueries({ queryKey: ["hosts"] });
+                      refresh();
                     } catch (e) {
                       toast.error(e instanceof Error ? e.message : t("common.failed"));
                     }
@@ -102,124 +79,37 @@ export default function HostsPage() {
                   {t("hosts.test")}
                 </Button>
                 {canDelete ? (
-                <ConfirmAction
-                  title={t("hosts.removeTitle", { name: host.name })}
-                  description={t("hosts.removeBody")}
-                  actionLabel={t("hosts.removeAction")}
-                  destructive
-                  onConfirm={async () => {
-                    await api(`/api/hosts/${host.id}`, { method: "DELETE" });
-                    toast.success(t("hosts.removed"));
-                    void qc.invalidateQueries({ queryKey: ["hosts"] });
-                  }}
-                >
-                  <Button size="sm" variant="destructive">
-                    {t("hosts.remove")}
-                  </Button>
-                </ConfirmAction>
+                  <ConfirmAction
+                    title={t("hosts.removeTitle", { name: host.name })}
+                    description={t("hosts.removeBody")}
+                    actionLabel={t("hosts.removeAction")}
+                    destructive
+                    onConfirm={async () => {
+                      await api(`/api/hosts/${host.id}`, { method: "DELETE" });
+                      toast.success(t("hosts.removed"));
+                      refresh();
+                    }}
+                  >
+                    <Button size="sm" variant="destructive">
+                      {t("hosts.remove")}
+                    </Button>
+                  </ConfirmAction>
                 ) : null}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{t("hosts.addTitle")}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <Field label={t("create.name")} value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
-            <Field label={t("create.host")} value={form.url} onChange={(v) => setForm({ ...form, url: v })} />
-            <div className="space-y-1">
-              <Label>{t("hosts.auth")}</Label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={form.authType}
-                onChange={(e) => {
-                  const authType = e.target.value as FormState["authType"];
-                  setForm({
-                    ...form,
-                    authType,
-                    tokenId: authType === "API_TOKEN" ? form.tokenId || "manager" : "",
-                    username: form.username || "root@pam",
-                  });
-                }}
-              >
-                <option value="PASSWORD">{t("hosts.authPassword")}</option>
-                <option value="API_TOKEN">{t("hosts.authToken")}</option>
-              </select>
-            </div>
-            <Field
-              label={t("hosts.user")}
-              value={form.username}
-              onChange={(v) => setForm({ ...form, username: v })}
-              placeholder="root@pam"
-            />
-            {form.authType === "API_TOKEN" ? (
-              <Field label={t("hosts.tokenId")} value={form.tokenId} onChange={(v) => setForm({ ...form, tokenId: v })} />
-            ) : null}
-            <Field
-              label={form.authType === "PASSWORD" ? t("create.password") : t("hosts.tokenSecret")}
-              type="password"
-              value={form.secret}
-              onChange={(v) => setForm({ ...form, secret: v })}
-            />
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={form.allowInsecureTls}
-                onChange={(e) => setForm({ ...form, allowInsecureTls: e.target.checked })}
-              />
-              {t("hosts.allowTls")}
-            </label>
-            {test ? <p className="text-sm text-muted-foreground">{test}</p> : null}
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    const r = await api<{ ok: boolean; version?: { version: string }; error?: string }>(
-                      "/api/hosts/test",
-                      { method: "POST", body: JSON.stringify(form) },
-                    );
-                    setTest(r.ok ? `${t("hosts.testOk")} · Proxmox ${r.version?.version}` : r.error ?? t("common.failed"));
-                  } catch (e) {
-                    setTest(e instanceof Error ? e.message : t("common.failed"));
-                  }
-                }}
-              >
-                {t("hosts.testConnection")}
-              </Button>
-              <Button onClick={() => create.mutate()} disabled={create.isPending}>
-                {t("hosts.saveHost")}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  placeholder?: string;
-}) {
-  return (
-    <div className="space-y-1">
-      <Label>{label}</Label>
-      <Input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      <HostEditorDialog mode="create" open={createOpen} onOpenChange={setCreateOpen} onSaved={refresh} />
+      <HostEditorDialog
+        mode="edit"
+        host={editing}
+        open={Boolean(editing)}
+        onOpenChange={(next) => {
+          if (!next) setEditing(null);
+        }}
+        onSaved={refresh}
+      />
     </div>
   );
 }

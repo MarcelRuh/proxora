@@ -10,10 +10,13 @@ import { Input, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmAction } from "@/components/confirm-action";
 import { UserScopeFields } from "@/components/access/user-scope-fields";
+import { AccessPreviewCard } from "@/components/access/access-preview";
+import { buildAccessPreview } from "@/lib/access-preview";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout/page-header";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
+import type { PublicHost } from "@/lib/types";
 import type { GuestScope } from "@/lib/guest-scope";
 
 type UserRow = {
@@ -29,7 +32,7 @@ type UserRow = {
   guests: GuestScope[];
 };
 
-type RoleRow = { id: string; name: string; slug: string };
+type RoleRow = { id: string; name: string; slug: string; permissions: string[] };
 
 const emptyForm = {
   username: "",
@@ -48,6 +51,8 @@ export default function UsersPage() {
   const canDelete = useCan("users.delete");
   const { data } = useQuery({ queryKey: ["users"], queryFn: () => api<{ users: UserRow[] }>("/api/users") });
   const { data: roles } = useQuery({ queryKey: ["roles"], queryFn: () => api<{ roles: RoleRow[] }>("/api/roles") });
+  const { data: hosts } = useQuery({ queryKey: ["hosts"], queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts") });
+  const [guestNames, setGuestNames] = useState<Record<string, string>>({});
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -198,6 +203,17 @@ export default function UsersPage() {
               guests={form.guests}
               onHostIds={(hostIds) => setForm({ ...form, hostIds })}
               onGuests={(guests) => setForm({ ...form, guests })}
+              onGuestNames={setGuestNames}
+            />
+            <AccessPreviewCard
+              preview={buildAccessPreview({
+                roleName: roles?.roles.find((r) => r.id === form.roleId)?.name ?? "",
+                permissions: roles?.roles.find((r) => r.id === form.roleId)?.permissions,
+                hostIds: form.hostIds,
+                guests: form.guests,
+                hosts: hosts?.hosts ?? [],
+                guestNames,
+              })}
             />
             <Button onClick={() => create.mutate()} disabled={create.isPending}>
               {t("users.add")}
@@ -229,6 +245,17 @@ export default function UsersPage() {
               guests={editForm.guests}
               onHostIds={(hostIds) => setEditForm({ ...editForm, hostIds })}
               onGuests={(guests) => setEditForm({ ...editForm, guests })}
+              onGuestNames={setGuestNames}
+            />
+            <AccessPreviewCard
+              preview={buildAccessPreview({
+                roleName: roles?.roles.find((r) => r.id === editForm.roleId)?.name ?? editing?.role.name ?? "",
+                permissions: roles?.roles.find((r) => r.id === editForm.roleId)?.permissions,
+                hostIds: editForm.hostIds,
+                guests: editForm.guests,
+                hosts: hosts?.hosts ?? [],
+                guestNames,
+              })}
             />
             <Button onClick={() => save.mutate()} disabled={save.isPending}>
               {t("common.save")}

@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.39] – 2026-08-27
+
+### Added
+
+- Hosts can be edited after add (name, URL, notes, credentials).
+- User scope picks VMs/containers from a checkbox list, with a role+scope preview.
+
+### Changed
+
+- Host, guest-config, and self-update copy follows DE/EN.
+- Host detail shows every node (metrics, console, reboot/shutdown), not only the first.
+
 ## [1.0.38] – 2026-08-27
 
 ### Changed

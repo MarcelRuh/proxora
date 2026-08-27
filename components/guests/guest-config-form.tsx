@@ -7,6 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { buildMpSpec, isBindVolume, nextIndexedKey, parseMpSpec } from "@/lib/proxmox-mp";
+import { useI18n } from "@/components/i18n/locale-provider";
+import type { Locale } from "@/lib/i18n/messages";
 
 const SKIP = new Set(["digest"]);
 
@@ -85,6 +87,7 @@ export function GuestConfigForm({
   busy?: boolean;
   readOnly?: boolean;
 }) {
+  const { t, locale } = useI18n();
   const original = useMemo(() => stringifyConfig(config), [config]);
   const [form, setForm] = useState(original);
   const [bindHost, setBindHost] = useState("/host/dir");
@@ -135,7 +138,7 @@ export function GuestConfigForm({
     const host = bindHost.trim();
     const guest = bindGuest.trim();
     if (!host.startsWith("/") || !guest) {
-      toast.error("Host-Pfad muss absolut sein, z. B. /host/dir");
+      toast.error(t("config.bindPathError"));
       return;
     }
     const options = bindRo ? ["ro=1"] : [];
@@ -146,7 +149,7 @@ export function GuestConfigForm({
     const volume = volStorage.trim();
     const guest = volGuest.trim();
     if (!volume || !guest) {
-      toast.error("Storage und Container-Pfad angeben");
+      toast.error(t("config.volumeError"));
       return;
     }
     const options = volBackup ? ["backup=1"] : [];
@@ -174,7 +177,7 @@ export function GuestConfigForm({
     }
     if (deleted.length) payload.delete = deleted.join(",");
     if (Object.keys(payload).length === 0) {
-      toast.message("Keine Änderungen");
+      toast.message(t("config.noChanges"));
       return;
     }
     await onSave(payload);
@@ -185,18 +188,18 @@ export function GuestConfigForm({
 
   return (
     <fieldset disabled={readOnly} className="space-y-4 border-0 p-0">
-      <Section title="CPU & RAM" description="Kerne und Speicher des Gastes.">
+      <Section title={t("config.cpuRam")} description={t("config.cpuRamBody")}>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {cpuKeys.map((key) => (
-            <Field key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} hint={hintFor(key)} />
+            <Field key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} hint={hintFor(key, locale)} />
           ))}
         </div>
       </Section>
 
-      <Section title="Allgemein" description={kind === "lxc" ? "Hostname, OS und Startverhalten." : "Name, OS und Startverhalten."}>
+      <Section title={t("config.general")} description={kind === "lxc" ? t("config.generalLxc") : t("config.generalVm")}>
         <div className="grid gap-3 sm:grid-cols-2">
           {metaKeys.map((key) => (
-            <Field key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} hint={hintFor(key)} />
+            <Field key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} hint={hintFor(key, locale)} />
           ))}
           {flags.map((key) => (
             <label key={key} className="flex h-9 items-center gap-2 text-sm">
@@ -205,14 +208,14 @@ export function GuestConfigForm({
                 checked={form[key] === "1" || form[key]?.startsWith("enabled=1")}
                 onChange={(e) => setField(key, e.target.checked ? "1" : "0")}
               />
-              {labelFor(key)}
+              {labelFor(key, locale)}
             </label>
           ))}
         </div>
       </Section>
 
       {disks.length ? (
-        <Section title="Disks" description="Rootfs und virtuelle Datenträger.">
+        <Section title={t("config.disks")} description={t("config.disksBody")}>
           <div className="space-y-2">
             {disks.map((key) => (
               <RowField key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} onRemove={() => removeField(key)} />
@@ -223,12 +226,12 @@ export function GuestConfigForm({
 
       {kind === "lxc" ? (
         <Section
-          title="Mountpoints"
-          description={`Entspricht pct set ${vmid} -${nextMp} /host/dir,mp=/container/mount/point`}
+          title={t("config.mounts")}
+          description={t("config.mountsBody", { vmid, mp: nextMp })}
         >
           <div className="space-y-4">
             {mounts.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Noch keine Mountpoints.</p>
+              <p className="text-sm text-muted-foreground">{t("config.noMounts")}</p>
             ) : (
               <div className="space-y-3">
                 {mounts.map((key) => (
@@ -247,35 +250,35 @@ export function GuestConfigForm({
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-3 rounded-lg border border-border p-4">
                 <div>
-                  <p className="text-sm font-medium">Bind-Mount (Host-Ordner)</p>
+                  <p className="text-sm font-medium">{t("config.bindTitle")}</p>
                   <p className="text-xs text-muted-foreground">
                     pct set {vmid} -{nextMp} {bindHost || "/host/dir"},mp={bindGuest || "/container/mount/point"}
                   </p>
                 </div>
-                <Field name="hostDir" value={bindHost} onChange={setBindHost} hint="Pfad auf dem Proxmox-Host" />
-                <Field name="guestDir" value={bindGuest} onChange={setBindGuest} hint="Pfad im Container" />
+                <Field name="hostDir" value={bindHost} onChange={setBindHost} hint={t("config.hostPathHint")} />
+                <Field name="guestDir" value={bindGuest} onChange={setBindGuest} hint={t("config.guestPathHint")} />
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={bindRo} onChange={(e) => setBindRo(e.target.checked)} />
-                  Nur lesen
+                  {t("config.readOnly")}
                 </label>
                 <Button type="button" variant="outline" onClick={addBindMount}>
-                  {nextMp} Bind-Mount anlegen
+                  {t("config.addBind", { mp: nextMp })}
                 </Button>
               </div>
 
               <div className="space-y-3 rounded-lg border border-border p-4">
                 <div>
-                  <p className="text-sm font-medium">Storage-Volume</p>
-                  <p className="text-xs text-muted-foreground">Neue Disk aus einem Storage, z. B. local-lvm:8</p>
+                  <p className="text-sm font-medium">{t("config.volumeTitle")}</p>
+                  <p className="text-xs text-muted-foreground">{t("config.volumeBody")}</p>
                 </div>
-                <Field name="volume" value={volStorage} onChange={setVolStorage} hint="storage:größe" />
-                <Field name="guestDir" value={volGuest} onChange={setVolGuest} hint="Pfad im Container" />
+                <Field name="volume" value={volStorage} onChange={setVolStorage} hint={t("config.volumeHint")} />
+                <Field name="guestDir" value={volGuest} onChange={setVolGuest} hint={t("config.guestPathHint")} />
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={volBackup} onChange={(e) => setVolBackup(e.target.checked)} />
-                  Backup
+                  {t("nav.backups")}
                 </label>
                 <Button type="button" variant="outline" onClick={addVolumeMount}>
-                  {nextMp} Volume anlegen
+                  {t("config.addVolume", { mp: nextMp })}
                 </Button>
               </div>
             </div>
@@ -284,26 +287,26 @@ export function GuestConfigForm({
         </Section>
       ) : null}
 
-      <Section title="Netzwerk" description="Bridges und IP-Konfiguration (net0, net1, …).">
+      <Section title={t("guest.network")} description={t("config.netBody")}>
         <div className="space-y-2">
-          {nets.length === 0 ? <p className="text-sm text-muted-foreground">Keine Netzwerkeinträge.</p> : null}
+          {nets.length === 0 ? <p className="text-sm text-muted-foreground">{t("config.noNets")}</p> : null}
           {nets.map((key) => (
             <RowField key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} onRemove={() => removeField(key)} />
           ))}
         </div>
       </Section>
 
-      <Section title="Weitere Optionen" description="Alle übrigen Proxmox-Keys.">
+      <Section title={t("config.other")} description={t("config.otherBody")}>
         <div className="space-y-2">
           {rest.map((key) => (
             <RowField key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} onRemove={() => removeField(key)} />
           ))}
           {readOnly ? null : (
           <div className="flex flex-wrap gap-2 pt-2">
-            <Input placeholder="Schlüssel" value={newKey} onChange={(e) => setNewKey(e.target.value)} className="max-w-48 font-mono" />
-            <Input placeholder="Wert" value={newValue} onChange={(e) => setNewValue(e.target.value)} className="min-w-48 flex-1 font-mono" />
+            <Input placeholder={t("config.key")} value={newKey} onChange={(e) => setNewKey(e.target.value)} className="max-w-48 font-mono" />
+            <Input placeholder={t("config.value")} value={newValue} onChange={(e) => setNewValue(e.target.value)} className="min-w-48 flex-1 font-mono" />
             <Button type="button" variant="outline" onClick={addField}>
-              Hinzufügen
+              {t("config.add")}
             </Button>
           </div>
           )}
@@ -313,10 +316,10 @@ export function GuestConfigForm({
       {readOnly ? null : (
       <div className="sticky bottom-4 flex justify-end gap-2 rounded-xl border border-border bg-card/95 p-3 shadow-sm backdrop-blur">
         <Button type="button" variant="outline" onClick={() => setForm(original)} disabled={busy}>
-          Zurücksetzen
+          {t("config.reset")}
         </Button>
         <Button type="button" onClick={() => void save()} disabled={busy}>
-          {busy ? "Speichern…" : "Config speichern"}
+          {busy ? t("config.saving") : t("config.save")}
         </Button>
       </div>
       )}
@@ -330,14 +333,14 @@ function preferredOrder(kind: "vm" | "lxc") {
     : ["name", "ostype", "cores", "sockets", "vcpus", "memory", "balloon", "tags", "description"];
 }
 
-function hintFor(key: string) {
+function hintFor(key: string, locale: Locale) {
   if (key === "memory" || key === "balloon" || key === "swap") return "MB";
-  if (key === "cores" || key === "sockets" || key === "vcpus") return "Anzahl";
+  if (key === "cores" || key === "sockets" || key === "vcpus") return locale === "en" ? "count" : "Anzahl";
   return undefined;
 }
 
-function labelFor(key: string) {
-  const map: Record<string, string> = {
+function labelFor(key: string, locale: Locale) {
+  const de: Record<string, string> = {
     name: "Name",
     hostname: "Hostname",
     cores: "Kerne",
@@ -362,7 +365,32 @@ function labelFor(key: string) {
     cpulimit: "CPU-Limit",
     cpuunits: "CPU-Units",
   };
-  return map[key] ?? key;
+  const en: Record<string, string> = {
+    name: "Name",
+    hostname: "Hostname",
+    cores: "Cores",
+    sockets: "Sockets",
+    vcpus: "vCPUs",
+    cpu: "CPU type",
+    memory: "RAM",
+    hostDir: "Host path",
+    guestDir: "Container path",
+    mp: "Mount point",
+    volume: "Volume",
+    balloon: "Balloon",
+    swap: "Swap",
+    onboot: "Start at boot",
+    ostype: "OS type",
+    description: "Description",
+    tags: "Tags",
+    unprivileged: "Unprivileged",
+    numa: "NUMA",
+    agent: "QEMU agent",
+    protection: "Protection",
+    cpulimit: "CPU limit",
+    cpuunits: "CPU units",
+  };
+  return (locale === "en" ? en : de)[key] ?? key;
 }
 
 function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
@@ -388,10 +416,11 @@ function Field({
   onChange: (v: string) => void;
   hint?: string;
 }) {
+  const { locale } = useI18n();
   return (
     <div className="space-y-1">
       <Label>
-        {labelFor(name)}
+        {labelFor(name, locale)}
         {hint ? <span className="ml-1 text-xs font-normal text-muted-foreground">{hint}</span> : null}
       </Label>
       <Input value={value} onChange={(e) => onChange(e.target.value)} className={name === "description" ? undefined : "font-mono"} />
@@ -410,12 +439,13 @@ function RowField({
   onChange: (v: string) => void;
   onRemove: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="flex gap-2">
       <span className="flex h-9 w-28 shrink-0 items-center font-mono text-xs text-muted-foreground">{name}</span>
       <Input value={value} onChange={(e) => onChange(e.target.value)} className="font-mono text-xs" />
       <Button type="button" size="sm" variant="ghost" onClick={onRemove}>
-        Entfernen
+        {t("settings.remove")}
       </Button>
     </div>
   );
@@ -432,6 +462,7 @@ function MountRow({
   onChange: (v: string) => void;
   onRemove: () => void;
 }) {
+  const { t } = useI18n();
   const parsed = parseMpSpec(value);
   const bind = isBindVolume(parsed.volume);
   return (
@@ -439,10 +470,10 @@ function MountRow({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="font-mono text-sm">{name}</span>
-          <Badge variant={bind ? "default" : "muted"}>{bind ? "Bind-Mount" : "Volume"}</Badge>
+          <Badge variant={bind ? "default" : "muted"}>{bind ? t("config.bindTitle") : t("config.volumeTitle")}</Badge>
         </div>
         <Button type="button" size="sm" variant="ghost" onClick={onRemove}>
-          Entfernen
+          {t("settings.remove")}
         </Button>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">

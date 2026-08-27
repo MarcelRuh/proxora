@@ -21,13 +21,13 @@ export const GET = apiRoute("hosts.view", async (_req, session, params) => {
     const details = await Promise.all(
       nodes.map(async (n) => {
         const status = await client.nodes.status(n.node).catch(() => null);
-        return { ...n, status };
+        return { node: n.node, online: n.status, status };
       }),
     );
     const [vms, containers, storage] = await Promise.all([
       client.listVms().catch(() => []),
       client.listContainers().catch(() => []),
-      client.storage.list(nodes[0]?.node).catch(() => []),
+      client.storage.list().catch(() => []),
     ]);
     return {
       host: host.name,
