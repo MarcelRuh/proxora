@@ -25,8 +25,8 @@ export function CommandSearch({ open, onOpenChange }: { open: boolean; onOpenCha
 
   const groups = [
     { label: "Hosts", items: data?.hosts ?? [] },
-    { label: "Virtual Machines", items: data?.vms ?? [] },
-    { label: "Containers", items: data?.containers ?? [] },
+    { label: "VMs", items: data?.vms ?? [] },
+    { label: "Container", items: data?.containers ?? [] },
     { label: "Storage", items: data?.storage ?? [] },
   ];
 
@@ -40,10 +40,10 @@ export function CommandSearch({ open, onOpenChange }: { open: boolean; onOpenCha
     >
       <DialogContent className="max-w-xl p-0">
         <DialogHeader className="p-4 pb-0">
-          <DialogTitle>Search</DialogTitle>
+          <DialogTitle className="proxora-section text-xs">Suchen</DialogTitle>
         </DialogHeader>
         <div className="p-4 pt-2">
-          <Input autoFocus placeholder="Search: minecraft, pve-01, storage…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input autoFocus placeholder="Suchen: VM, Host, Storage…" value={q} onChange={(e) => setQ(e.target.value)} />
           <div className="mt-3 max-h-80 overflow-y-auto">
             {groups.map((g) =>
               g.items.length ? (
@@ -66,7 +66,7 @@ export function CommandSearch({ open, onOpenChange }: { open: boolean; onOpenCha
               ) : null,
             )}
             {q && !groups.some((g) => g.items.length) ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">No results</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">Keine Treffer</p>
             ) : null}
           </div>
         </div>

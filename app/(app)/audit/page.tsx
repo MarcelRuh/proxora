@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { PageHeader } from "@/components/layout/page-header";
 
 type Log = {
   id: string;
@@ -26,10 +27,11 @@ export default function AuditPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Audit log</h1>
-        <p className="text-sm text-muted-foreground">Immutable history of manager actions. Regular users cannot edit these records.</p>
-      </div>
+      <PageHeader
+        kicker="Sicherheit"
+        title="Audit"
+        description="Unveränderliche Historie der Manager-Aktionen."
+      />
       <Card>
         <CardHeader>
           <CardTitle>Events</CardTitle>

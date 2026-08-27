@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { bytesToSize, percentage } from "@/lib/utils";
 import type { PublicHost } from "@/lib/types";
+import { PageHeader } from "@/components/layout/page-header";
 
 type StorageResp = {
   storage: Array<{
@@ -49,7 +50,7 @@ export default function StoragePage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Storage</h1>
+      <PageHeader kicker="Speicher" title="Storage" />
       {(data ?? []).map((block) => (
         <Card key={block.host.id}>
           <CardHeader>

@@ -73,8 +73,8 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">{kind === "vm" ? "VM" : "LXC"}</p>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <p className="proxora-section">{kind === "vm" ? "VM" : "LXC"}</p>
+          <h1 className="proxora-title mt-1 text-3xl md:text-4xl">
             {params.vmid} · {name}
           </h1>
           <p className="text-sm text-muted-foreground">

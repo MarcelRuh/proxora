@@ -45,31 +45,31 @@ export function GuestTable({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <Input placeholder="Search name or ID" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" />
+        <Input placeholder="Name oder ID" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" />
         <select
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+          className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
           value={status}
           onChange={(e) => setStatus(e.target.value)}
         >
-          <option value="all">All statuses</option>
-          <option value="running">Running</option>
-          <option value="stopped">Stopped</option>
-          <option value="paused">Paused</option>
+          <option value="all">Alle Status</option>
+          <option value="running">Laufend</option>
+          <option value="stopped">Gestoppt</option>
+          <option value="paused">Pausiert</option>
         </select>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-border">
+      <div className="overflow-x-auto rounded-[4px] border border-border">
         <table className="w-full min-w-[720px] text-left text-sm">
-          <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+          <thead className="font-[family-name:var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
             <tr>
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Host / Node</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">CPU</th>
-              <th className="px-3 py-2">Memory</th>
-              <th className="px-3 py-2">Disk</th>
-              <th className="px-3 py-2">Uptime</th>
-              <th className="px-3 py-2">Actions</th>
+              <th className="px-3 py-2 font-medium">ID</th>
+              <th className="px-3 py-2 font-medium">Name</th>
+              <th className="px-3 py-2 font-medium">Host / Node</th>
+              <th className="px-3 py-2 font-medium">Status</th>
+              <th className="px-3 py-2 font-medium">CPU</th>
+              <th className="px-3 py-2 font-medium">RAM</th>
+              <th className="px-3 py-2 font-medium">Disk</th>
+              <th className="px-3 py-2 font-medium">Uptime</th>
+              <th className="px-3 py-2 font-medium">Aktionen</th>
             </tr>
           </thead>
           <tbody>

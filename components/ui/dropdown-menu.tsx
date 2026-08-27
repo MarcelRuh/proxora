@@ -15,7 +15,7 @@ export function DropdownMenuContent({
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
         className={cn(
-          "z-50 min-w-40 overflow-hidden rounded-md border border-border bg-card p-1 shadow-md",
+          "z-50 min-w-40 overflow-hidden rounded-[4px] border border-border bg-card p-1 shadow-[0_0_24px_rgba(131,56,236,0.18)]",
           className,
         )}
         {...props}

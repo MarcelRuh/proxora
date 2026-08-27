@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ALL_PERMISSIONS } from "@/lib/permissions";
 import { api } from "@/lib/api";
+import { PageHeader } from "@/components/layout/page-header";
 
 type Role = {
   id: string;
@@ -37,7 +38,7 @@ export default function RolesPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Roles</h1>
+      <PageHeader kicker="Zugriff" title="Rollen" />
       <div className="grid gap-4 lg:grid-cols-2">
         {(data?.roles ?? []).map((role) => (
           <Card key={role.id}>

@@ -12,6 +12,7 @@ import { ConfirmAction } from "@/components/confirm-action";
 import { WebConsole } from "@/components/console/web-console";
 import { api } from "@/lib/api";
 import { formatUptime, percentage } from "@/lib/utils";
+import { PageHeader } from "@/components/layout/page-header";
 import { useState } from "react";
 
 type Status = {
@@ -42,11 +43,11 @@ export default function HostDetailPage() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-destructive/40 p-6">
-        <p className="font-medium">Unable to connect to this host</p>
-        <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : "Connection timeout"}</p>
+      <div className="proxora-panel p-6">
+        <p className="font-medium">Verbindung zum Host fehlgeschlagen</p>
+        <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : "Zeitüberschreitung"}</p>
         <Button className="mt-3" variant="outline" onClick={() => void refetch()}>
-          Retry
+          Erneut versuchen
         </Button>
       </div>
     );
@@ -57,13 +58,12 @@ export default function HostDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">{meta?.host.name ?? data?.host ?? "Host"}</h1>
-          <p className="text-sm text-muted-foreground">Proxmox VE {meta?.host.proxmoxVersion ?? "—"}</p>
-        </div>
-        {meta ? <HostStateBadge state={meta.host.connectionState} /> : null}
-      </div>
+      <PageHeader
+        kicker="Host"
+        title={meta?.host.name ?? data?.host ?? "Host"}
+        description={`Proxmox VE ${meta?.host.proxmoxVersion ?? "—"}`}
+        actions={meta ? <HostStateBadge state={meta.host.connectionState} /> : undefined}
+      />
       {st ? (
         <Card>
           <CardContent className="grid gap-4 p-5 sm:grid-cols-3">

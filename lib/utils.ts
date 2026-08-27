@@ -11,7 +11,12 @@ export function bytesToSize(bytes: number | undefined | null, decimals = 1): str
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB", "TB", "PB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / k ** i).toFixed(decimals))} ${sizes[i]}`;
+  const n = bytes / k ** i;
+  return `${n.toLocaleString("de-DE", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${sizes[i]}`;
+}
+
+export function formatPercent(value: number, digits = 1): string {
+  return `${value.toLocaleString("de-DE", { minimumFractionDigits: digits, maximumFractionDigits: digits })} %`;
 }
 
 export function formatUptime(seconds: number | undefined | null): string {

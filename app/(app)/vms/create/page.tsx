@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
+import { PageHeader } from "@/components/layout/page-header";
 
 const STEPS = ["General", "OS", "System", "Memory", "Disk", "Network", "Confirm"];
 
@@ -75,7 +76,7 @@ export default function CreateVmPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <h1 className="text-2xl font-semibold">Create Virtual Machine</h1>
+      <PageHeader kicker="Virtualisierung" title="VM erstellen" />
       <div className="flex flex-wrap gap-2 text-xs">
         {STEPS.map((s, i) => (
           <span key={s} className={i === step ? "font-semibold text-primary" : "text-muted-foreground"}>

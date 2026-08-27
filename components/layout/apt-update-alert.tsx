@@ -62,10 +62,13 @@ export function AptUpdateBanner() {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm">
+    <div className="flex flex-wrap items-center gap-3 border-b border-warning/35 bg-warning/10 px-4 py-2 text-sm">
       <p className="min-w-0 flex-1">
-        <span className="font-medium text-amber-800 dark:text-amber-200">
-          {data.total} Paket-Update{data.total === 1 ? "" : "s"} verfügbar
+        <span className="font-[family-name:var(--font-display)] text-[10px] tracking-[0.22em] text-warning">
+          Update-Hinweise
+        </span>
+        <span className="ml-3 font-medium text-warning">
+          {data.total} Update{data.total === 1 ? "" : "s"} verfügbar
         </span>
         <span className="text-muted-foreground"> · {names}</span>
       </p>

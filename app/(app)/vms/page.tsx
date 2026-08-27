@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { GuestTable } from "@/components/guests/guest-table";
 import { api } from "@/lib/api";
 import type { Guest, PublicHost } from "@/lib/types";
+import { PageHeader } from "@/components/layout/page-header";
 
 export default function VmsPage() {
   const { data: hosts } = useQuery({
@@ -33,15 +34,16 @@ export default function VmsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Virtual Machines</h1>
-          <p className="text-sm text-muted-foreground">All QEMU guests across connected hosts.</p>
-        </div>
-        <Button asChild>
-          <Link href="/vms/create">Create VM</Link>
-        </Button>
-      </div>
+      <PageHeader
+        kicker="Virtualisierung"
+        title="VMs"
+        description="Alle QEMU-Gäste auf verbundenen Hosts."
+        actions={
+          <Button asChild>
+            <Link href="/vms/create">VM erstellen</Link>
+          </Button>
+        }
+      />
       <GuestTable kind="vm" items={data ?? []} />
     </div>
   );

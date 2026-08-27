@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
+import { PageHeader } from "@/components/layout/page-header";
 
 type Task = {
   upid: string;
@@ -54,7 +55,7 @@ export default function TasksPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Tasks</h1>
+      <PageHeader kicker="Betrieb" title="Tasks" description="Proxmox-Aufgaben auf allen verbundenen Hosts." />
       <Card>
         <CardHeader>
           <CardTitle>Proxmox tasks</CardTitle>

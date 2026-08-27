@@ -2,12 +2,15 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ProgressBar, Skeleton } from "@/components/ui/misc";
 import { HostStateBadge, GuestStateBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import { bytesToSize, formatUptime, percentage } from "@/lib/utils";
+import { bytesToSize, formatPercent, formatUptime, percentage } from "@/lib/utils";
+import { useAptSummary } from "@/components/layout/apt-update-alert";
 
 type Guest = {
   vmid: number;
@@ -50,11 +53,17 @@ type Dashboard = {
 };
 
 export default function DashboardPage() {
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => api<Dashboard>("/api/dashboard"),
     refetchInterval: 15_000,
   });
+  const apt = useAptSummary();
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   if (isLoading) {
     return (
@@ -67,10 +76,10 @@ export default function DashboardPage() {
   }
   if (error || !data) {
     return (
-      <div className="rounded-xl border border-destructive/40 p-6">
+      <div className="proxora-panel p-6">
         <p className="font-medium">Dashboard konnte nicht geladen werden</p>
         <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : "Unknown error"}</p>
-        <button className="mt-3 text-sm underline" onClick={() => void refetch()}>
+        <button className="mt-3 text-sm text-primary" onClick={() => void refetch()}>
           Erneut versuchen
         </button>
       </div>
@@ -82,59 +91,110 @@ export default function DashboardPage() {
     ...(data.guests?.containers ?? []).map((g) => ({ ...g, kind: "lxc" as const })),
   ].sort((a, b) => a.vmid - b.vmid || a.name.localeCompare(b.name));
 
-  const stats = [
-    { label: "Hosts", value: data.hosts.total, hint: `${data.hosts.online} online` },
-    { label: "VMs", value: data.virtualization.vms, hint: `${data.virtualization.running} running` },
-    { label: "Container", value: data.virtualization.lxc, hint: `${data.virtualization.stopped} stopped` },
-    {
-      label: "RAM",
-      value: `${percentage(data.resources.memUsed, data.resources.memTotal)}%`,
-      hint: `${bytesToSize(data.resources.memUsed)} / ${bytesToSize(data.resources.memTotal)}`,
-    },
-  ];
+  const running = guests.filter((g) => g.status === "running").length;
+  const stopped = guests.filter((g) => g.status === "stopped").length;
+  const bad = guests.filter((g) => g.status !== "running" && g.status !== "stopped").length;
+  const allOnline = data.hosts.total > 0 && data.hosts.online === data.hosts.total;
+  const cpuCores = data.hosts.items.reduce((acc, h) => acc + (h.cpuCores ?? 0), 0);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Übersicht aller Hosts, VMs und Container.</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="proxora-section">Übersicht</p>
+          <h1 className="proxora-title mt-1 text-4xl md:text-5xl">Dashboard</h1>
+        </div>
+        <div className="flex items-center gap-3 text-xs uppercase tracking-wider">
+          <span className="flex items-center gap-2 text-success">
+            <span className="proxora-pulse inline-block h-2 w-2 rounded-full bg-success" />
+            Live Stand {now.toLocaleTimeString("de-DE")}
+          </span>
+          <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={isFetching}>
+            Aktualisieren
+          </Button>
+        </div>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map((s) => (
-          <Card key={s.label}>
-            <CardHeader>
-              <CardTitle className="text-muted-foreground">{s.label}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-semibold">{s.value}</p>
-              <p className="text-xs text-muted-foreground">{s.hint}</p>
-            </CardContent>
-          </Card>
-        ))}
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <MiniStat label="Host-Status" value={allOnline ? "Online" : `${data.hosts.online}/${data.hosts.total}`} ok={allOnline} />
+        <MiniStat label="Hosts" value={String(data.hosts.total)} />
+        <MiniStat
+          label="Proxmox VE"
+          value={data.hosts.items[0]?.proxmoxVersion ?? "—"}
+        />
       </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <CountStat label="Gesamt" value={guests.length} />
+        <CountStat label="Laufend" value={running} />
+        <CountStat label="Gestoppt" value={stopped} />
+        <CountStat label="Fehlerhaft" value={bad} />
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <ResourceStat
+          label="CPU"
+          primary={formatPercent(Math.round(data.resources.cpu * 1000) / 10)}
+          secondary={cpuCores ? `${cpuCores} Kerne` : undefined}
+          ratio={data.resources.cpu * 100}
+        />
+        <ResourceStat
+          label="RAM"
+          primary={formatPercent(percentage(data.resources.memUsed, data.resources.memTotal))}
+          secondary={`${bytesToSize(data.resources.memUsed)} / ${bytesToSize(data.resources.memTotal)}`}
+          ratio={percentage(data.resources.memUsed, data.resources.memTotal)}
+        />
+        <ResourceStat
+          label="Festplatte"
+          primary={formatPercent(percentage(data.resources.diskUsed, data.resources.diskTotal))}
+          secondary={`${bytesToSize(data.resources.diskUsed)} / ${bytesToSize(data.resources.diskTotal)}`}
+          ratio={percentage(data.resources.diskUsed, data.resources.diskTotal)}
+        />
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>Hosts</CardTitle>
+          <p className="proxora-section">Update-Hinweise</p>
+        </CardHeader>
+        <CardContent>
+          <p className={apt.data?.total ? "text-warning" : "text-muted-foreground"}>
+            {apt.data?.total ? `${apt.data.total} Update(s) verfügbar` : "Keine Host-Updates"}
+          </p>
+          {apt.data?.total ? (
+            <Link href="/updates" className="mt-2 inline-block text-sm text-primary">
+              Zu den Updates
+            </Link>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <p className="proxora-section">Hosts</p>
         </CardHeader>
         <CardContent className="space-y-4">
           {data.hosts.items.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Noch keine Hosts. <Link className="underline" href="/hosts">Proxmox-Host hinzufügen</Link>.
+              Noch keine Hosts.{" "}
+              <Link className="text-primary" href="/hosts">
+                Proxmox-Host hinzufügen
+              </Link>
+              .
             </p>
           ) : (
             data.hosts.items.map((h) => (
-              <Link key={h.id} href={`/hosts/${h.id}`} className="block rounded-lg border border-border p-3 hover:bg-muted/40">
+              <Link key={h.id} href={`/hosts/${h.id}`} className="block rounded-[4px] border border-border p-3 hover:border-primary/40">
                 <div className="mb-2 flex items-center justify-between">
                   <div>
                     <p className="font-medium">{h.name}</p>
-                    <p className="text-xs text-muted-foreground">Proxmox VE {h.proxmoxVersion ?? "unknown"}</p>
+                    <p className="text-xs text-muted-foreground">Proxmox VE {h.proxmoxVersion ?? "unbekannt"}</p>
                   </div>
                   <HostStateBadge state={h.connectionState as never} />
                 </div>
                 {h.connectionState === "ONLINE" ? (
                   <div className="grid gap-2 sm:grid-cols-3">
                     <Metric
-                      label="Kerne"
+                      label="CPU"
                       value={(h.cpu ?? 0) * 100}
                       detail={h.cpuCores ? `${h.cpuCores} Kerne · ${Math.round((h.cpu ?? 0) * 100)}%` : `${Math.round((h.cpu ?? 0) * 100)}%`}
                     />
@@ -150,7 +210,7 @@ export default function DashboardPage() {
                     />
                   </div>
                 ) : (
-                  <p className="text-sm text-destructive">{h.lastError ?? "Unavailable"}</p>
+                  <p className="text-sm text-destructive">{h.lastError ?? "Nicht erreichbar"}</p>
                 )}
                 {h.uptime ? <p className="mt-2 text-xs text-muted-foreground">Uptime {formatUptime(h.uptime)}</p> : null}
               </Link>
@@ -158,9 +218,10 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>VMs &amp; Container</CardTitle>
+          <p className="proxora-section">VMs &amp; Container</p>
           <span className="text-xs text-muted-foreground">{guests.length}</span>
         </CardHeader>
         <CardContent>
@@ -169,7 +230,7 @@ export default function DashboardPage() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                <thead className="font-[family-name:var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                   <tr>
                     <th className="px-2 py-2 font-medium">ID</th>
                     <th className="px-2 py-2 font-medium">Typ</th>
@@ -180,9 +241,9 @@ export default function DashboardPage() {
                 </thead>
                 <tbody>
                   {guests.map((g) => (
-                    <tr key={`${g.kind}-${g.hostId}-${g.node}-${g.vmid}`} className="border-t border-border hover:bg-muted/30">
+                    <tr key={`${g.kind}-${g.hostId}-${g.node}-${g.vmid}`} className="border-t border-border hover:bg-white/[0.03]">
                       <td className="px-2 py-2 font-mono font-semibold">
-                        <Link href={guestHref(g)} className="hover:underline">
+                        <Link href={guestHref(g)} className="hover:text-primary">
                           {g.vmid}
                         </Link>
                       </td>
@@ -190,16 +251,14 @@ export default function DashboardPage() {
                         <Badge variant={g.kind === "vm" ? "default" : "muted"}>{g.kind === "vm" ? "VM" : "LXC"}</Badge>
                       </td>
                       <td className="px-2 py-2">
-                        <Link href={guestHref(g)} className="hover:underline">
+                        <Link href={guestHref(g)} className="hover:text-primary">
                           {g.name}
                           {g.template ? <span className="text-xs text-muted-foreground"> (template)</span> : null}
                         </Link>
                       </td>
                       <td className="px-2 py-2 text-muted-foreground">
                         {g.hostName}
-                        {g.node && g.node !== g.hostName ? (
-                          <span className="block text-xs">{g.node}</span>
-                        ) : null}
+                        {g.node && g.node !== g.hostName ? <span className="block text-xs">{g.node}</span> : null}
                       </td>
                       <td className="px-2 py-2">
                         <GuestStateBadge status={g.status} />
@@ -213,6 +272,57 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function MiniStat({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
+  return (
+    <Card>
+      <CardHeader>
+        <p className="proxora-section">{label}</p>
+      </CardHeader>
+      <CardContent>
+        <p className={ok ? "text-lg font-semibold text-success" : "text-lg font-semibold"}>{value}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CountStat({ label, value }: { label: string; value: number }) {
+  return (
+    <Card>
+      <CardHeader>
+        <p className="proxora-section">{label}</p>
+      </CardHeader>
+      <CardContent>
+        <p className="proxora-stat text-4xl leading-none">{value}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ResourceStat({
+  label,
+  primary,
+  secondary,
+  ratio,
+}: {
+  label: string;
+  primary: string;
+  secondary?: string;
+  ratio: number;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <p className="proxora-section">{label}</p>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="proxora-stat text-3xl leading-none">{primary}</p>
+        {secondary ? <p className="text-xs text-muted-foreground">{secondary}</p> : null}
+        <ProgressBar value={ratio} />
+      </CardContent>
+    </Card>
   );
 }
 

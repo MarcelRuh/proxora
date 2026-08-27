@@ -12,7 +12,7 @@ export function SelectTrigger({ className, children, ...props }: React.Component
   return (
     <SelectPrimitive.Trigger
       className={cn(
-        "flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-sm",
+        "flex h-9 w-full items-center justify-between rounded-[4px] border border-input bg-white/[0.03] px-3 text-sm",
         className,
       )}
       {...props}
@@ -27,7 +27,7 @@ export function SelectContent({ className, children, ...props }: React.Component
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
-        className={cn("z-50 overflow-hidden rounded-md border border-border bg-card shadow-md", className)}
+        className={cn("z-50 overflow-hidden rounded-[4px] border border-border bg-card shadow-[0_0_24px_rgba(131,56,236,0.18)]", className)}
         {...props}
       >
         <SelectPrimitive.Viewport className="p-1">{children}</SelectPrimitive.Viewport>

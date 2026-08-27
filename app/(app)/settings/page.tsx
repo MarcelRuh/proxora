@@ -2,22 +2,23 @@
 
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/page-header";
 
 export default function SettingsPage() {
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Settings</h1>
+      <PageHeader kicker="System" title="Einstellungen" />
       <Card>
         <CardHeader>
-          <CardTitle>General</CardTitle>
+          <CardTitle className="proxora-section">Allgemein</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>Application name: Proxora</p>
-          <p>Sessions use httpOnly cookies. Credentials never leave the server.</p>
+          <p>Anwendungsname: Proxora</p>
+          <p>Sessions nutzen httpOnly-Cookies. Zugangsdaten bleiben auf dem Server.</p>
           <p>
             Proxora-Updates unter{" "}
             <Link className="underline" href="/proxora">
-              Settings → Proxora
+              Einstellungen → Proxora
             </Link>
             .
           </p>

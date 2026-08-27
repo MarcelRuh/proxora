@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.23] – 2026-08-27
+
+### Changed
+
+- UI follows Dockora’s neon dark theme (Orbitron, magenta/purple/cyan, dark-only sidebar and dashboard).
+
 ## [1.0.22] – 2026-08-27
 
 ### Fixed

@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { PageHeader } from "@/components/layout/page-header";
 
 type UserRow = {
   id: string;
@@ -41,10 +42,11 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Users</h1>
-        <Button onClick={() => setOpen(true)}>Add user</Button>
-      </div>
+      <PageHeader
+        kicker="Zugriff"
+        title="Benutzer"
+        actions={<Button onClick={() => setOpen(true)}>Benutzer hinzufügen</Button>}
+      />
       <Card>
         <CardHeader>
           <CardTitle>Manager accounts</CardTitle>

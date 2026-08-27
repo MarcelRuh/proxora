@@ -12,6 +12,7 @@ import { HostStateBadge } from "@/components/status-badge";
 import { ConfirmAction } from "@/components/confirm-action";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
+import { PageHeader } from "@/components/layout/page-header";
 
 type FormState = {
   name: string;
@@ -57,13 +58,12 @@ export default function HostsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Hosts</h1>
-          <p className="text-sm text-muted-foreground">Independent Proxmox VE nodes — no cluster required.</p>
-        </div>
-        <Button onClick={() => setOpen(true)}>Add host</Button>
-      </div>
+      <PageHeader
+        kicker="Inventar"
+        title="Hosts"
+        description="Unabhängige Proxmox-VE-Nodes — kein Cluster nötig."
+        actions={<Button onClick={() => setOpen(true)}>Host hinzufügen</Button>}
+      />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {(data?.hosts ?? []).map((host) => (
           <Card key={host.id}>

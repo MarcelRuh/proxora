@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { GuestTable } from "@/components/guests/guest-table";
 import { api } from "@/lib/api";
 import type { Guest, PublicHost } from "@/lib/types";
+import { PageHeader } from "@/components/layout/page-header";
 
 export default function ContainersPage() {
   const { data: hosts } = useQuery({
@@ -33,15 +34,16 @@ export default function ContainersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Containers</h1>
-          <p className="text-sm text-muted-foreground">LXC containers across connected hosts.</p>
-        </div>
-        <Button asChild>
-          <Link href="/containers/create">Create container</Link>
-        </Button>
-      </div>
+      <PageHeader
+        kicker="Virtualisierung"
+        title="Container"
+        description="LXC-Container auf verbundenen Hosts."
+        actions={
+          <Button asChild>
+            <Link href="/containers/create">Container erstellen</Link>
+          </Button>
+        }
+      />
       <GuestTable kind="lxc" items={data ?? []} />
     </div>
   );

@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
+import { PageHeader } from "@/components/layout/page-header";
 
 export default function CreateLxcPage() {
   const router = useRouter();
@@ -61,7 +62,7 @@ export default function CreateLxcPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <h1 className="text-2xl font-semibold">Create Container</h1>
+      <PageHeader kicker="Virtualisierung" title="Container erstellen" />
       <Card>
         <CardHeader>
           <CardTitle>LXC</CardTitle>

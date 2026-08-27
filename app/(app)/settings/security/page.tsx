@@ -1,11 +1,12 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/page-header";
 
 export default function SecuritySettingsPage() {
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Security</h1>
+      <PageHeader kicker="System" title="Sicherheit" />
       <Card>
         <CardHeader>
           <CardTitle>Hardening</CardTitle>

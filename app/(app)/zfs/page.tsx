@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { bytesToSize, cn } from "@/lib/utils";
 import type { PublicHost } from "@/lib/types";
+import { PageHeader } from "@/components/layout/page-header";
 
 type ZfsDisk = {
   name: string;
@@ -71,10 +72,11 @@ export default function ZfsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">ZFS</h1>
-        <p className="text-sm text-muted-foreground">Pool- und Plattenstatus. Grün = ONLINE ohne I/O-Fehler.</p>
-      </div>
+      <PageHeader
+        kicker="Speicher"
+        title="ZFS"
+        description="Pool- und Plattenstatus. Grün = ONLINE ohne I/O-Fehler."
+      />
       {(data ?? []).map((block) => (
         <Card key={block.host.id}>
           <CardHeader>

@@ -1,14 +1,12 @@
 "use client";
 
 import { SelfUpdateSection } from "@/components/settings/self-update-section";
+import { PageHeader } from "@/components/layout/page-header";
 
 export default function ProxoraUpdatePage() {
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Proxora</h1>
-        <p className="text-sm text-muted-foreground">Self-Update dieser Installation von GitHub.</p>
-      </div>
+      <PageHeader kicker="System" title="Proxora" description="Self-Update dieser Installation von GitHub." />
       <SelfUpdateSection />
     </div>
   );

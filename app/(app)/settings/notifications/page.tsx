@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { api } from "@/lib/api";
+import { PageHeader } from "@/components/layout/page-header";
 
 export default function NotificationsSettingsPage() {
   const qc = useQueryClient();
@@ -30,7 +31,7 @@ export default function NotificationsSettingsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Notifications</h1>
+      <PageHeader kicker="System" title="Meldungen" />
       <Card>
         <CardHeader>
           <CardTitle>Channels</CardTitle>

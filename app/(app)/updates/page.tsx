@@ -10,6 +10,7 @@ import { ConfirmAction } from "@/components/confirm-action";
 import { WebConsole } from "@/components/console/web-console";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
+import { PageHeader } from "@/components/layout/page-header";
 
 type AptPackage = { Package: string; Version?: string; OldVersion?: string };
 type HostUpdates = {
@@ -98,22 +99,20 @@ export default function UpdatesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Updates</h1>
-          <p className="text-sm text-muted-foreground">
-            Paketlisten werden alle 3 Stunden automatisch geprüft. Bei neuen Updates kommt eine Meldung.
-            Upgrade öffnet die Node-Shell wie in der Proxmox-GUI.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          disabled={checkAll.isPending || !hosts?.hosts.length}
-          onClick={() => checkAll.mutate()}
-        >
-          {checkAll.isPending ? "Aktualisiere…" : "Alle Paketlisten prüfen"}
-        </Button>
-      </div>
+      <PageHeader
+        kicker="Wartung"
+        title="Updates"
+        description="Paketlisten werden alle 3 Stunden geprüft. Bei neuen Updates kommt eine Meldung. Upgrade öffnet die Node-Shell wie in der Proxmox-GUI."
+        actions={
+          <Button
+            variant="outline"
+            disabled={checkAll.isPending || !hosts?.hosts.length}
+            onClick={() => checkAll.mutate()}
+          >
+            {checkAll.isPending ? "Aktualisiere…" : "Alle Paketlisten prüfen"}
+          </Button>
+        }
+      />
 
       {shell ? (
         <Card>
