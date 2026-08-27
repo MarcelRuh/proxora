@@ -10,6 +10,9 @@ import { Input, Label } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
+import { CreateIpFields, ipFieldsFromVmid } from "@/components/guests/create-ip-fields";
+import { DEFAULT_GUEST_NETWORK } from "@/lib/create-ip";
+import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
 
 type Options = {
@@ -41,6 +44,10 @@ export default function CreateVmPage() {
     cores: 2,
     memory: 2048,
     bridge: "",
+    ipMode: "static" as LxcIpMode,
+    network: DEFAULT_GUEST_NETWORK,
+    cidr: "",
+    gateway: "",
     startAfter: true,
   });
   const { data: options } = useQuery({
@@ -85,7 +92,11 @@ export default function CreateVmPage() {
       const vmid = f.vmid > 0 ? f.vmid : (options.nextid ?? 0);
       const isoList = (options.isos ?? []).map((i) => String(i.volid ?? "")).filter(Boolean);
       const iso = f.iso && isoList.includes(f.iso) ? f.iso : "";
-      return { ...f, node, diskStorage, bridge, vmid, iso };
+      const ip =
+        f.ipMode === "static" && !f.cidr.trim()
+          ? ipFieldsFromVmid(f.network || DEFAULT_GUEST_NETWORK, vmid)
+          : {};
+      return { ...f, node, diskStorage, bridge, vmid, iso, ...ip };
     });
   }, [options]);
 
@@ -108,6 +119,8 @@ export default function CreateVmPage() {
           startAfter: form.startAfter,
           discard: true,
           ssd: true,
+          ipv4: form.ipMode === "dhcp" ? "dhcp" : form.cidr,
+          gateway: form.ipMode === "static" ? form.gateway : undefined,
         }),
       });
     },
@@ -124,7 +137,8 @@ export default function CreateVmPage() {
     (form.vmid > 0 || Boolean(options?.nextid)) &&
     form.name.trim().length > 0 &&
     Boolean(form.diskStorage) &&
-    Boolean(form.bridge);
+    Boolean(form.bridge) &&
+    (form.ipMode === "dhcp" || (form.cidr.trim().length > 0 && form.gateway.trim().length > 0));
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -160,7 +174,18 @@ export default function CreateVmPage() {
               </select>
             </label>
           ) : null}
-          <Field label={t("create.id")} value={form.vmid ? String(form.vmid) : ""} onChange={(v) => setForm({ ...form, vmid: Number(v) || 0 })} />
+          <Field
+            label={t("create.id")}
+            value={form.vmid ? String(form.vmid) : ""}
+            onChange={(v) => {
+              const vmid = Number(v) || 0;
+              setForm({
+                ...form,
+                vmid,
+                ...(form.ipMode === "static" ? ipFieldsFromVmid(form.network, vmid) : {}),
+              });
+            }}
+          />
           <Field label={t("create.name")} value={form.name} onChange={(name) => setForm({ ...form, name })} />
           <label className="text-sm md:col-span-2">
             {t("create.iso")}
@@ -196,6 +221,11 @@ export default function CreateVmPage() {
               ))}
             </select>
           </label>
+          <CreateIpFields
+            value={{ ipMode: form.ipMode, network: form.network, cidr: form.cidr, gateway: form.gateway }}
+            vmid={form.vmid}
+            onChange={(ip) => setForm({ ...form, ...ip })}
+          />
           <label className="flex items-center gap-2 text-sm md:col-span-2">
             <input
               type="checkbox"

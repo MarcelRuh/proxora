@@ -7,6 +7,7 @@ import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { startGuestAfterCreate } from "@/server/services/guest-start";
 import { notifyTopic } from "@/server/notifications/dispatch";
+import { normalizeLxcCidr } from "@/lib/lxc-net";
 import type { VmCreateParams } from "@/server/proxmox/vms";
 
 const createVmSchema = z.object({
@@ -38,6 +39,8 @@ const createVmSchema = z.object({
   efi: z.boolean().optional(),
   tpm: z.boolean().optional(),
   startAfter: z.boolean().optional(),
+  ipv4: z.string().optional(),
+  gateway: z.string().optional(),
 });
 
 export const GET = apiRoute("vm.view", async (_req, session, params) => {
@@ -77,6 +80,11 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     net0: net,
     ostype: body.ostype ?? "l26",
   };
+  if (body.ipv4 && body.ipv4 !== "dhcp") {
+    const ip = normalizeLxcCidr(body.ipv4);
+    payload.ipconfig0 = body.gateway?.trim() ? `ip=${ip},gw=${body.gateway.trim()}` : `ip=${ip}`;
+    payload.scsi1 = `${body.diskStorage}:cloudinit`;
+  }
   if (body.diskBus === "virtio") payload.virtio0 = disk;
   else if (body.diskBus === "sata") payload.sata0 = disk;
   else if (body.diskBus === "ide") payload.ide0 = disk;

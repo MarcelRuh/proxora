@@ -1,5 +1,6 @@
 import { apiRoute } from "@/server/http/api-route";
 import { json } from "@/server/http/respond";
+import { nextSmallerVmid } from "@/lib/next-vmid";
 import { withHostClient } from "@/server/services/host-service";
 
 export const GET = apiRoute(["vm.create", "lxc.create"], async (req, session, params) => {
@@ -9,11 +10,15 @@ export const GET = apiRoute(["vm.create", "lxc.create"], async (req, session, pa
     const nodes = await client.nodes.list();
     const selected = node ?? nodes[0]?.node;
     if (!selected) return { nodes: [], nextid: null, storage: [], isos: [], templates: [], bridges: [] };
-    const [nextid, storage, network] = await Promise.all([
-      client.cluster.nextId().catch(() => null),
+    const [vms, containers, storage, network, fallbackNext] = await Promise.all([
+      client.listVms().catch(() => [] as Array<{ vmid: number }>),
+      client.listContainers().catch(() => [] as Array<{ vmid: number }>),
       client.storage.list(selected),
       client.nodes.network(selected).catch(() => []),
+      client.cluster.nextId().catch(() => null),
     ]);
+    const used = [...vms, ...containers].map((g) => g.vmid).filter((id) => Number.isInteger(id) && id > 0);
+    const nextid = used.length > 0 ? nextSmallerVmid(used) : (fallbackNext ?? nextSmallerVmid([]));
     const isoStorages = storage.filter((s) => (s.content ?? "").includes("iso"));
     const tmplStorages = storage.filter((s) => (s.content ?? "").includes("vztmpl"));
     const isos = (

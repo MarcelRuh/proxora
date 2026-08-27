@@ -10,6 +10,8 @@ import { Input, Label } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
+import { CreateIpFields, ipFieldsFromVmid } from "@/components/guests/create-ip-fields";
+import { DEFAULT_GUEST_NETWORK } from "@/lib/create-ip";
 import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
 
@@ -43,7 +45,8 @@ export default function CreateLxcPage() {
     cores: 2,
     memory: 1024,
     bridge: "",
-    ipMode: "dhcp" as LxcIpMode,
+    ipMode: "static" as LxcIpMode,
+    network: DEFAULT_GUEST_NETWORK,
     cidr: "",
     gateway: "",
     startAfter: true,
@@ -91,7 +94,11 @@ export default function CreateLxcPage() {
       const vols = (options.templates ?? []).map((t) => String(t.volid ?? "")).filter(Boolean);
       const ostemplate = f.ostemplate && vols.includes(f.ostemplate) ? f.ostemplate : "";
       const vmid = f.vmid > 0 ? f.vmid : (options.nextid ?? 0);
-      return { ...f, node, storage, bridge, ostemplate, vmid };
+      const ip =
+        f.ipMode === "static" && !f.cidr.trim()
+          ? ipFieldsFromVmid(f.network || DEFAULT_GUEST_NETWORK, vmid)
+          : {};
+      return { ...f, node, storage, bridge, ostemplate, vmid, ...ip };
     });
   }, [options]);
 
@@ -175,7 +182,14 @@ export default function CreateLxcPage() {
           <Field
             label={t("create.id")}
             value={form.vmid ? String(form.vmid) : ""}
-            onChange={(v) => setForm({ ...form, vmid: Number(v) || 0 })}
+            onChange={(v) => {
+              const vmid = Number(v) || 0;
+              setForm({
+                ...form,
+                vmid,
+                ...(form.ipMode === "static" ? ipFieldsFromVmid(form.network, vmid) : {}),
+              });
+            }}
           />
           <Field label={t("create.hostname")} value={form.hostname} onChange={(hostname) => setForm({ ...form, hostname })} />
           <Field
@@ -233,33 +247,11 @@ export default function CreateLxcPage() {
               ))}
             </select>
           </label>
-          <label className="text-sm">
-            {t("create.ipv4")}
-            <select
-              className={selectClass}
-              value={form.ipMode}
-              onChange={(e) => setForm({ ...form, ipMode: e.target.value as LxcIpMode })}
-            >
-              <option value="dhcp">{t("create.dhcp")}</option>
-              <option value="static">{t("create.static")}</option>
-            </select>
-          </label>
-          {form.ipMode === "static" ? (
-            <>
-              <Field
-                label={t("create.address")}
-                value={form.cidr}
-                onChange={(cidr) => setForm({ ...form, cidr })}
-                placeholder="192.168.1.50/24"
-              />
-              <Field
-                label={t("create.gateway")}
-                value={form.gateway}
-                onChange={(gateway) => setForm({ ...form, gateway })}
-                placeholder="192.168.1.1"
-              />
-            </>
-          ) : null}
+          <CreateIpFields
+            value={{ ipMode: form.ipMode, network: form.network, cidr: form.cidr, gateway: form.gateway }}
+            vmid={form.vmid}
+            onChange={(ip) => setForm({ ...form, ...ip })}
+          />
           <label className="flex items-center gap-2 text-sm md:col-span-2">
             <input
               type="checkbox"

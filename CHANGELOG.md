@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.35] – 2026-08-27
+
+### Changed
+
+- Create forms suggest the next **smaller** free VMID across all nodes (243 + 244 → 242).
+- Static IPv4 uses presets `192.168.178.0`, `192.168.1.0`, `192.168.2.0` and fills the last octet from the VMID (`242` → `192.168.178.242`).
+
 ## [1.0.34] – 2026-08-27
 
 ### Changed
