@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.21] – 2026-08-27
+
+### Fixed
+
+- Self-update no longer dies on a dirty or diverged `/opt/proxora` git tree (`merge --ff-only`). It resets to GitHub `main`, keeps `.env`, and records the real Compose error in `.proxora-update-compose.log`.
+
 ## [1.0.20] – 2026-08-27
 
 ### Fixed

@@ -39,4 +39,6 @@ next-env.d.ts
 # Proxora runtime
 .proxora-revision
 .proxora-update-progress
+.proxora-update-compose.log
+.proxora-update.lock
 /data

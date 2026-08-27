@@ -96,7 +96,11 @@ function readLocalRevision(dir: string): string | null {
 
 async function isUpdaterRunning(): Promise<boolean> {
   try {
-    const { stdout } = await execFileAsync("docker", ["ps", "--format", "{{.Names}}"], { timeout: 5_000 });
+    const { stdout } = await execFileAsync(
+      "docker",
+      ["ps", "--filter", `name=^${UPDATER_NAME}$`, "--filter", "status=running", "--format", "{{.Names}}"],
+      { timeout: 5_000 },
+    );
     return stdout.split("\n").some((n) => n.trim() === UPDATER_NAME);
   } catch {
     return false;
@@ -262,6 +266,9 @@ async function applyOnHost(installMount: string, repo: string, branch: string) {
 
 async function applyViaDocker(hostDir: string, repo: string, branch: string) {
   try {
+    if (await isUpdaterRunning()) {
+      return { ok: false, mode: "compose" as const, message: "Update already running" };
+    }
     await execFileAsync("docker", ["rm", "-f", UPDATER_NAME], { timeout: 10_000 }).catch(() => undefined);
     const rawUrl = `https://raw.githubusercontent.com/${repo}/${branch}/scripts/self-update-apply.sh`;
     await execFileAsync(
@@ -269,6 +276,7 @@ async function applyViaDocker(hostDir: string, repo: string, branch: string) {
       [
         "run",
         "-d",
+        "--init",
         "--name",
         UPDATER_NAME,
         "-v",

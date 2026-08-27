@@ -11,7 +11,20 @@ SKIP_COMPOSE="${PROXORA_SKIP_COMPOSE:-0}"
 TARBALL_URL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
 CLONE_URL="https://github.com/${REPO}.git"
 PROGRESS_FILE="${INSTALL_DIR}/.proxora-update-progress"
+LOCK_DIR="${INSTALL_DIR}/.proxora-update.lock"
+COMPOSE_LOG_FILE="${INSTALL_DIR}/.proxora-update-compose.log"
 rm -f "$PROGRESS_FILE"
+
+if [ -d "$LOCK_DIR" ]; then
+  echo "==> Clearing leftover update lock"
+  rm -rf "$LOCK_DIR"
+fi
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  echo "ERROR: another Proxora update is already running" >&2
+  printf 'percent=%s\nstep=%s\ndetail=%s\n' 0 error "Update already running" > "$PROGRESS_FILE"
+  exit 1
+fi
+trap 'rm -rf "$LOCK_DIR"' EXIT
 
 write_progress() {
   percent="$1"
@@ -146,11 +159,25 @@ resolve_sha() {
 sync_via_git() {
   git config --global --add safe.directory "$INSTALL_DIR" >/dev/null 2>&1 || true
   git -C "$INSTALL_DIR" remote get-url origin >/dev/null 2>&1 || git -C "$INSTALL_DIR" remote add origin "$CLONE_URL" >/dev/null 2>&1 || true
-  git -C "$INSTALL_DIR" fetch --depth 1 origin "$BRANCH"
-  LOCAL="$(git -C "$INSTALL_DIR" rev-parse HEAD)"
-  REMOTE="$(git -C "$INSTALL_DIR" rev-parse FETCH_HEAD)"
-  if [ "$LOCAL" = "$REMOTE" ]; then echo " git already at $REMOTE"; return 0; fi
-  git -C "$INSTALL_DIR" merge --ff-only FETCH_HEAD
+  git -C "$INSTALL_DIR" remote set-url origin "$CLONE_URL" >/dev/null 2>&1 || true
+  git -C "$INSTALL_DIR" fetch --force --depth 1 origin "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
+  REMOTE="$(git -C "$INSTALL_DIR" rev-parse "origin/${BRANCH}" 2>/dev/null || git -C "$INSTALL_DIR" rev-parse FETCH_HEAD)"
+  if [ -z "${REMOTE:-}" ]; then
+    echo "ERROR: fetch did not return a revision" >&2
+    return 1
+  fi
+  # Appliance install: match GitHub exactly. ff-only fails on dirty/diverged trees
+  # left by earlier tarball overlays and local commits.
+  git -C "$INSTALL_DIR" reset --hard "$REMOTE"
+  git -C "$INSTALL_DIR" clean -fd \
+    -e .env \
+    -e data \
+    -e data/ \
+    -e .proxora-revision \
+    -e .proxora-update-progress \
+    -e .proxora-update-compose.log \
+    -e .proxora-update.lock
+  echo " git reset to $REMOTE"
 }
 
 sync_via_tarball() {
@@ -172,7 +199,7 @@ sync_via_tarball() {
 }
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+trap 'rm -rf "$TMP" "$LOCK_DIR"' EXIT
 
 if [ "$SKIP_COMPOSE" != "1" ]; then
   free_docker_space 6
@@ -223,7 +250,13 @@ kill "$WATCH" 2>/dev/null || true
 wait "$WATCH" 2>/dev/null || true
 cat "$TMP/compose.log" || true
 if [ "$COMPOSE_RC" -ne 0 ]; then
-  write_progress 0 error "Compose rebuild failed"
+  cp "$TMP/compose.log" "$COMPOSE_LOG_FILE" 2>/dev/null || true
+  err="$(grep -E 'ERROR|error:|failed|ELIFECYCLE|no space' "$TMP/compose.log" | tail -1 | tr '\n' ' ' | cut -c1-180)"
+  if [ -z "$err" ]; then
+    err="$(tail -8 "$TMP/compose.log" | tr '\n' ' ' | cut -c1-180)"
+  fi
+  write_progress 0 error "${err:-Compose rebuild failed}"
+  echo "ERROR: compose rebuild failed (see ${COMPOSE_LOG_FILE})" >&2
   exit "$COMPOSE_RC"
 fi
 
