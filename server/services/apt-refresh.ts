@@ -62,7 +62,7 @@ export async function refreshAllHostPackageLists(): Promise<{
   notified: number;
 }> {
   const hosts = await prisma.host.findMany({ orderBy: { name: "asc" } });
-  const alerts: Array<{ name: string; count: number }> = [];
+  const alerts: Array<{ name: string; count: number; hostId?: string }> = [];
   let failed = 0;
   for (const host of hosts) {
     try {

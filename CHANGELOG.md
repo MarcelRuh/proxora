@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.22] – 2026-08-27
+
+### Fixed
+
+- Docker image build failed TypeScript check (`hostId` on APT alert objects). Self-update can complete again.
+
 ## [1.0.21] – 2026-08-27
 
 ### Fixed
