@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { bytesToSize, formatPercent, formatUptime, percentage } from "@/lib/utils";
 import { useAptSummary } from "@/components/layout/apt-update-alert";
-import { GuestCpuBar, GuestRamBar } from "@/components/guests/guest-usage";
+import { GuestCpuBar, GuestDiskBar, GuestRamBar } from "@/components/guests/guest-usage";
 import { useI18n } from "@/components/i18n/locale-provider";
 
 type Guest = {
@@ -27,6 +27,9 @@ type Guest = {
   cpus?: number;
   mem?: number;
   maxmem?: number;
+  disk?: number;
+  maxdisk?: number;
+  uptime?: number;
 };
 
 type Dashboard = {
@@ -236,7 +239,7 @@ export default function DashboardPage() {
             <p className="text-sm text-muted-foreground">{t("dashboard.noGuests")}</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
+              <table className="w-full min-w-[880px] text-left text-sm">
                 <thead className="font-[family-name:var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                   <tr>
                     <th className="px-2 py-2 font-medium">{t("table.id")}</th>
@@ -246,6 +249,8 @@ export default function DashboardPage() {
                     <th className="px-2 py-2 font-medium">{t("table.status")}</th>
                     <th className="px-2 py-2 font-medium">{t("table.cpu")}</th>
                     <th className="px-2 py-2 font-medium">{t("table.ram")}</th>
+                    <th className="px-2 py-2 font-medium">{t("table.disk")}</th>
+                    <th className="px-2 py-2 font-medium">{t("table.uptime")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -278,6 +283,10 @@ export default function DashboardPage() {
                       <td className="px-2 py-2">
                         <GuestRamBar guest={{ mem: g.mem ?? 0, maxmem: g.maxmem ?? 0 }} />
                       </td>
+                      <td className="px-2 py-2">
+                        <GuestDiskBar guest={{ disk: g.disk ?? 0, maxdisk: g.maxdisk ?? 0 }} />
+                      </td>
+                      <td className="px-2 py-2 text-muted-foreground">{formatUptime(g.uptime)}</td>
                     </tr>
                   ))}
                 </tbody>

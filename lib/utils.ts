@@ -15,6 +15,11 @@ export function bytesToSize(bytes: number | undefined | null, decimals = 1): str
   return `${n.toLocaleString("de-DE", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${sizes[i]}`;
 }
 
+export function guestSizeDetail(used: number | undefined, total: number | undefined): string {
+  if (!total) return "—";
+  return `${bytesToSize(used ?? 0)} / ${bytesToSize(total)}`;
+}
+
 export function formatPercent(value: number, digits = 1): string {
   return `${value.toLocaleString("de-DE", { minimumFractionDigits: digits, maximumFractionDigits: digits })} %`;
 }
@@ -30,7 +35,7 @@ export function formatUptime(seconds: number | undefined | null): string {
 }
 
 export function percentage(used: number | undefined, total: number | undefined): number {
-  if (!total || !used) return 0;
+  if (!total || used == null || Number.isNaN(used) || used < 0) return 0;
   return Math.min(100, Math.round((used / total) * 1000) / 10);
 }
 

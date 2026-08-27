@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.40] – 2026-08-27
+
+### Changed
+
+- Dashboard guest rows (VMs and LXC) show RAM and disk as used/total size, plus CPU cores and uptime.
+- LXC core count is taken from Proxmox `maxcpu` when `cpus` is missing.
+
 ## [1.0.39] – 2026-08-27
 
 ### Added

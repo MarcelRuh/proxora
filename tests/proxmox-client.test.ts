@@ -54,11 +54,41 @@ describe("ProxmoxClient", () => {
     const vms = await client.listVms();
     expect(vms).toHaveLength(1);
     expect(vms[0]?.name).toBe("web");
+    expect(vms[0]?.cpus).toBe(2);
+    expect(vms[0]?.maxmem).toBe(2);
     const [url, init] = vi.mocked(undiciFetch).mock.calls[0] ?? [];
     expect(String(url)).toContain("/cluster/resources");
     expect(String((init as { headers?: Record<string, string> })?.headers?.Authorization)).toContain(
       "PVEAPIToken=root@pam!manager=",
     );
+  });
+
+  it("maps LXC maxcpu and memory from cluster resources", async () => {
+    vi.mocked(undiciFetch).mockResolvedValueOnce(
+      jsonResponse([
+        {
+          type: "lxc",
+          vmid: 200,
+          name: "db",
+          node: "pve",
+          status: "running",
+          cpu: 0.2,
+          maxcpu: 2,
+          mem: 512 * 1024 * 1024,
+          maxmem: 2 * 1024 * 1024 * 1024,
+          disk: 1024 * 1024 * 1024,
+          maxdisk: 8 * 1024 * 1024 * 1024,
+          uptime: 90,
+        },
+      ]) as never,
+    );
+    const cts = await client.listContainers();
+    expect(cts).toHaveLength(1);
+    expect(cts[0]?.cpus).toBe(2);
+    expect(cts[0]?.mem).toBe(512 * 1024 * 1024);
+    expect(cts[0]?.maxmem).toBe(2 * 1024 * 1024 * 1024);
+    expect(cts[0]?.maxdisk).toBe(8 * 1024 * 1024 * 1024);
+    expect(cts[0]?.uptime).toBe(90);
   });
 
   it("logs in with root password via /access/ticket", async () => {

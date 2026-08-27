@@ -54,6 +54,7 @@ export interface ProxmoxResource {
   status?: string;
   cpu?: number;
   cpus?: number;
+  maxcpu?: number;
   mem?: number;
   maxmem?: number;
   disk?: number;

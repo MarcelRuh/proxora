@@ -111,7 +111,7 @@ function mapGuest(r: ProxmoxResource): GuestListItem {
     node: r.node ?? "",
     status: ["running", "stopped", "paused"].includes(status) ? status : "unknown",
     cpu: r.cpu ?? 0,
-    cpus: r.cpus ?? 0,
+    cpus: r.cpus ?? r.maxcpu ?? 0,
     mem: r.mem ?? 0,
     maxmem: r.maxmem ?? 0,
     disk: r.disk ?? 0,

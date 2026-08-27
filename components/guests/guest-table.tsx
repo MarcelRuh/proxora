@@ -9,9 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GuestStateBadge } from "@/components/status-badge";
 import { ConfirmAction } from "@/components/confirm-action";
-import { GuestCpuBar, GuestRamBar } from "@/components/guests/guest-usage";
+import { GuestCpuBar, GuestDiskBar, GuestRamBar } from "@/components/guests/guest-usage";
 import { api } from "@/lib/api";
-import { bytesToSize, formatUptime } from "@/lib/utils";
+import { formatUptime } from "@/lib/utils";
 import type { Guest } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
@@ -117,7 +117,9 @@ export function GuestTable({
                   <td className="px-3 py-2">
                     <GuestRamBar guest={g} />
                   </td>
-                  <td className="px-3 py-2">{bytesToSize(g.maxdisk)}</td>
+                  <td className="px-3 py-2">
+                    <GuestDiskBar guest={g} />
+                  </td>
                   <td className="px-3 py-2">{formatUptime(g.uptime)}</td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
