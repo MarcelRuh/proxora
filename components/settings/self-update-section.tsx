@@ -30,6 +30,7 @@ export type SelfUpdateStatus = {
 };
 
 const STEP_LABELS: Record<string, string> = {
+  cleanup: "Cleaning disk space",
   start: "Starting",
   resolve: "Resolving GitHub revision",
   sync: "Syncing source",

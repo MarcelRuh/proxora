@@ -67,6 +67,26 @@ if [ "$SKIP_COMPOSE" != "1" ]; then
   docker compose version >/dev/null 2>&1 || { echo "ERROR: docker compose plugin required" >&2; exit 1; }
 fi
 
+disk_avail_kb() {
+  df -Pk "$INSTALL_DIR" 2>/dev/null | awk 'NR==2 {print $4}'
+}
+
+free_docker_space() {
+  percent="${1:-6}"
+  echo "==> Cleaning Docker leftovers"
+  write_progress "$percent" cleanup "Pruning unused images and build cache"
+  docker container prune -f >/dev/null 2>&1 || true
+  docker builder prune -af >/dev/null 2>&1 || true
+  docker image prune -af >/dev/null 2>&1 || true
+  avail="$(disk_avail_kb)"
+  echo " disk available: ${avail:-?}K"
+  if [ "${avail:-0}" -lt 4194304 ]; then
+    write_progress 0 error "Not enough disk space (${avail}K free, need 4G+)"
+    echo "ERROR: not enough disk space after cleanup (${avail}K free, need at least 4G)" >&2
+    exit 1
+  fi
+}
+
 detect_lan_ip() {
   _ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')"
   if [ -z "$_ip" ] || [ "$_ip" = "127.0.0.1" ]; then
@@ -154,6 +174,10 @@ sync_via_tarball() {
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+if [ "$SKIP_COMPOSE" != "1" ]; then
+  free_docker_space 6
+fi
+
 echo "==> Resolving remote revision"
 write_progress 8 resolve "Reading remote revision"
 ensure_git || true
@@ -180,6 +204,8 @@ if [ "$SKIP_COMPOSE" = "1" ]; then
 fi
 
 echo "==> Rebuilding stack (docker compose up -d --build)"
+write_progress 26 cleanup "Freeing space before rebuild"
+free_docker_space 26
 write_progress 28 build "Stack rebuild starting"
 cd "$INSTALL_DIR"
 sync_app_url_if_localhost "${INSTALL_DIR}/.env"
@@ -205,5 +231,6 @@ printf '%s\n' "$SHA" > "${INSTALL_DIR}/.proxora-revision"
 echo " wrote .proxora-revision"
 write_progress 96 finalize "Revision saved"
 docker builder prune -af >/dev/null 2>&1 || true
+docker image prune -af >/dev/null 2>&1 || true
 write_progress 100 done "Update complete"
 echo "==> Done. Proxora should come back shortly."

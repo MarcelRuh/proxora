@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.10] – 2026-08-27
+
+### Fixed
+
+- Self-update prunes unused Docker images, stopped containers, and build cache **before** (and after) the rebuild, and aborts if less than 4 GB is free.
+
 ## [1.0.9] – 2026-08-27
 
 ### Fixed
