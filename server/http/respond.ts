@@ -11,7 +11,7 @@ export function handleRouteError(error: unknown) {
   if (error instanceof ZodError) {
     return json(
       {
-        error: "Validation failed",
+        error: error.issues.map((issue) => issue.message).join(" · ") || "Validation failed",
         code: "VALIDATION_ERROR",
         details: error.flatten(),
       },

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.26] – 2026-08-27
+
+### Fixed
+
+- Container create uses a short form (DHCP/static, auto node/CT-ID/storage/bridge) and no longer sends empty Proxmox fields that made create fail.
+
 ## [1.0.25] – 2026-08-27
 
 ### Changed

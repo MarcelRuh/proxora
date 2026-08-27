@@ -25,11 +25,27 @@ function toSearch(query?: Query): string {
   return encoded ? `?${encoded}` : "";
 }
 
+function proxmoxErrorMessage(
+  parsed: { errors?: unknown; message?: string },
+  status: number,
+): string {
+  const details =
+    parsed.errors && typeof parsed.errors === "object"
+      ? Object.entries(parsed.errors as Record<string, unknown>)
+          .map(([key, value]) => `${key}: ${String(value).trim()}`)
+          .join("; ")
+      : typeof parsed.errors === "string"
+        ? parsed.errors
+        : "";
+  const base = parsed.message?.trim() || `Proxmox API error (${status})`;
+  return details ? `${base} (${details})` : base;
+}
+
 function toFormBody(body?: Record<string, unknown>): string | undefined {
   if (!body) return undefined;
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(body)) {
-    if (value === undefined || value === null) continue;
+    if (value === undefined || value === null || value === "") continue;
     params.set(key, String(value));
   }
   return params.toString();
@@ -148,9 +164,7 @@ export class ProxmoxHttpClient {
     }
 
     if (!response.ok) {
-      const message =
-        parsed.message ??
-        (typeof parsed.errors === "string" ? parsed.errors : `Proxmox API error (${response.status})`);
+      const message = proxmoxErrorMessage(parsed, response.status);
       logger.warn(
         { path, method, status: response.status, message },
         "Proxmox API request failed",
