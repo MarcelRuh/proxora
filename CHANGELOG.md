@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.14] – 2026-08-27
+
+### Changed
+
+- VM/LXC detail shows live CPU, RAM, disk and network usage. Config is a form for cores, memory, disks, NICs and all other Proxmox keys — not JSON.
+
 ## [1.0.13] – 2026-08-27
 
 ### Changed
