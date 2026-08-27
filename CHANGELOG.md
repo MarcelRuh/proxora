@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.16] – 2026-08-27
+
+### Changed
+
+- Guest config is split into CPU/RAM, Allgemein, Disks, Mountpoints, Netzwerk.
+- LXC bind-mounts match `pct set <id> -mp0 /host/dir,mp=/container/mount/point`. Storage volumes remain a second mount type.
+
 ## [1.0.15] – 2026-08-27
 
 ### Changed

@@ -176,6 +176,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
       {data?.config ? (
         <GuestConfigForm
           kind={kind}
+          vmid={Number(params.vmid)}
           config={data.config}
           busy={saving}
           onSave={async (payload) => {
