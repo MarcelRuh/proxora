@@ -7,7 +7,8 @@ const AUTH_TAG_LENGTH = 16;
 const KEY_LENGTH = 32;
 
 function getKey(): Buffer {
-  const secret = process.env.ENCRYPTION_KEY;
+  // Dynamic lookup so Next.js cannot inline the Docker build-time placeholder.
+  const secret = process.env["ENCRYPTION_KEY"];
   if (!secret || secret.length < 32) {
     throw new AppError(
       500,
@@ -35,15 +36,23 @@ export function decryptSecret(payload: string): string {
     throw new AppError(500, "Invalid encrypted payload", "CRYPTO_ERROR");
   }
   const [ivB64, tagB64, dataB64] = parts;
-  const decipher = createDecipheriv(ALGORITHM, getKey(), Buffer.from(ivB64, "base64"), {
-    authTagLength: AUTH_TAG_LENGTH,
-  });
-  decipher.setAuthTag(Buffer.from(tagB64, "base64"));
-  const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(dataB64, "base64")),
-    decipher.final(),
-  ]);
-  return decrypted.toString("utf8");
+  try {
+    const decipher = createDecipheriv(ALGORITHM, getKey(), Buffer.from(ivB64, "base64"), {
+      authTagLength: AUTH_TAG_LENGTH,
+    });
+    decipher.setAuthTag(Buffer.from(tagB64, "base64"));
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(dataB64, "base64")),
+      decipher.final(),
+    ]);
+    return decrypted.toString("utf8");
+  } catch {
+    throw new AppError(
+      500,
+      "Host credentials could not be decrypted. ENCRYPTION_KEY may have changed — re-enter the password on the host.",
+      "CRYPTO_ERROR",
+    );
+  }
 }
 
 export function sha256(value: string): string {

@@ -15,10 +15,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
-# Prisma/Next evaluate these at build time; runtime values come from Compose.
+# Prisma/Next evaluate env during `next build`. Do not use a 64-char hex value:
+# Next may inline process.env.ENCRYPTION_KEY and then runtime Compose secrets would not match.
 ENV DATABASE_URL="postgresql://proxora:proxora@127.0.0.1:5432/proxora?schema=public"
-ENV ENCRYPTION_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-ENV SESSION_SECRET="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+ENV ENCRYPTION_KEY="build-time-placeholder-not-a-real-secret-key"
+ENV SESSION_SECRET="build-time-placeholder-not-a-real-session-secret"
 RUN npx prisma generate && npm run build
 
 FROM node:22-bookworm-slim AS runner

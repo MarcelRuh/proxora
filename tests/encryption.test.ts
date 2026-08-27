@@ -21,6 +21,13 @@ describe("secret encryption", () => {
     expect(encryptSecret("token")).not.toBe(encryptSecret("token"));
   });
 
+  it("fails clearly when the encryption key changed", () => {
+    process.env.ENCRYPTION_KEY = "a".repeat(64);
+    const encrypted = encryptSecret("secret-value");
+    process.env.ENCRYPTION_KEY = "b".repeat(64);
+    expect(() => decryptSecret(encrypted)).toThrow(/could not be decrypted/);
+  });
+
   it("hashes session tokens with sha256", () => {
     expect(sha256("abc")).toMatch(/^[a-f0-9]{64}$/);
     expect(sha256("abc")).toBe(sha256("abc"));

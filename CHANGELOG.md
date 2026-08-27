@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.11] – 2026-08-27
+
+### Fixed
+
+- Host connections are re-probed on startup so a self-update no longer leaves hosts stuck in ERROR.
+- ENCRYPTION_KEY is read at runtime (not inlined at Docker build). Decrypt failures show a clear credential error instead of OpenSSL noise.
+
 ## [1.0.10] – 2026-08-27
 
 ### Fixed

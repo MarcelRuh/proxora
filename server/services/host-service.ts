@@ -196,6 +196,33 @@ export async function testHost(id: string, user: SessionUser) {
   return result;
 }
 
+export async function probeAllHosts() {
+  const hosts = await prisma.host.findMany({ orderBy: { name: "asc" } });
+  for (const host of hosts) {
+    try {
+      const secret = decryptSecret(host.encryptedSecret);
+      const result = await testRawConnection({
+        name: host.name,
+        url: host.url,
+        authType: host.authType,
+        username: host.username,
+        tokenId: host.tokenId,
+        secret,
+        allowInsecureTls: host.allowInsecureTls,
+      });
+      await applyTestResult(host.id, result);
+      logger.info({ host: host.name, ok: result.ok }, "Host probe finished");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      logger.warn({ host: host.name, err: message }, "Host probe failed");
+      await prisma.host.update({
+        where: { id: host.id },
+        data: { connectionState: HostConnectionState.ERROR, lastError: message },
+      });
+    }
+  }
+}
+
 export async function withHostClient<T>(
   hostId: string,
   user: SessionUser,
