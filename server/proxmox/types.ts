@@ -42,6 +42,7 @@ export interface ProxmoxNodeStatus {
   idle?: number;
   kversion?: string;
   pveversion?: string;
+  cpuinfo?: { cpus?: number; cores?: number; sockets?: number; model?: string; mhz?: string };
 }
 
 export interface ProxmoxResource {

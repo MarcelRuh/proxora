@@ -12,6 +12,7 @@ export type HostOverview = {
   clusterName: string | null;
   isClusterMember: boolean;
   cpu?: number;
+  cpuCores?: number;
   memUsed?: number;
   memTotal?: number;
   diskUsed?: number;
@@ -45,6 +46,14 @@ export async function getDashboard(user: SessionUser) {
           const status = primary
             ? await client.nodes.status(primary.node).catch(() => null)
             : null;
+          const live = nodes.filter((n) => n.status === "online");
+          const pool = live.length ? live : nodes;
+          const cpuCores =
+            pool.reduce((acc, n) => acc + (n.maxcpu ?? 0), 0) || status?.cpuinfo?.cpus || undefined;
+          const memUsed = pool.reduce((acc, n) => acc + (n.mem ?? 0), 0) || status?.memory.used;
+          const memTotal = pool.reduce((acc, n) => acc + (n.maxmem ?? 0), 0) || status?.memory.total;
+          const diskUsed = pool.reduce((acc, n) => acc + (n.disk ?? 0), 0) || status?.rootfs?.used;
+          const diskTotal = pool.reduce((acc, n) => acc + (n.maxdisk ?? 0), 0) || status?.rootfs?.total;
           return {
             id: host.id,
             name: host.name,
@@ -54,12 +63,13 @@ export async function getDashboard(user: SessionUser) {
             lastError: null,
             clusterName: host.clusterName,
             isClusterMember: host.isClusterMember,
-            cpu: status?.cpu,
-            memUsed: status?.memory.used,
-            memTotal: status?.memory.total,
-            diskUsed: status?.rootfs?.used,
-            diskTotal: status?.rootfs?.total,
-            uptime: status?.uptime,
+            cpu: status?.cpu ?? primary?.cpu,
+            cpuCores,
+            memUsed,
+            memTotal,
+            diskUsed,
+            diskTotal,
+            uptime: status?.uptime ?? primary?.uptime,
             loadavg: status?.loadavg,
             nodeCount: nodes.length,
             onlineNodes: nodes.filter((n) => n.status === "online").length,

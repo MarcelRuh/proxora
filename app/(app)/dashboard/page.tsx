@@ -32,6 +32,7 @@ type Dashboard = {
       connectionState: string;
       proxmoxVersion: string | null;
       cpu?: number;
+      cpuCores?: number;
       memUsed?: number;
       memTotal?: number;
       diskUsed?: number;
@@ -132,9 +133,21 @@ export default function DashboardPage() {
                 </div>
                 {h.connectionState === "ONLINE" ? (
                   <div className="grid gap-2 sm:grid-cols-3">
-                    <Metric label="CPU" value={(h.cpu ?? 0) * 100} />
-                    <Metric label="RAM" value={percentage(h.memUsed, h.memTotal)} />
-                    <Metric label="Storage" value={percentage(h.diskUsed, h.diskTotal)} />
+                    <Metric
+                      label="Kerne"
+                      value={(h.cpu ?? 0) * 100}
+                      detail={h.cpuCores ? `${h.cpuCores} Kerne · ${Math.round((h.cpu ?? 0) * 100)}%` : `${Math.round((h.cpu ?? 0) * 100)}%`}
+                    />
+                    <Metric
+                      label="RAM"
+                      value={percentage(h.memUsed, h.memTotal)}
+                      detail={`${bytesToSize(h.memUsed)} / ${bytesToSize(h.memTotal)}`}
+                    />
+                    <Metric
+                      label="Speicher"
+                      value={percentage(h.diskUsed, h.diskTotal)}
+                      detail={`${bytesToSize(h.diskUsed)} / ${bytesToSize(h.diskTotal)}`}
+                    />
                   </div>
                 ) : (
                   <p className="text-sm text-destructive">{h.lastError ?? "Unavailable"}</p>
@@ -161,6 +174,7 @@ export default function DashboardPage() {
                     <th className="px-2 py-2 font-medium">ID</th>
                     <th className="px-2 py-2 font-medium">Typ</th>
                     <th className="px-2 py-2 font-medium">Name</th>
+                    <th className="px-2 py-2 font-medium">Host</th>
                     <th className="px-2 py-2 font-medium">Status</th>
                   </tr>
                 </thead>
@@ -181,6 +195,12 @@ export default function DashboardPage() {
                           {g.template ? <span className="text-xs text-muted-foreground"> (template)</span> : null}
                         </Link>
                       </td>
+                      <td className="px-2 py-2 text-muted-foreground">
+                        {g.hostName}
+                        {g.node && g.node !== g.hostName ? (
+                          <span className="block text-xs">{g.node}</span>
+                        ) : null}
+                      </td>
                       <td className="px-2 py-2">
                         <GuestStateBadge status={g.status} />
                       </td>
@@ -200,12 +220,12 @@ function guestHref(g: Guest) {
   return g.kind === "vm" ? `/vms/${g.hostId}/${g.node}/${g.vmid}` : `/containers/${g.hostId}/${g.node}/${g.vmid}`;
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({ label, value, detail }: { label: string; value: number; detail?: string }) {
   return (
     <div>
-      <div className="mb-1 flex justify-between text-xs text-muted-foreground">
+      <div className="mb-1 flex justify-between gap-2 text-xs text-muted-foreground">
         <span>{label}</span>
-        <span>{Math.round(value)}%</span>
+        <span className="text-right font-medium text-foreground">{detail ?? `${Math.round(value)}%`}</span>
       </div>
       <ProgressBar value={value} />
     </div>

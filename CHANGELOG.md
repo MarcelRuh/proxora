@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.13] – 2026-08-27
+
+### Changed
+
+- Dashboard guest table includes the host. Host cards show cores plus RAM and storage as used/total sizes (GB/TB), not only percentages.
+
 ## [1.0.12] – 2026-08-27
 
 ### Changed
