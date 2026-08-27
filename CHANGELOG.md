@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.38] – 2026-08-27
+
+### Changed
+
+- Proxora self-update has its own sidebar item (`/proxora`) instead of living under Settings.
+
 ## [1.0.37] – 2026-08-27
 
 ### Changed

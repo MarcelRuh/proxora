@@ -4,7 +4,7 @@ import { applySelfUpdate, getSelfUpdateStatus } from "@/server/services/self-upd
 import { writeAuditLog } from "@/server/services/audit-service";
 import { clientIp } from "@/server/auth/session";
 
-export const GET = apiRoute("updates.view", async () => {
+export const GET = apiRoute(["updates.view", "proxora.update"], async () => {
   return json(await getSelfUpdateStatus());
 });
 

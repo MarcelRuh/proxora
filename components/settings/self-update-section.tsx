@@ -9,6 +9,7 @@ import { ProgressBar } from "@/components/ui/misc";
 import { ConfirmAction } from "@/components/confirm-action";
 import { api } from "@/lib/api";
 import { APP_NAME } from "@/lib/version";
+import { useCan } from "@/components/auth/session-user";
 
 export type SelfUpdateStatus = {
   enabled: boolean;
@@ -64,6 +65,7 @@ async function waitForHealth(timeoutMs = 180_000): Promise<boolean> {
 
 export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
   const qc = useQueryClient();
+  const canApply = useCan("proxora.update");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -177,20 +179,22 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
               <Button size="sm" variant="outline" onClick={() => void qc.invalidateQueries({ queryKey: ["self-update"] })}>
                 Check
               </Button>
-              <ConfirmAction
-                title={`Update ${APP_NAME}?`}
-                description={
-                  status.updateAvailable
-                    ? `This syncs from GitHub and rebuilds the Compose stack. ${status.currentVersion} → ${status.targetVersion ?? "latest"}.`
-                    : "No newer version was detected. Rebuild from GitHub anyway?"
-                }
-                actionLabel="Jetzt aktualisieren"
-                onConfirm={handleApply}
-              >
-                <Button size="sm" disabled={busy || status.updating}>
-                  {busy || status.updating ? "Updating…" : "Jetzt aktualisieren"}
-                </Button>
-              </ConfirmAction>
+              {canApply ? (
+                <ConfirmAction
+                  title={`Update ${APP_NAME}?`}
+                  description={
+                    status.updateAvailable
+                      ? `This syncs from GitHub and rebuilds the Compose stack. ${status.currentVersion} → ${status.targetVersion ?? "latest"}.`
+                      : "No newer version was detected. Rebuild from GitHub anyway?"
+                  }
+                  actionLabel="Jetzt aktualisieren"
+                  onConfirm={handleApply}
+                >
+                  <Button size="sm" disabled={busy || status.updating}>
+                    {busy || status.updating ? "Updating…" : "Jetzt aktualisieren"}
+                  </Button>
+                </ConfirmAction>
+              ) : null}
             </div>
             {!compact && status.changelog ? (
               <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">

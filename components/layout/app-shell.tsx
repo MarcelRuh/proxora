@@ -16,6 +16,7 @@ import {
   Server,
   Settings,
   Shield,
+  ArrowUpCircle,
   Users,
   X,
 } from "lucide-react";
@@ -51,10 +52,11 @@ const NAV: Array<{
   { href: "/backups", labelKey: "nav.backups", icon: Archive, anyOf: ["backup.view"] },
   { href: "/tasks", labelKey: "nav.tasks", icon: Activity, anyOf: ["tasks.view"] },
   { href: "/updates", labelKey: "nav.updates", icon: Shield, anyOf: ["updates.view"] },
+  { href: "/proxora", labelKey: "nav.proxora", icon: ArrowUpCircle, anyOf: ["proxora.update", "updates.view"] },
   { href: "/users", labelKey: "nav.users", icon: Users, anyOf: ["users.view"] },
   { href: "/roles", labelKey: "nav.roles", icon: Shield, anyOf: ["roles.view"] },
   { href: "/audit", labelKey: "nav.audit", icon: ClipboardList, anyOf: ["audit.view"] },
-  { href: "/settings", labelKey: "nav.settings", icon: Settings, anyOf: ["settings.view", "notifications.view", "proxora.update"] },
+  { href: "/settings", labelKey: "nav.settings", icon: Settings, anyOf: ["settings.view", "notifications.view"] },
 ];
 
 export function AppShell({ children, user }: { children: ReactNode; user: SessionUser }) {
@@ -113,13 +115,13 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
               active={
                 item.href === "/dashboard"
                   ? pathname === item.href
-                  : item.href === "/settings"
-                    ? pathname === item.href || pathname.startsWith("/settings") || pathname === "/proxora"
-                    : pathname === item.href || pathname.startsWith(`${item.href}/`)
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`)
               }
               badge={
                 item.href === "/updates" && hasPermission(user.role.permissions, "updates.view") ? (
                   <UpdatesBadge />
+                ) : item.href === "/proxora" ? (
+                  <ProxoraBadge />
                 ) : undefined
               }
             />
@@ -134,7 +136,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             {t("nav.search")}
             <kbd className="ml-auto text-[10px] text-sidebar-muted">⌘K</kbd>
           </button>
-          <SidebarVersion />
+          {hasAnyPermission(user.role.permissions, ["proxora.update", "updates.view"]) ? <SidebarVersion /> : null}
           <div className="flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider">
             <button
               className={locale === "de" ? "text-primary" : "text-sidebar-muted hover:text-white"}
@@ -219,6 +221,20 @@ function UpdatesBadge() {
   );
 }
 
+function ProxoraBadge() {
+  const { data } = useQuery({
+    queryKey: ["self-update"],
+    queryFn: () => api<SelfUpdateStatus>("/api/system/self-update"),
+    refetchInterval: (q) => (q.state.data?.updating ? 1500 : 60_000),
+  });
+  if (!data?.updateAvailable && !data?.updating) return null;
+  return (
+    <span className="rounded-full border border-warning/50 bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold text-warning">
+      {data.updating ? "…" : "1"}
+    </span>
+  );
+}
+
 function SidebarVersion() {
   const { data: status } = useQuery({
     queryKey: ["self-update"],
@@ -230,7 +246,7 @@ function SidebarVersion() {
   const updating = Boolean(status?.updating);
   const percent = status?.progress?.percent ?? (updating ? 2 : status?.updateAvailable ? 8 : 100);
   return (
-    <Link href="/settings" className="block rounded-[4px] border border-[rgba(131,56,236,0.28)] px-2 py-2 hover:border-primary/50">
+    <Link href="/proxora" className="block rounded-[4px] border border-[rgba(131,56,236,0.28)] px-2 py-2 hover:border-primary/50">
       <div className="flex items-center justify-between gap-2 text-[11px]">
         <span className="font-mono text-sidebar-foreground">
           {status?.updateAvailable ? `${current} → ${target}` : `v${current}`}
