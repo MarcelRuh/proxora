@@ -17,7 +17,6 @@ import {
   Settings,
   Shield,
   Users,
-  Waves,
   X,
 } from "lucide-react";
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
@@ -41,7 +40,6 @@ const NAV: Array<{ href: string; label: string; icon: ComponentType<{ className?
   { href: "/vms", label: "VMs", icon: Boxes },
   { href: "/containers", label: "Container", icon: Box },
   { href: "/storage", label: "Storage", icon: HardDrive },
-  { href: "/zfs", label: "ZFS", icon: Waves },
   { href: "/tasks", label: "Tasks", icon: Activity },
   { href: "/updates", label: "Updates", icon: Shield },
   { href: "/users", label: "Benutzer", icon: Users },

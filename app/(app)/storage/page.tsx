@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { bytesToSize, percentage } from "@/lib/utils";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
+import { ZfsSection, type ZfsHostBlock } from "@/components/storage/zfs-section";
 
 type StorageResp = {
   storage: Array<{
@@ -29,8 +30,9 @@ export default function StoragePage() {
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
   });
+  const hostIds = hosts?.hosts.map((h) => h.id);
   const { data } = useQuery({
-    queryKey: ["storage", hosts?.hosts.map((h) => h.id)],
+    queryKey: ["storage", hostIds],
     enabled: Boolean(hosts),
     queryFn: async () => {
       const rows = await Promise.all(
@@ -47,55 +49,80 @@ export default function StoragePage() {
     },
     refetchInterval: 30_000,
   });
+  const { data: zfs } = useQuery({
+    queryKey: ["zfs", hostIds],
+    enabled: Boolean(hosts),
+    queryFn: async () => {
+      const rows = await Promise.all(
+        (hosts?.hosts ?? []).map(async (h) => {
+          try {
+            const r = await api<{ zfs: ZfsHostBlock["zfs"] }>(`/api/hosts/${h.id}/zfs`);
+            return { hostId: h.id, ...r } satisfies { hostId: string } & ZfsHostBlock;
+          } catch {
+            return { hostId: h.id, zfs: [], error: true };
+          }
+        }),
+      );
+      return rows;
+    },
+    refetchInterval: 30_000,
+  });
 
   return (
     <div className="space-y-4">
-      <PageHeader kicker="Speicher" title="Storage" />
+      <PageHeader
+        kicker="Speicher"
+        title="Storage"
+        description="Datastores und ZFS-Pools der verbundenen Hosts."
+      />
       {(data ?? []).map((block) => (
         <Card key={block.host.id}>
           <CardHeader>
             <CardTitle>{block.host.name}</CardTitle>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
-            {"error" in block ? (
-              <p className="text-sm text-destructive">Unable to load storage for this host.</p>
+          <CardContent>
+            {"error" in block && block.error ? (
+              <p className="text-sm text-destructive">Storage für diesen Host konnte nicht geladen werden.</p>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="text-left text-xs uppercase text-muted-foreground">
-                  <tr>
-                    <th className="py-2">Name</th>
-                    <th>Type</th>
-                    <th>Status</th>
-                    <th>Content</th>
-                    <th>Used</th>
-                    <th>Free</th>
-                    <th>Usage</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {block.storage.flatMap((n) =>
-                    n.storage.map((s) => {
-                      const pct = percentage(s.used, s.total);
-                      return (
-                        <tr key={`${n.node}-${s.storage}`} className="border-t border-border">
-                          <td className="py-2">{s.storage}</td>
-                          <td>{s.type}</td>
-                          <td>
-                            <Badge variant={s.active ? "success" : "danger"}>{s.active ? "active" : "inactive"}</Badge>
-                          </td>
-                          <td className="text-muted-foreground">{s.content}</td>
-                          <td>{bytesToSize(s.used)}</td>
-                          <td>{bytesToSize(s.avail)}</td>
-                          <td className="w-40">
-                            <ProgressBar value={pct} />
-                          </td>
-                        </tr>
-                      );
-                    }),
-                  )}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="font-[family-name:var(--font-display)] text-left text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                    <tr>
+                      <th className="py-2 font-medium">Name</th>
+                      <th className="font-medium">Typ</th>
+                      <th className="font-medium">Status</th>
+                      <th className="font-medium">Inhalt</th>
+                      <th className="font-medium">Belegt</th>
+                      <th className="font-medium">Frei</th>
+                      <th className="font-medium">Auslastung</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {block.storage.flatMap((n) =>
+                      n.storage.map((s) => {
+                        const pct = percentage(s.used, s.total);
+                        return (
+                          <tr key={`${n.node}-${s.storage}`} className="border-t border-border">
+                            <td className="py-2">{s.storage}</td>
+                            <td>{s.type}</td>
+                            <td>
+                              <Badge variant={s.active ? "success" : "danger"}>{s.active ? "aktiv" : "inaktiv"}</Badge>
+                            </td>
+                            <td className="text-muted-foreground">{s.content}</td>
+                            <td>{bytesToSize(s.used)}</td>
+                            <td>{bytesToSize(s.avail)}</td>
+                            <td className="w-40">
+                              <ProgressBar value={pct} />
+                            </td>
+                          </tr>
+                        );
+                      }),
+                    )}
+                  </tbody>
+                </table>
+              </div>
             )}
+            <ZfsSection block={zfs?.find((row) => row.hostId === block.host.id)} />
           </CardContent>
         </Card>
       ))}

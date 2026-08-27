@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.25] – 2026-08-27
+
+### Changed
+
+- ZFS pools are shown on the Storage page. The separate sidebar item is gone (`/zfs` redirects).
+
 ## [1.0.24] – 2026-08-27
 
 ### Fixed
