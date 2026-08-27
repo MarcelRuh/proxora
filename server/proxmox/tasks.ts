@@ -1,5 +1,10 @@
+import { ProxmoxApiError } from "@/lib/errors";
 import type { ProxmoxHttpClient } from "@/server/proxmox/http";
 import type { ProxmoxAptUpdate, ProxmoxTask } from "@/server/proxmox/types";
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export class TaskApi {
   constructor(private readonly http: ProxmoxHttpClient) {}
@@ -26,23 +31,34 @@ export class TaskApi {
       `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}`,
     );
   }
+
+  async wait(node: string, upid: string, timeoutMs = 180_000, intervalMs = 1_500) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const st = await this.status(node, upid);
+      if (st.status && st.status !== "running") {
+        const exit = st.exitstatus ?? "OK";
+        if (exit === "OK") return st;
+        throw new ProxmoxApiError(`Proxmox-Task fehlgeschlagen: ${exit}`, 502);
+      }
+      await sleep(intervalMs);
+    }
+    throw new ProxmoxApiError("Zeitüberschreitung beim Warten auf den Proxmox-Task", 504);
+  }
 }
 
 export class UpdateApi {
   constructor(private readonly http: ProxmoxHttpClient) {}
 
-  list(node: string) {
-    return this.http.get<ProxmoxAptUpdate[]>(`/nodes/${encodeURIComponent(node)}/apt/update`);
+  async list(node: string) {
+    const data = await this.http.get<ProxmoxAptUpdate[] | null>(
+      `/nodes/${encodeURIComponent(node)}/apt/update`,
+    );
+    return Array.isArray(data) ? data : [];
   }
 
   refresh(node: string) {
-    return this.http.post<string>(`/nodes/${encodeURIComponent(node)}/apt/update`);
-  }
-
-  upgrade(node: string) {
-    return this.http.post<string>(`/nodes/${encodeURIComponent(node)}/apt/upgrade`, undefined, {
-      quiet: 1,
-    });
+    return this.http.post<string>(`/nodes/${encodeURIComponent(node)}/apt/update`, { quiet: 1 });
   }
 
   changelog(node: string, name: string) {

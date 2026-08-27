@@ -40,8 +40,10 @@ const NUMBER_KEYS = new Set([
   "acpi",
 ]);
 
-const CPU_KEYS = ["cores", "sockets", "vcpus", "cpu", "memory", "balloon", "swap", "cpulimit", "cpuunits"];
+const CPU_KEYS = ["cores", "sockets", "vcpus", "memory", "balloon", "swap", "cpuunits"];
 const META_KEYS = ["name", "hostname", "ostype", "tags", "description"];
+/** Keep in form state (so save does not delete them) but do not show. */
+const HIDDEN_UI_KEYS = new Set(["cpu", "cpulimit"]);
 
 function isNet(key: string) {
   return /^net\d+$/.test(key);
@@ -105,7 +107,13 @@ export function GuestConfigForm({
   const disks = keys.filter(isDisk);
   const mounts = keys.filter(isMp);
   const rest = keys.filter(
-    (k) => !isNet(k) && !isDisk(k) && !isMp(k) && !FLAG_KEYS.has(k) && !primary.includes(k),
+    (k) =>
+      !isNet(k) &&
+      !isDisk(k) &&
+      !isMp(k) &&
+      !FLAG_KEYS.has(k) &&
+      !primary.includes(k) &&
+      !HIDDEN_UI_KEYS.has(k),
   );
   const nextMp = nextIndexedKey("mp", Object.keys(form));
 
@@ -313,8 +321,8 @@ export function GuestConfigForm({
 
 function preferredOrder(kind: "vm" | "lxc") {
   return kind === "lxc"
-    ? ["hostname", "ostype", "cores", "memory", "swap", "cpulimit", "cpuunits", "tags", "description"]
-    : ["name", "ostype", "cores", "sockets", "vcpus", "cpu", "memory", "balloon", "tags", "description"];
+    ? ["hostname", "ostype", "cores", "memory", "swap", "cpuunits", "tags", "description"]
+    : ["name", "ostype", "cores", "sockets", "vcpus", "memory", "balloon", "tags", "description"];
 }
 
 function hintFor(key: string) {

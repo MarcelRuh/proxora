@@ -11,9 +11,10 @@ type Props = {
   node: string;
   kind: "vm" | "lxc" | "node";
   vmid?: number;
+  cmd?: "upgrade";
 };
 
-export function WebConsole({ hostId, node, kind, vmid }: Props) {
+export function WebConsole({ hostId, node, kind, vmid, cmd }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -49,6 +50,7 @@ export function WebConsole({ hostId, node, kind, vmid }: Props) {
       rows: String(term.rows),
     });
     if (vmid) params.set("vmid", String(vmid));
+    if (cmd) params.set("cmd", cmd);
     const ws = new WebSocket(`${wsBase}/ws/console?${params.toString()}`);
     wsRef.current = ws;
     setStatus("connecting");
@@ -103,7 +105,7 @@ export function WebConsole({ hostId, node, kind, vmid }: Props) {
       ws.close();
       term.dispose();
     };
-  }, [hostId, node, kind, vmid, fontSize, nonce]);
+  }, [hostId, node, kind, vmid, cmd, fontSize, nonce]);
 
   return (
     <div className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-[#020617]">
@@ -115,9 +117,9 @@ export function WebConsole({ hostId, node, kind, vmid }: Props) {
         >
           ● {status}
         </span>
-        <span className="text-slate-500">
-          {kind.toUpperCase()} {vmid ?? node} @ {node}
-        </span>
+          <span className="text-slate-500">
+            {cmd === "upgrade" ? "UPGRADE" : kind.toUpperCase()} {vmid ?? node} @ {node}
+          </span>
         <div className="ml-auto flex items-center gap-1">
           <Button size="icon" variant="ghost" onClick={() => setFontSize((s) => Math.max(10, s - 1))}>
             <Minus className="h-3 w-3" />

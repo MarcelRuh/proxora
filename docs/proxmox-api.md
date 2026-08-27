@@ -65,10 +65,10 @@ Adding a host runs:
 | ZFS | GET | `/nodes/{node}/disks/zfs` |
 | APT list | GET | `/nodes/{node}/apt/update` |
 | APT refresh | POST | `/nodes/{node}/apt/update` |
-| APT upgrade | POST | `/nodes/{node}/apt/upgrade` |
+| Node upgrade shell | POST | `/nodes/{node}/termproxy` with `cmd=upgrade` |
 | Tasks | GET | `/nodes/{node}/tasks` |
 
-Updates never run arbitrary SSH commands. They use the APT API above.
+Proxmox VE has no unattended `POST /apt/upgrade`. Package lists use the APT API; applying updates opens the same interactive node shell as the PVE GUI (`root@pam`).
 
 ## Errors
 

@@ -35,6 +35,11 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
   const vmid = url.searchParams.get("vmid");
   const cols = Number(url.searchParams.get("cols") ?? 80);
   const rows = Number(url.searchParams.get("rows") ?? 24);
+  const cmd = url.searchParams.get("cmd");
+  if (cmd && (kind !== "node" || cmd !== "upgrade")) {
+    browser.close(4400, "Invalid console command");
+    return;
+  }
 
   const session = await getSessionFromToken(cookieValue(req, SESSION_COOKIE));
   if (!session) {
@@ -59,7 +64,7 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
     const proxmox = await clientForHost(host);
     const term =
       kind === "node"
-        ? await proxmox.nodes.termproxy(node)
+        ? await proxmox.nodes.termproxy(node, cmd === "upgrade" ? { cmd: "upgrade" } : undefined)
         : kind === "vm"
           ? await proxmox.vms.termproxy(node, Number(vmid))
           : await proxmox.lxc.termproxy(node, Number(vmid));

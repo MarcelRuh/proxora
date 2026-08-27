@@ -240,7 +240,7 @@ export async function withHostClient<T>(
     }
     return result;
   } catch (error) {
-    if (error instanceof ProxmoxApiError && error.status < 500 && error.status !== 503) {
+    if (error instanceof ProxmoxApiError && error.status !== 503) {
       throw error;
     }
     const message = error instanceof Error ? error.message : "Unknown error";

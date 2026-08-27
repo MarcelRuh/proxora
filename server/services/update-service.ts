@@ -1,68 +1,53 @@
 import { prisma } from "@/lib/db";
-import { logger } from "@/lib/logger";
 import type { SessionUser } from "@/server/auth/session";
-import { listHosts, withHostClient } from "@/server/services/host-service";
+import { withHostClient } from "@/server/services/host-service";
 
-export async function queueHostUpdate(hostId: string, user: SessionUser, refreshFirst = true) {
-  const job = await prisma.job.create({
-    data: {
-      type: "host.update",
-      hostId,
-      status: "WAITING",
-      createdById: user.id,
-      payload: { refreshFirst },
-    },
-  });
-  void runUpdateJob(job.id);
-  return job;
+export type NodeUpdates = {
+  node: string;
+  packages: Array<{ Package: string; Version?: string; OldVersion?: string; Title?: string }>;
+  count: number;
+};
+
+async function nodesFor(client: { nodes: { list: () => Promise<Array<{ node: string }>> } }, node?: string) {
+  const nodes = await client.nodes.list();
+  return node ? nodes.filter((n) => n.node === node) : nodes;
 }
 
-export async function queueAllHostUpdates(user: SessionUser) {
-  const hosts = await listHosts(user);
-  const jobs = [];
-  for (const host of hosts) {
-    jobs.push(await queueHostUpdate(host.id, user, true));
-  }
-  return jobs;
+export async function listHostUpdates(hostId: string, user: SessionUser, node?: string) {
+  return withHostClient(hostId, user, async (client, host) => {
+    const nodes = await nodesFor(client, node);
+    const updates: NodeUpdates[] = await Promise.all(
+      nodes.map(async (n) => {
+        const packages = await client.updates.list(n.node);
+        return { node: n.node, packages, count: packages.length };
+      }),
+    );
+    return { version: host.proxmoxVersion, updates };
+  });
 }
 
-async function runUpdateJob(jobId: string) {
-  const job = await prisma.job.findUnique({ where: { id: jobId } });
-  if (!job || !job.hostId) return;
-  await prisma.job.update({
-    where: { id: jobId },
-    data: { status: "RUNNING", startedAt: new Date() },
+export async function refreshHostUpdates(hostId: string, user: SessionUser, node?: string) {
+  return withHostClient(hostId, user, async (client, host) => {
+    const nodes = await nodesFor(client, node);
+    if (nodes.length === 0) throw new Error("Kein Node gefunden");
+    const updates: NodeUpdates[] = [];
+    for (const n of nodes) {
+      const upid = await client.updates.refresh(n.node);
+      if (upid) await client.tasks.wait(n.node, upid);
+      const packages = await client.updates.list(n.node);
+      updates.push({ node: n.node, packages, count: packages.length });
+    }
+    return { version: host.proxmoxVersion, updates };
   });
-  try {
-    const host = await prisma.host.findUnique({ where: { id: job.hostId } });
-    if (!host) throw new Error("Host disappeared");
-    const syntheticUser: SessionUser = {
-      id: job.createdById ?? "system",
-      username: "system",
-      email: "",
-      role: { id: "system", slug: "super-admin", name: "System", permissions: [] },
-      allowedHostIds: null,
-    };
-    const upid = await withHostClient(host.id, syntheticUser, async (client) => {
-      const nodes = await client.nodes.list();
-      const node = nodes[0]?.node;
-      if (!node) throw new Error("No node found");
-      await client.updates.refresh(node);
-      return client.updates.upgrade(node);
-    });
-    await prisma.job.update({
-      where: { id: jobId },
-      data: { status: "SUCCESS", finishedAt: new Date(), result: { upid } },
-    });
-    logger.info({ hostId: job.hostId, upid }, "Host update started");
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Update failed";
-    await prisma.job.update({
-      where: { id: jobId },
-      data: { status: "FAILED", finishedAt: new Date(), error: message },
-    });
-    logger.error({ hostId: job.hostId, err: message }, "Host update failed");
-  }
+}
+
+export async function upgradeConsoleTarget(hostId: string, user: SessionUser, node?: string) {
+  return withHostClient(hostId, user, async (client) => {
+    const nodes = await nodesFor(client, node);
+    const target = nodes[0]?.node;
+    if (!target) throw new Error("Kein Node gefunden");
+    return { mode: "console" as const, node: target };
+  });
 }
 
 export async function listJobs(type?: string) {

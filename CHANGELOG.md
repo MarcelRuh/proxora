@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.17] – 2026-08-27
+
+### Fixed
+
+- Host updates no longer call the nonexistent Proxmox path `/apt/upgrade`. Package lists refresh via `apt update` and wait for the task; applying updates opens the same node upgrade shell as the PVE GUI.
+- Guest config no longer shows CPU type (`host`) or CPU limit.
+
 ## [1.0.16] – 2026-08-27
 
 ### Changed

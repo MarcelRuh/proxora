@@ -103,8 +103,42 @@ describe("ProxmoxClient", () => {
       hostname: "web",
       rootfs: "local-lvm:8",
     });
-    const [url] = vi.mocked(undiciFetch).mock.calls[0] ?? [];
+    const [url, init] = vi.mocked(undiciFetch).mock.calls[0] ?? [];
     expect(String(url)).toContain("/nodes/pve/lxc");
+  });
+
+  it("refreshes the APT package list, not a nonexistent /apt/upgrade path", async () => {
+    vi.mocked(undiciFetch).mockResolvedValueOnce(jsonResponse("UPID:pve:apt") as never);
+    const upid = await client.updates.refresh("pve");
+    expect(upid).toBe("UPID:pve:apt");
+    const [url, init] = vi.mocked(undiciFetch).mock.calls[0] ?? [];
+    expect(String(url)).toContain("/nodes/pve/apt/update");
+    expect(String(url)).not.toContain("/apt/upgrade");
+    expect((init as { method?: string })?.method).toBe("POST");
+    expect(String((init as { body?: string })?.body)).toContain("quiet=1");
+  });
+
+  it("waits until a Proxmox task stops with OK", async () => {
+    vi.mocked(undiciFetch)
+      .mockResolvedValueOnce(jsonResponse({ status: "running", upid: "UPID:1", starttime: 1, node: "pve", user: "root@pam", type: "aptupdate" }) as never)
+      .mockResolvedValueOnce(jsonResponse({ status: "stopped", exitstatus: "OK", upid: "UPID:1", starttime: 1, node: "pve", user: "root@pam", type: "aptupdate" }) as never);
+    const st = await client.tasks.wait("pve", "UPID:1", 5_000, 1);
+    expect(st.exitstatus).toBe("OK");
+  });
+
+  it("fails wait when the task exitstatus is not OK", async () => {
+    vi.mocked(undiciFetch).mockResolvedValueOnce(
+      jsonResponse({
+        status: "stopped",
+        exitstatus: "command failed",
+        upid: "UPID:1",
+        starttime: 1,
+        node: "pve",
+        user: "root@pam",
+        type: "aptupdate",
+      }) as never,
+    );
+    await expect(client.tasks.wait("pve", "UPID:1", 5_000, 1)).rejects.toThrow(/command failed/);
   });
 
   it("lists storage", async () => {
