@@ -15,13 +15,12 @@ export async function globalSearch(user: SessionUser, query: string) {
     hosts.map(async (host) => {
       try {
         return await withHostClient(host.id, user, async (client) => {
-          const [vms, containers, storage] = await Promise.all([
-            client.listVms().catch(() => []),
-            client.listContainers().catch(() => []),
+          const [guests, storage] = await Promise.all([
+            client.listGuests().catch(() => ({ vms: [], containers: [] })),
             client.storage.list().catch(() => []),
           ]);
           return {
-            vms: filterGuestsForUser(user, host.id, "vm", vms)
+            vms: filterGuestsForUser(user, host.id, "vm", guests.vms)
               .filter((v) => v.name.toLowerCase().includes(q) || String(v.vmid).includes(q))
               .map((v) => ({
                 type: "vm" as const,
@@ -30,7 +29,7 @@ export async function globalSearch(user: SessionUser, query: string) {
                 subtitle: `${host.name} / ${v.node}`,
                 href: `/vms/${host.id}/${v.node}/${v.vmid}`,
               })),
-            containers: filterGuestsForUser(user, host.id, "lxc", containers)
+            containers: filterGuestsForUser(user, host.id, "lxc", guests.containers)
               .filter((v) => v.name.toLowerCase().includes(q) || String(v.vmid).includes(q))
               .map((v) => ({
                 type: "lxc" as const,

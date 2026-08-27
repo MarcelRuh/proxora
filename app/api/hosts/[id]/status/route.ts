@@ -24,16 +24,15 @@ export const GET = apiRoute("hosts.view", async (_req, session, params) => {
         return { node: n.node, online: n.status, status };
       }),
     );
-    const [vms, containers, storage] = await Promise.all([
-      client.listVms().catch(() => []),
-      client.listContainers().catch(() => []),
+    const [guests, storage] = await Promise.all([
+      client.listGuests().catch(() => ({ vms: [], containers: [] })),
       client.storage.list().catch(() => []),
     ]);
     return {
       host: host.name,
       nodes: details,
-      vms: filterGuestsForUser(session.user, params.id, "vm", vms),
-      containers: filterGuestsForUser(session.user, params.id, "lxc", containers),
+      vms: filterGuestsForUser(session.user, params.id, "vm", guests.vms),
+      containers: filterGuestsForUser(session.user, params.id, "lxc", guests.containers),
       storage,
     };
   });

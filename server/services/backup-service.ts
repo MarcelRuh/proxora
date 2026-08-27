@@ -28,12 +28,13 @@ export type BackupFile = {
 
 export async function listHostBackups(hostId: string, user: SessionUser) {
   return withHostClient(hostId, user, async (client) => {
-    const [nodes, vms, containers, jobsRaw] = await Promise.all([
+    const [nodes, listed, jobsRaw] = await Promise.all([
       client.nodes.list(),
-      client.listVms().catch(() => []),
-      client.listContainers().catch(() => []),
+      client.listGuests().catch(() => ({ vms: [], containers: [] })),
       client.backup.jobs().catch(() => [] as Array<Record<string, unknown>>),
     ]);
+    const vms = listed.vms;
+    const containers = listed.containers;
     const nodeNames = nodes.map((n) => n.node);
     const primary = nodeNames[0] ?? "";
     const storageLists = await Promise.all(

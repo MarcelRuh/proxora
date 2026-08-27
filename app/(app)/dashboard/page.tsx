@@ -5,31 +5,31 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ProgressBar, Skeleton } from "@/components/ui/misc";
-import { HostStateBadge, GuestStateBadge } from "@/components/status-badge";
-import { Badge } from "@/components/ui/badge";
+import { HostStateBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { uniqueNonEmpty } from "@/lib/cluster-metrics";
 import { bytesToSize, formatPercent, formatUptime, percentage } from "@/lib/utils";
 import { useAptSummary } from "@/components/layout/apt-update-alert";
-import { GuestCpuBar, GuestDiskBar, GuestRamBar } from "@/components/guests/guest-usage";
+import { GuestTable } from "@/components/guests/guest-table";
 import { useI18n } from "@/components/i18n/locale-provider";
+import type { Guest } from "@/lib/types";
 
-type Guest = {
-  vmid: number;
+type DashboardHost = {
+  id: string;
   name: string;
-  node: string;
-  status: string;
-  hostId: string;
-  hostName: string;
-  template?: boolean;
-  kind: "vm" | "lxc";
+  connectionState: string;
+  proxmoxVersion: string | null;
   cpu?: number;
-  cpus?: number;
-  mem?: number;
-  maxmem?: number;
-  disk?: number;
-  maxdisk?: number;
+  cpuCores?: number;
+  memUsed?: number;
+  memTotal?: number;
+  diskUsed?: number;
+  diskTotal?: number;
   uptime?: number;
+  lastError?: string | null;
+  nodeCount?: number;
+  onlineNodes?: number;
 };
 
 type Dashboard = {
@@ -38,20 +38,7 @@ type Dashboard = {
     online: number;
     offline: number;
     warning: number;
-    items: Array<{
-      id: string;
-      name: string;
-      connectionState: string;
-      proxmoxVersion: string | null;
-      cpu?: number;
-      cpuCores?: number;
-      memUsed?: number;
-      memTotal?: number;
-      diskUsed?: number;
-      diskTotal?: number;
-      uptime?: number;
-      lastError?: string | null;
-    }>;
+    items: DashboardHost[];
   };
   virtualization: { vms: number; lxc: number; running: number; stopped: number; paused: number };
   resources: { cpu: number; memUsed: number; memTotal: number; diskUsed: number; diskTotal: number };
@@ -71,8 +58,8 @@ export default function DashboardPage() {
   const apt = useAptSummary();
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
   }, []);
 
   if (isLoading) {
@@ -106,6 +93,8 @@ export default function DashboardPage() {
   const bad = guests.filter((g) => g.status !== "running" && g.status !== "stopped").length;
   const allOnline = data.hosts.total > 0 && data.hosts.online === data.hosts.total;
   const cpuCores = data.hosts.items.reduce((acc, h) => acc + (h.cpuCores ?? 0), 0);
+  const versions = uniqueNonEmpty(data.hosts.items.map((h) => h.proxmoxVersion));
+  const unavailable = data.hosts.items.filter((h) => h.connectionState !== "ONLINE");
 
   return (
     <div className="space-y-6">
@@ -128,10 +117,7 @@ export default function DashboardPage() {
       <div className="grid gap-3 sm:grid-cols-3">
         <MiniStat label={t("dashboard.hostStatus")} value={allOnline ? t("dashboard.online") : `${data.hosts.online}/${data.hosts.total}`} ok={allOnline} />
         <MiniStat label={t("dashboard.hosts")} value={String(data.hosts.total)} />
-        <MiniStat
-          label="Proxmox VE"
-          value={data.hosts.items[0]?.proxmoxVersion ?? "—"}
-        />
+        <MiniStat label="Proxmox VE" value={versions.length ? versions.join(" · ") : "—"} />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -222,7 +208,18 @@ export default function DashboardPage() {
                 ) : (
                   <p className="text-sm text-destructive">{h.lastError ?? t("dashboard.unreachable")}</p>
                 )}
-                {h.uptime ? <p className="mt-2 text-xs text-muted-foreground">Uptime {formatUptime(h.uptime)}</p> : null}
+                <div className="mt-2 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                  {(h.nodeCount ?? 0) > 1 ? (
+                    <span>{t("dashboard.nodesOnline", { online: h.onlineNodes ?? 0, total: h.nodeCount ?? 0 })}</span>
+                  ) : null}
+                  {h.uptime ? (
+                    <span>
+                      {(h.nodeCount ?? 0) > 1
+                        ? t("dashboard.minUptime", { time: formatUptime(h.uptime) })
+                        : t("guest.uptime", { time: formatUptime(h.uptime) })}
+                    </span>
+                  ) : null}
+                </div>
               </Link>
             ))
           )}
@@ -234,64 +231,14 @@ export default function DashboardPage() {
           <p className="proxora-section">{t("dashboard.guests")}</p>
           <span className="text-xs text-muted-foreground">{guests.length}</span>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          {unavailable.length > 0 ? (
+            <p className="text-sm text-warning">{t("dashboard.guestsHidden", { n: unavailable.length })}</p>
+          ) : null}
           {guests.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("dashboard.noGuests")}</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[880px] text-left text-sm">
-                <thead className="font-[family-name:var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                  <tr>
-                    <th className="px-2 py-2 font-medium">{t("table.id")}</th>
-                    <th className="px-2 py-2 font-medium">{t("table.type")}</th>
-                    <th className="px-2 py-2 font-medium">{t("table.name")}</th>
-                    <th className="px-2 py-2 font-medium">{t("table.host")}</th>
-                    <th className="px-2 py-2 font-medium">{t("table.status")}</th>
-                    <th className="px-2 py-2 font-medium">{t("table.cpu")}</th>
-                    <th className="px-2 py-2 font-medium">{t("table.ram")}</th>
-                    <th className="px-2 py-2 font-medium">{t("table.disk")}</th>
-                    <th className="px-2 py-2 font-medium">{t("table.uptime")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {guests.map((g) => (
-                    <tr key={`${g.kind}-${g.hostId}-${g.node}-${g.vmid}`} className="border-t border-border hover:bg-white/[0.03]">
-                      <td className="px-2 py-2 font-mono font-semibold">
-                        <Link href={guestHref(g)} className="hover:text-primary">
-                          {g.vmid}
-                        </Link>
-                      </td>
-                      <td className="px-2 py-2">
-                        <Badge variant={g.kind === "vm" ? "default" : "muted"}>{g.kind === "vm" ? "VM" : "LXC"}</Badge>
-                      </td>
-                      <td className="px-2 py-2">
-                        <Link href={guestHref(g)} className="hover:text-primary">
-                          {g.name}
-                          {g.template ? <span className="text-xs text-muted-foreground"> (template)</span> : null}
-                        </Link>
-                      </td>
-                      <td className="px-2 py-2 text-muted-foreground">
-                        {g.hostName}
-                        {g.node && g.node !== g.hostName ? <span className="block text-xs">{g.node}</span> : null}
-                      </td>
-                      <td className="px-2 py-2">
-                        <GuestStateBadge status={g.status} />
-                      </td>
-                      <td className="px-2 py-2">
-                        <GuestCpuBar guest={{ cpu: g.cpu ?? 0, cpus: g.cpus ?? 0 }} />
-                      </td>
-                      <td className="px-2 py-2">
-                        <GuestRamBar guest={{ mem: g.mem ?? 0, maxmem: g.maxmem ?? 0 }} />
-                      </td>
-                      <td className="px-2 py-2">
-                        <GuestDiskBar guest={{ disk: g.disk ?? 0, maxdisk: g.maxdisk ?? 0 }} />
-                      </td>
-                      <td className="px-2 py-2 text-muted-foreground">{formatUptime(g.uptime)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <GuestTable kind="all" items={guests} />
           )}
         </CardContent>
       </Card>
@@ -348,10 +295,6 @@ function ResourceStat({
       </CardContent>
     </Card>
   );
-}
-
-function guestHref(g: Guest) {
-  return g.kind === "vm" ? `/vms/${g.hostId}/${g.node}/${g.vmid}` : `/containers/${g.hostId}/${g.node}/${g.vmid}`;
 }
 
 function Metric({ label, value, detail }: { label: string; value: number; detail?: string }) {

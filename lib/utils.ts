@@ -39,6 +39,18 @@ export function percentage(used: number | undefined, total: number | undefined):
   return Math.min(100, Math.round((used / total) * 1000) / 10);
 }
 
+/** Proxmox guest `cpu` is a 0–1 ratio of allocated vCPUs. Values > 1 are treated as cores used. */
+export function guestCpuPercent(cpu: number | undefined, cores?: number): number {
+  const value = cpu ?? 0;
+  if (!Number.isFinite(value) || value < 0) return 0;
+  if (value > 1) {
+    const n = cores || 0;
+    const raw = n > 0 ? (value / n) * 100 : value * 100;
+    return Math.max(0, Math.min(100, raw));
+  }
+  return Math.max(0, Math.min(100, value * 100));
+}
+
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

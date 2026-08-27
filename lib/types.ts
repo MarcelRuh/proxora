@@ -34,6 +34,7 @@ export type Guest = {
   hostId?: string;
   hostName?: string;
   template?: boolean;
+  kind?: "vm" | "lxc";
 };
 
 export type SessionUser = {

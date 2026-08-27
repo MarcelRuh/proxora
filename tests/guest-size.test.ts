@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { guestSizeDetail, percentage } from "@/lib/utils";
+import { guestCpuPercent, guestSizeDetail, percentage } from "@/lib/utils";
 
 describe("guestSizeDetail", () => {
   it("formats used and total memory", () => {
@@ -20,5 +20,17 @@ describe("percentage", () => {
   it("keeps 0% when nothing is used but a total exists", () => {
     expect(percentage(0, 4 * 1024 * 1024 * 1024)).toBe(0);
     expect(percentage(512, 1024)).toBe(50);
+  });
+});
+
+describe("guestCpuPercent", () => {
+  it("treats Proxmox guest cpu as a 0–1 ratio of allocated vCPUs", () => {
+    expect(guestCpuPercent(0.5, 4)).toBe(50);
+    expect(guestCpuPercent(0.5, 0)).toBe(50);
+    expect(guestCpuPercent(0, 4)).toBe(0);
+  });
+
+  it("falls back to cores-used when cpu is greater than 1", () => {
+    expect(guestCpuPercent(2, 4)).toBe(50);
   });
 });

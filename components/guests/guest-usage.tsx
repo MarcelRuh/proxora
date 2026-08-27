@@ -1,16 +1,9 @@
 "use client";
 
 import { ProgressBar } from "@/components/ui/misc";
-import { guestSizeDetail, percentage } from "@/lib/utils";
+import { guestCpuPercent, guestSizeDetail, percentage } from "@/lib/utils";
 import type { Guest } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
-
-export function guestCpuPercent(g: Pick<Guest, "cpu" | "cpus">): number {
-  const cores = g.cpus || 0;
-  const raw = cores > 0 ? (g.cpu / cores) * 100 : g.cpu * 100;
-  if (!Number.isFinite(raw)) return 0;
-  return Math.max(0, Math.min(100, raw));
-}
 
 export function GuestUsageBar({ percent, detail }: { percent: number; detail?: string }) {
   const value = Number.isFinite(percent) ? percent : 0;
@@ -26,7 +19,7 @@ export function GuestUsageBar({ percent, detail }: { percent: number; detail?: s
 
 export function GuestCpuBar({ guest }: { guest: Pick<Guest, "cpu" | "cpus"> }) {
   const { t } = useI18n();
-  const pct = guestCpuPercent(guest);
+  const pct = guestCpuPercent(guest.cpu, guest.cpus);
   const cores = guest.cpus || 0;
   const detail = cores
     ? `${t("dashboard.cores", { n: cores })} · ${Math.round(pct)}%`

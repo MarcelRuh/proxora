@@ -18,7 +18,7 @@ import { BackupNowDialog } from "@/components/backups/backup-now-dialog";
 import { RestoreDialog } from "@/components/backups/restore-dialog";
 import type { BackupFile, BackupOverview } from "@/components/backups/types";
 import { api } from "@/lib/api";
-import { bytesToSize, formatUptime, percentage } from "@/lib/utils";
+import { bytesToSize, formatUptime, guestCpuPercent, percentage } from "@/lib/utils";
 import type { PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
@@ -106,7 +106,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const hostName = hosts?.hosts.find((h) => h.id === params.hostId)?.name ?? params.hostId;
   const cores = num(status.cpus) || num(config.cores) * Math.max(1, num(config.sockets) || 1) || num(config.cores);
   const cpuUsage = num(status.cpu);
-  const cpuPercent = cores > 0 ? (cpuUsage / cores) * 100 : cpuUsage * 100;
+  const cpuPercent = guestCpuPercent(cpuUsage, cores);
   const mem = num(status.mem);
   const maxmem = num(status.maxmem) || num(config.memory) * 1024 * 1024;
   const disk = num(status.disk);

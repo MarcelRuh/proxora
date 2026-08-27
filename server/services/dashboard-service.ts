@@ -1,7 +1,8 @@
 import type { SessionUser } from "@/server/auth/session";
 import { listHosts, withHostClient } from "@/server/services/host-service";
 import { filterGuestsForUser } from "@/server/auth/session-core";
-import type { GuestListItem } from "@/server/proxmox/types";
+import { isClusterNodeOnline, minPositiveUptime, weightedCpuRatio } from "@/lib/cluster-metrics";
+import type { GuestListItem, ProxmoxResource } from "@/server/proxmox/types";
 
 export type HostOverview = {
   id: string;
@@ -24,97 +25,95 @@ export type HostOverview = {
   onlineNodes?: number;
 };
 
+type HostSnapshot = {
+  overview: HostOverview;
+  vms: GuestListItem[];
+  containers: GuestListItem[];
+};
+
+function hostShell(
+  host: {
+    id: string;
+    name: string;
+    url: string;
+    connectionState: string;
+    proxmoxVersion: string | null;
+    lastError: string | null;
+    clusterName: string | null;
+    isClusterMember: boolean;
+  },
+  extra: Partial<HostOverview> = {},
+): HostOverview {
+  return {
+    id: host.id,
+    name: host.name,
+    url: host.url,
+    connectionState: host.connectionState,
+    proxmoxVersion: host.proxmoxVersion,
+    lastError: host.lastError,
+    clusterName: host.clusterName,
+    isClusterMember: host.isClusterMember,
+    ...extra,
+  };
+}
+
+function nodePool(nodes: ProxmoxResource[]): ProxmoxResource[] {
+  const live = nodes.filter((n) => isClusterNodeOnline(n.status));
+  return live.length ? live : nodes;
+}
+
 export async function getDashboard(user: SessionUser) {
   const hosts = await listHosts(user);
-  const overviews: HostOverview[] = await Promise.all(
-    hosts.map(async (host) => {
+  const snapshots: HostSnapshot[] = await Promise.all(
+    hosts.map(async (host): Promise<HostSnapshot> => {
       if (host.connectionState === "OFFLINE" || host.connectionState === "MAINTENANCE") {
-        return {
-          id: host.id,
-          name: host.name,
-          url: host.url,
-          connectionState: host.connectionState,
-          proxmoxVersion: host.proxmoxVersion,
-          lastError: host.lastError,
-          clusterName: host.clusterName,
-          isClusterMember: host.isClusterMember,
-        } satisfies HostOverview;
+        return { overview: hostShell(host), vms: [], containers: [] };
       }
       try {
         return await withHostClient(host.id, user, async (client) => {
-          const nodes = await client.nodes.list();
-          const primary = nodes[0];
-          const status = primary
-            ? await client.nodes.status(primary.node).catch(() => null)
-            : null;
-          const live = nodes.filter((n) => n.status === "online");
-          const pool = live.length ? live : nodes;
-          const cpuCores =
-            pool.reduce((acc, n) => acc + (n.maxcpu ?? 0), 0) || status?.cpuinfo?.cpus || undefined;
-          const memUsed = pool.reduce((acc, n) => acc + (n.mem ?? 0), 0) || status?.memory.used;
-          const memTotal = pool.reduce((acc, n) => acc + (n.maxmem ?? 0), 0) || status?.memory.total;
-          const diskUsed = pool.reduce((acc, n) => acc + (n.disk ?? 0), 0) || status?.rootfs?.used;
-          const diskTotal = pool.reduce((acc, n) => acc + (n.maxdisk ?? 0), 0) || status?.rootfs?.total;
+          const inv = await client.listInventory();
+          const pool = nodePool(inv.nodes);
+          const cpuCores = pool.reduce((acc, n) => acc + (n.maxcpu ?? 0), 0) || undefined;
+          const memUsed = pool.reduce((acc, n) => acc + (n.mem ?? 0), 0);
+          const memTotal = pool.reduce((acc, n) => acc + (n.maxmem ?? 0), 0);
+          const diskUsed = pool.reduce((acc, n) => acc + (n.disk ?? 0), 0);
+          const diskTotal = pool.reduce((acc, n) => acc + (n.maxdisk ?? 0), 0);
+          const onlineNodes = inv.nodes.filter((n) => isClusterNodeOnline(n.status)).length;
           return {
-            id: host.id,
-            name: host.name,
-            url: host.url,
-            connectionState: "ONLINE",
-            proxmoxVersion: host.proxmoxVersion,
-            lastError: null,
-            clusterName: host.clusterName,
-            isClusterMember: host.isClusterMember,
-            cpu: status?.cpu ?? primary?.cpu,
-            cpuCores,
-            memUsed,
-            memTotal,
-            diskUsed,
-            diskTotal,
-            uptime: status?.uptime ?? primary?.uptime,
-            loadavg: status?.loadavg,
-            nodeCount: nodes.length,
-            onlineNodes: nodes.filter((n) => n.status === "online").length,
-          } satisfies HostOverview;
-        });
-      } catch {
-        return {
-          id: host.id,
-          name: host.name,
-          url: host.url,
-          connectionState: "ERROR",
-          proxmoxVersion: host.proxmoxVersion,
-          lastError: host.lastError ?? "Unable to connect",
-          clusterName: host.clusterName,
-          isClusterMember: host.isClusterMember,
-        } satisfies HostOverview;
-      }
-    }),
-  );
-
-  const guests = await Promise.all(
-    hosts.map(async (host) => {
-      try {
-        return await withHostClient(host.id, user, async (client) => {
-          const [vms, containers] = await Promise.all([
-            client.listVms().catch(() => [] as GuestListItem[]),
-            client.listContainers().catch(() => [] as GuestListItem[]),
-          ]);
-          return {
-            hostId: host.id,
-            hostName: host.name,
-            vms: filterGuestsForUser(user, host.id, "vm", vms),
-            containers: filterGuestsForUser(user, host.id, "lxc", containers),
+            overview: hostShell(host, {
+              connectionState: "ONLINE",
+              lastError: null,
+              cpu: weightedCpuRatio(pool.map((n) => ({ cpu: n.cpu, maxcpu: n.maxcpu }))),
+              cpuCores,
+              memUsed,
+              memTotal,
+              diskUsed,
+              diskTotal,
+              uptime: minPositiveUptime(pool),
+              nodeCount: inv.nodes.length,
+              onlineNodes,
+            }),
+            vms: filterGuestsForUser(user, host.id, "vm", inv.vms),
+            containers: filterGuestsForUser(user, host.id, "lxc", inv.containers),
           };
         });
-      } catch {
-        return { hostId: host.id, hostName: host.name, vms: [] as GuestListItem[], containers: [] as GuestListItem[] };
+      } catch (error) {
+        return {
+          overview: hostShell(host, {
+            connectionState: "ERROR",
+            lastError: error instanceof Error ? error.message : (host.lastError ?? "Unable to connect"),
+          }),
+          vms: [],
+          containers: [],
+        };
       }
     }),
   );
 
-  const allVms = guests.flatMap((g) => g.vms.map((vm) => ({ ...vm, hostId: g.hostId, hostName: g.hostName })));
-  const allLxc = guests.flatMap((g) =>
-    g.containers.map((ct) => ({ ...ct, hostId: g.hostId, hostName: g.hostName })),
+  const overviews = snapshots.map((s) => s.overview);
+  const allVms = snapshots.flatMap((s) => s.vms.map((vm) => ({ ...vm, hostId: s.overview.id, hostName: s.overview.name })));
+  const allLxc = snapshots.flatMap((s) =>
+    s.containers.map((ct) => ({ ...ct, hostId: s.overview.id, hostName: s.overview.name })),
   );
 
   const online = overviews.filter((h) => h.connectionState === "ONLINE").length;
@@ -123,7 +122,6 @@ export async function getDashboard(user: SessionUser) {
     (h) => h.connectionState === "ERROR" || h.connectionState === "MAINTENANCE",
   ).length;
 
-  const cpuSamples = overviews.map((h) => h.cpu).filter((v): v is number => typeof v === "number");
   const memUsed = overviews.reduce((acc, h) => acc + (h.memUsed ?? 0), 0);
   const memTotal = overviews.reduce((acc, h) => acc + (h.memTotal ?? 0), 0);
   const diskUsed = overviews.reduce((acc, h) => acc + (h.diskUsed ?? 0), 0);
@@ -145,7 +143,7 @@ export async function getDashboard(user: SessionUser) {
       paused: [...allVms, ...allLxc].filter((g) => g.status === "paused").length,
     },
     resources: {
-      cpu: cpuSamples.reduce((acc, v) => acc + v, 0) / Math.max(1, cpuSamples.length),
+      cpu: weightedCpuRatio(overviews.map((h) => ({ cpu: h.cpu, maxcpu: h.cpuCores }))) ?? 0,
       memUsed,
       memTotal,
       diskUsed,

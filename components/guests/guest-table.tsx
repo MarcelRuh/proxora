@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { GuestStateBadge } from "@/components/status-badge";
 import { ConfirmAction } from "@/components/confirm-action";
 import { GuestCpuBar, GuestDiskBar, GuestRamBar } from "@/components/guests/guest-usage";
@@ -21,16 +22,28 @@ export function GuestTable({
   items,
   hostId,
 }: {
-  kind: "vm" | "lxc";
+  kind: "vm" | "lxc" | "all";
   items: Guest[];
   hostId?: string;
 }) {
   const { t } = useI18n();
-  const canStart = useCan(kind === "vm" ? "vm.start" : "lxc.start");
-  const canShutdown = useCan(kind === "vm" ? "vm.shutdown" : "lxc.shutdown");
-  const canReboot = useCan(kind === "vm" ? "vm.reboot" : "lxc.reboot");
-  const canConsole = useCan(kind === "vm" ? "vm.console" : "lxc.console");
-  const canDelete = useCan(kind === "vm" ? "vm.delete" : "lxc.delete");
+  const mixed = kind === "all";
+  const can = {
+    vm: {
+      start: useCan("vm.start"),
+      shutdown: useCan("vm.shutdown"),
+      reboot: useCan("vm.reboot"),
+      console: useCan("vm.console"),
+      delete: useCan("vm.delete"),
+    },
+    lxc: {
+      start: useCan("lxc.start"),
+      shutdown: useCan("lxc.shutdown"),
+      reboot: useCan("lxc.reboot"),
+      console: useCan("lxc.console"),
+      delete: useCan("lxc.delete"),
+    },
+  };
   const qc = useQueryClient();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
@@ -42,12 +55,14 @@ export function GuestTable({
       }),
     [items, q, status],
   );
-  const permPath = kind === "vm" ? "vms" : "lxc";
-  const detailBase = kind === "vm" ? "vms" : "containers";
-  const kindLabel = kind === "vm" ? "VM" : "LXC";
-  const listKey = kind === "vm" ? "all-vms" : "all-lxc";
 
-  async function guestAction(hid: string, node: string, vmid: number, action: string) {
+  function rowKind(g: Guest): "vm" | "lxc" {
+    if (g.kind === "vm" || g.kind === "lxc") return g.kind;
+    return kind === "lxc" ? "lxc" : "vm";
+  }
+
+  async function guestAction(hid: string, node: string, vmid: number, action: string, row: "vm" | "lxc") {
+    const permPath = row === "vm" ? "vms" : "lxc";
     try {
       await api(`/api/hosts/${hid}/${permPath}/${node}/${vmid}`, {
         method: "POST",
@@ -55,7 +70,8 @@ export function GuestTable({
       });
       toast.success(t("common.taskDone"));
       await Promise.all([
-        qc.invalidateQueries({ queryKey: [listKey] }),
+        qc.invalidateQueries({ queryKey: ["all-vms"] }),
+        qc.invalidateQueries({ queryKey: ["all-lxc"] }),
         qc.invalidateQueries({ queryKey: ["dashboard"] }),
       ]);
     } catch (err) {
@@ -63,6 +79,8 @@ export function GuestTable({
       throw err;
     }
   }
+
+  const colCount = mixed ? 10 : 9;
 
   return (
     <div className="space-y-3">
@@ -80,10 +98,11 @@ export function GuestTable({
         </select>
       </div>
       <div className="overflow-x-auto rounded-[4px] border border-border">
-        <table className="w-full min-w-[720px] text-left text-sm">
+        <table className={`w-full text-left text-sm ${mixed ? "min-w-[960px]" : "min-w-[720px]"}`}>
           <thead className="font-[family-name:var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
             <tr>
               <th className="px-3 py-2 font-medium">{t("table.id")}</th>
+              {mixed ? <th className="px-3 py-2 font-medium">{t("table.type")}</th> : null}
               <th className="px-3 py-2 font-medium">{t("table.name")}</th>
               <th className="px-3 py-2 font-medium">{t("table.hostNode")}</th>
               <th className="px-3 py-2 font-medium">{t("table.status")}</th>
@@ -95,74 +114,92 @@ export function GuestTable({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((g) => {
-              const hid = g.hostId ?? hostId ?? "";
-              return (
-                <tr key={`${hid}-${g.node}-${g.vmid}`} className="border-t border-border">
-                  <td className="px-3 py-2 font-mono">{g.vmid}</td>
-                  <td className="px-3 py-2">
-                    <Link className="hover:underline" href={`/${detailBase}/${hid}/${g.node}/${g.vmid}`}>
-                      {g.name}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {g.hostName ?? hid} / {g.node}
-                  </td>
-                  <td className="px-3 py-2">
-                    <GuestStateBadge status={g.status} />
-                  </td>
-                  <td className="px-3 py-2">
-                    <GuestCpuBar guest={g} />
-                  </td>
-                  <td className="px-3 py-2">
-                    <GuestRamBar guest={g} />
-                  </td>
-                  <td className="px-3 py-2">
-                    <GuestDiskBar guest={g} />
-                  </td>
-                  <td className="px-3 py-2">{formatUptime(g.uptime)}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex gap-1">
-                      {canStart ? (
-                        <Button size="icon" variant="ghost" title={t("guest.start")} onClick={() => void guestAction(hid, g.node, g.vmid, "start")}>
-                          <Play className="h-4 w-4" />
-                        </Button>
-                      ) : null}
-                      {canShutdown ? (
-                        <Button size="icon" variant="ghost" title={t("guest.shutdown")} onClick={() => void guestAction(hid, g.node, g.vmid, "shutdown")}>
-                          <Square className="h-4 w-4" />
-                        </Button>
-                      ) : null}
-                      {canReboot ? (
-                        <Button size="icon" variant="ghost" title={t("guest.reboot")} onClick={() => void guestAction(hid, g.node, g.vmid, "reboot")}>
-                          <RotateCcw className="h-4 w-4" />
-                        </Button>
-                      ) : null}
-                      {canConsole ? (
-                        <Button size="icon" variant="ghost" asChild>
-                          <Link href={`/${detailBase}/${hid}/${g.node}/${g.vmid}?console=1`}>
-                            <Terminal className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                      ) : null}
-                      {canDelete ? (
-                        <ConfirmAction
-                          title={t("guest.deleteTitle", { kind: kindLabel, id: g.vmid })}
-                          description={t("guest.deleteBody", { id: g.vmid, name: g.name })}
-                          actionLabel={t("guest.delete")}
-                          destructive
-                          onConfirm={() => guestAction(hid, g.node, g.vmid, "delete")}
-                        >
-                          <Button size="sm" variant="destructive">
-                            {t("guest.delete")}
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={colCount} className="px-3 py-6 text-sm text-muted-foreground">
+                  {items.length === 0 ? t("dashboard.noGuests") : t("table.noMatches")}
+                </td>
+              </tr>
+            ) : (
+              filtered.map((g) => {
+                const hid = g.hostId ?? hostId ?? "";
+                const row = rowKind(g);
+                const perms = can[row];
+                const kindLabel = row === "vm" ? "VM" : "LXC";
+                const detailBase = row === "vm" ? "vms" : "containers";
+                return (
+                  <tr key={`${row}-${hid}-${g.node}-${g.vmid}`} className="border-t border-border">
+                    <td className="px-3 py-2 font-mono">{g.vmid}</td>
+                    {mixed ? (
+                      <td className="px-3 py-2">
+                        <Badge variant={row === "vm" ? "default" : "muted"}>{kindLabel}</Badge>
+                      </td>
+                    ) : null}
+                    <td className="px-3 py-2">
+                      <Link className="hover:underline" href={`/${detailBase}/${hid}/${g.node}/${g.vmid}`}>
+                        {g.name}
+                        {g.template ? <span className="text-xs text-muted-foreground"> {t("dashboard.template")}</span> : null}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {g.hostName ?? hid} / {g.node}
+                    </td>
+                    <td className="px-3 py-2">
+                      <GuestStateBadge status={g.status} />
+                    </td>
+                    <td className="px-3 py-2">
+                      <GuestCpuBar guest={g} />
+                    </td>
+                    <td className="px-3 py-2">
+                      <GuestRamBar guest={g} />
+                    </td>
+                    <td className="px-3 py-2">
+                      <GuestDiskBar guest={g} />
+                    </td>
+                    <td className="px-3 py-2">{formatUptime(g.uptime)}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex gap-1">
+                        {perms.start ? (
+                          <Button size="icon" variant="ghost" title={t("guest.start")} onClick={() => void guestAction(hid, g.node, g.vmid, "start", row)}>
+                            <Play className="h-4 w-4" />
                           </Button>
-                        </ConfirmAction>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
+                        ) : null}
+                        {perms.shutdown ? (
+                          <Button size="icon" variant="ghost" title={t("guest.shutdown")} onClick={() => void guestAction(hid, g.node, g.vmid, "shutdown", row)}>
+                            <Square className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                        {perms.reboot ? (
+                          <Button size="icon" variant="ghost" title={t("guest.reboot")} onClick={() => void guestAction(hid, g.node, g.vmid, "reboot", row)}>
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                        {perms.console ? (
+                          <Button size="icon" variant="ghost" asChild title={t("guest.console")}>
+                            <Link href={`/${detailBase}/${hid}/${g.node}/${g.vmid}?console=1`}>
+                              <Terminal className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                        ) : null}
+                        {perms.delete ? (
+                          <ConfirmAction
+                            title={t("guest.deleteTitle", { kind: kindLabel, id: g.vmid })}
+                            description={t("guest.deleteBody", { id: g.vmid, name: g.name })}
+                            actionLabel={t("guest.delete")}
+                            destructive
+                            onConfirm={() => guestAction(hid, g.node, g.vmid, "delete", row)}
+                          >
+                            <Button size="sm" variant="destructive">
+                              {t("guest.delete")}
+                            </Button>
+                          </ConfirmAction>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>

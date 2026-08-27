@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.41] – 2026-08-27
+
+### Changed
+
+- Guest CPU is shown as a share of allocated vCPUs (no longer divided by core count).
+- Dashboard host CPU is weighted across all nodes; uptime is the shortest live node.
+- Dashboard guest table has search, status filter, and start/stop/reboot/console/delete.
+- Offline or failing hosts are listed explicitly instead of dropping their guests silently.
+- Dashboard loads nodes and guests in one Proxmox `cluster/resources` call per host.
+
 ## [1.0.40] – 2026-08-27
 
 ### Changed
