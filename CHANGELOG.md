@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.44] – 2026-08-27
+
+### Added
+
+- Storage/ZFS copy follows DE/EN.
+- Guest lists show the Proxmox description under the name (searchable).
+- Discord event **Task fehlgeschlagen** for failed start/stop/snapshot (UI and polled Proxmox tasks).
+
 ## [1.0.43] – 2026-08-27
 
 ### Fixed

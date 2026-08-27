@@ -6,6 +6,7 @@ import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { filterGuestsForUser } from "@/server/auth/session-core";
+import { attachGuestNotes } from "@/server/services/guest-notes";
 import { completeGuestCreate } from "@/server/services/guest-start";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { normalizeLxcCidr } from "@/lib/lxc-net";
@@ -52,8 +53,12 @@ const createVmSchema = z.object({
 });
 
 export const GET = apiRoute("vm.view", async (_req, session, params) => {
-  const vms = await withHostClient(params.id, session.user, (client) => client.listVms());
-  return json({ vms: filterGuestsForUser(session.user, params.id, "vm", vms) });
+  const vms = await withHostClient(params.id, session.user, async (client) => {
+    const listed = filterGuestsForUser(session.user, params.id, "vm", await client.listVms());
+    await attachGuestNotes(client, listed, []);
+    return listed;
+  });
+  return json({ vms });
 });
 
 export const POST = apiRoute("vm.create", async (req, session, params) => {

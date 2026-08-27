@@ -55,7 +55,7 @@ export function GuestTable({
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const matched = items.filter((g) => {
-      const hay = `${g.name} ${g.vmid} ${g.hostName ?? ""} ${g.node} ${g.tags ?? ""}`.toLowerCase();
+      const hay = `${g.name} ${g.vmid} ${g.hostName ?? ""} ${g.node} ${g.tags ?? ""} ${g.description ?? ""}`.toLowerCase();
       const textOk = !needle || hay.includes(needle);
       const statusOk = status === "all" || g.status === status;
       const tagOk = tag === "all" || guestHasTag(g.tags, tag);
@@ -163,6 +163,11 @@ export function GuestTable({
                         {g.name}
                         {g.template ? <span className="text-xs text-muted-foreground"> {t("dashboard.template")}</span> : null}
                       </Link>
+                      {g.description ? (
+                        <p className="mt-0.5 max-w-xs truncate text-xs text-muted-foreground" title={g.description}>
+                          {g.description}
+                        </p>
+                      ) : null}
                       {rowTags.length > 0 ? (
                         <div className="mt-1 flex flex-wrap gap-1">
                           {rowTags.map((item) => (

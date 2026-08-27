@@ -66,6 +66,7 @@ export interface ProxmoxResource {
   uptime?: number;
   template?: number;
   tags?: string;
+  description?: string;
 }
 
 export interface ProxmoxTask {
@@ -154,6 +155,7 @@ export interface GuestListItem {
   maxdisk: number;
   uptime: number;
   tags?: string;
+  description?: string;
   template: boolean;
   netin?: number;
   netout?: number;

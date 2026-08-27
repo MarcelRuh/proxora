@@ -133,6 +133,7 @@ function mapGuest(r: ProxmoxResource): GuestListItem {
     maxdisk: r.maxdisk ?? 0,
     uptime: r.uptime ?? 0,
     tags: r.tags,
+    description: r.description,
     template: r.template === 1,
     netin: r.netin,
     netout: r.netout,

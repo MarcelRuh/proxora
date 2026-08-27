@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { bytesToSize, cn } from "@/lib/utils";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 export type ZfsDisk = {
   name: string;
@@ -49,13 +50,14 @@ function diskDotClass(disk: ZfsDisk) {
 }
 
 export function ZfsSection({ block }: { block?: ZfsHostBlock }) {
+  const { t } = useI18n();
   if (!block || block.error) return null;
   const pools = block.zfs.flatMap((n) => n.pools.map((pool) => ({ node: n.node, pool })));
   if (pools.length === 0) return null;
 
   return (
     <div className="mt-6 space-y-3">
-      <p className="proxora-section">ZFS</p>
+      <p className="proxora-section">{t("zfs.title")}</p>
       <div className="grid gap-4 lg:grid-cols-2">
         {pools.map(({ node, pool }) => {
           const summary = pool.healthSummary;
@@ -66,7 +68,7 @@ export function ZfsSection({ block }: { block?: ZfsHostBlock }) {
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="font-medium">{pool.name}</p>
-                  <p className="text-xs text-muted-foreground">Node {node}</p>
+                  <p className="text-xs text-muted-foreground">{t("zfs.node", { name: node })}</p>
                 </div>
                 <Badge variant={tone}>{pool.health}</Badge>
               </div>
@@ -77,17 +79,19 @@ export function ZfsSection({ block }: { block?: ZfsHostBlock }) {
                 )}
               >
                 {allHealthy
-                  ? `Alle Platten grün${summary?.totalDisks ? ` · ${summary.healthyDisks}/${summary.totalDisks}` : ""}`
-                  : `${summary?.problemDisks ?? "?"} Platte(n) nicht OK`}
+                  ? summary?.totalDisks
+                    ? t("zfs.disksOkCount", { healthy: summary.healthyDisks, total: summary.totalDisks })
+                    : t("zfs.disksOk")
+                  : t("zfs.disksBad", { n: summary?.problemDisks ?? "?" })}
               </div>
               <dl className="mb-4 grid grid-cols-2 gap-2 text-sm">
-                <dt className="text-muted-foreground">Größe</dt>
+                <dt className="text-muted-foreground">{t("zfs.size")}</dt>
                 <dd>{bytesToSize(pool.size)}</dd>
-                <dt className="text-muted-foreground">Belegt</dt>
+                <dt className="text-muted-foreground">{t("zfs.used")}</dt>
                 <dd>{bytesToSize(pool.alloc)}</dd>
-                <dt className="text-muted-foreground">Frei</dt>
+                <dt className="text-muted-foreground">{t("zfs.free")}</dt>
                 <dd>{bytesToSize(pool.free)}</dd>
-                <dt className="text-muted-foreground">Frag</dt>
+                <dt className="text-muted-foreground">{t("zfs.frag")}</dt>
                 <dd>{pool.frag ?? "—"}%</dd>
               </dl>
               {summary?.devices.length ? (
@@ -109,7 +113,7 @@ export function ZfsSection({ block }: { block?: ZfsHostBlock }) {
                   ))}
                 </ul>
               ) : (
-                <p className="text-xs text-muted-foreground">Keine VDEV-Details vom Host.</p>
+                <p className="text-xs text-muted-foreground">{t("zfs.noVdevs")}</p>
               )}
             </div>
           );

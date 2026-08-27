@@ -84,19 +84,19 @@ export default function StoragePage() {
           </CardHeader>
           <CardContent>
             {"error" in block && block.error ? (
-              <p className="text-sm text-destructive">Storage für diesen Host konnte nicht geladen werden.</p>
+              <p className="text-sm text-destructive">{t("storage.loadError")}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="font-[family-name:var(--font-display)] text-left text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                     <tr>
-                      <th className="py-2 font-medium">Name</th>
-                      <th className="font-medium">Typ</th>
-                      <th className="font-medium">Status</th>
-                      <th className="font-medium">Inhalt</th>
-                      <th className="font-medium">Belegt</th>
-                      <th className="font-medium">Frei</th>
-                      <th className="font-medium">Auslastung</th>
+                      <th className="py-2 font-medium">{t("table.name")}</th>
+                      <th className="font-medium">{t("table.type")}</th>
+                      <th className="font-medium">{t("table.status")}</th>
+                      <th className="font-medium">{t("storage.content")}</th>
+                      <th className="font-medium">{t("zfs.used")}</th>
+                      <th className="font-medium">{t("zfs.free")}</th>
+                      <th className="font-medium">{t("storage.usage")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -108,7 +108,9 @@ export default function StoragePage() {
                             <td className="py-2">{s.storage}</td>
                             <td>{s.type}</td>
                             <td>
-                              <Badge variant={s.active ? "success" : "danger"}>{s.active ? "aktiv" : "inaktiv"}</Badge>
+                              <Badge variant={s.active ? "success" : "danger"}>
+                                {s.active ? t("settings.enabled") : t("settings.disabled")}
+                              </Badge>
                             </td>
                             <td className="text-muted-foreground">{s.content}</td>
                             <td>{bytesToSize(s.used)}</td>

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { isFailedBackupTask } from "@/lib/backup-tasks";
+import { failedTaskKind, isFailedBackupTask } from "@/lib/backup-tasks";
 import { DEFAULT_GUEST_SORT, nextGuestSort, sortGuests } from "@/lib/guest-sort";
 import { guestHasTag, parseGuestTags, uniqueGuestTags } from "@/lib/guest-tags";
+import { plainGuestNote } from "@/lib/guest-notes";
 
 function guest(partial: Partial<{ vmid: number; name: string; cpu: number; cpus: number; mem: number; maxmem: number; disk: number; maxdisk: number; uptime: number; node: string; status: string }>) {
   return {
@@ -51,5 +52,19 @@ describe("failed backup tasks", () => {
     expect(isFailedBackupTask({ type: "vzdump", status: "stopped", exitstatus: "OK" })).toBe(false);
     expect(isFailedBackupTask({ type: "qmstart", status: "stopped", exitstatus: "command failed" })).toBe(false);
     expect(isFailedBackupTask({ type: "vzdump", status: "running" })).toBe(false);
+  });
+
+  it("classifies failed start/stop/snapshot tasks", () => {
+    expect(failedTaskKind({ type: "qmstart", status: "stopped", exitstatus: "command failed" })).toBe("guest");
+    expect(failedTaskKind({ type: "vzsnapshot", status: "stopped", exitstatus: "interrupted" })).toBe("guest");
+    expect(failedTaskKind({ type: "aptupdate", status: "stopped", exitstatus: "command failed" })).toBe(null);
+  });
+});
+
+describe("plainGuestNote", () => {
+  it("strips HTML and truncates", () => {
+    expect(plainGuestNote("<p>Mail <b>relay</b></p>")).toBe("Mail relay");
+    expect(plainGuestNote("   ")).toBeUndefined();
+    expect(plainGuestNote("x".repeat(200))?.endsWith("…")).toBe(true);
   });
 });

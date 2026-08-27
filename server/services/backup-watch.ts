@@ -1,4 +1,4 @@
-import { isFailedBackupTask } from "@/lib/backup-tasks";
+import { failedTaskKind, guestTaskLabel } from "@/lib/backup-tasks";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { notifyTopic } from "@/server/notifications/dispatch";
@@ -22,6 +22,10 @@ function remember(upid: string) {
   for (const id of keep) seenFailedUpids.add(id);
 }
 
+export function rememberNotifiedUpid(upid: string | undefined) {
+  if (upid) remember(upid);
+}
+
 export async function scanFailedBackupTasks(): Promise<number> {
   const hosts = await prisma.host.findMany({ orderBy: { name: "asc" } });
   const failed: Array<{ hostId: string; hostName: string; task: ProxmoxTask }> = [];
@@ -32,10 +36,10 @@ export async function scanFailedBackupTasks(): Promise<number> {
       const client = await clientForHost(host);
       const nodes = await client.nodes.list();
       const lists = await Promise.all(
-        nodes.map((n) => client.tasks.list(n.node, { source: "all", limit: 50 }).catch(() => [] as ProxmoxTask[])),
+        nodes.map((n) => client.tasks.list(n.node, { source: "all", limit: 80 }).catch(() => [] as ProxmoxTask[])),
       );
       for (const task of lists.flat()) {
-        if (!isFailedBackupTask(task) || !task.upid) continue;
+        if (!failedTaskKind(task) || !task.upid) continue;
         failed.push({ hostId: host.id, hostName: host.name, task });
       }
     } catch (error) {
@@ -57,17 +61,32 @@ export async function scanFailedBackupTasks(): Promise<number> {
     const upid = row.task.upid;
     if (!upid || seenFailedUpids.has(upid)) continue;
     remember(upid);
+    const kind = failedTaskKind(row.task);
     const guestId = String(row.task.id ?? "").trim();
-    notifyTopic("backup.failed", {
-      level: "error",
-      title: "Backup fehlgeschlagen",
-      message: `${guestId ? `Gast ${guestId}` : "vzdump"} auf ${row.hostName}: ${row.task.exitstatus ?? "unbekannt"}`,
-      hostId: row.hostId,
-      name: guestId || "vzdump",
-      id: guestId || upid,
-      host: row.hostName,
-      node: row.task.node,
-    });
+    if (kind === "backup") {
+      notifyTopic("backup.failed", {
+        level: "error",
+        title: "Backup fehlgeschlagen",
+        message: `${guestId ? `Gast ${guestId}` : "vzdump"} auf ${row.hostName}: ${row.task.exitstatus ?? "unbekannt"}`,
+        hostId: row.hostId,
+        name: guestId || "vzdump",
+        id: guestId || upid,
+        host: row.hostName,
+        node: row.task.node,
+      });
+    } else if (kind === "guest") {
+      const label = guestTaskLabel(row.task.type);
+      notifyTopic("task.failed", {
+        level: "error",
+        title: `${label} fehlgeschlagen`,
+        message: `${guestId ? `Gast ${guestId}` : label} auf ${row.hostName}: ${row.task.exitstatus ?? "unbekannt"}`,
+        hostId: row.hostId,
+        name: guestId || label,
+        id: guestId || upid,
+        host: row.hostName,
+        node: row.task.node,
+      });
+    }
     notified += 1;
   }
   return notified;
@@ -78,7 +97,7 @@ async function tick() {
   running = true;
   try {
     const notified = await scanFailedBackupTasks();
-    if (notified) logger.info({ notified }, "Backup failure notifications sent");
+    if (notified) logger.info({ notified }, "Task failure notifications sent");
   } catch (error) {
     logger.warn({ err: error }, "Backup watch cycle failed");
   } finally {

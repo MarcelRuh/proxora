@@ -12,6 +12,8 @@ import { assertGuestAccess } from "@/server/auth/session-core";
 import { withHostClient } from "@/server/services/host-service";
 import { waitGuestAction } from "@/server/proxmox/task-wait";
 import { durationLabel } from "@/lib/duration";
+import { notifyGuestTaskFailed } from "@/server/notifications/guest-task-fail";
+import { invalidateGuestNoteCache } from "@/server/services/guest-notes";
 
 export const maxDuration = 800;
 
@@ -92,6 +94,7 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
   let guestName: string | undefined;
   const t0 = Date.now();
   let upid: unknown;
+  let taskUpid: unknown;
   try {
     upid = await withHostClient(params.id, session.user, async (client, host) => {
     hostName = host.name;
@@ -144,14 +147,27 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
         break;
       case "config":
         result = await vm.updateConfig(node, vmid, body.config ?? {});
+        invalidateGuestNoteCache(client.http.baseUrl, "vm", node, vmid);
         break;
       default:
         result = null;
     }
+    taskUpid = result;
     await waitGuestAction(client, node, result, body.action);
     return result;
     });
   } catch (error) {
+    notifyGuestTaskFailed({
+      kind: "vm",
+      action: body.action,
+      vmid,
+      name: guestName,
+      hostId: params.id,
+      hostName,
+      node: params.node,
+      error,
+      upid: taskUpid,
+    });
     if (body.action === "delete") {
       notifyTopic("vm.deleted", {
         level: "error",

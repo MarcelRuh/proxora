@@ -9,6 +9,7 @@ export const NOTIFICATION_TOPICS = [
   "backup.started",
   "backup.failed",
   "backup.restored",
+  "task.failed",
 ] as const;
 
 export type NotificationTopic = (typeof NOTIFICATION_TOPICS)[number];

@@ -2,6 +2,7 @@ import type { SessionUser } from "@/server/auth/session";
 import { listHosts, withHostClient } from "@/server/services/host-service";
 import { filterGuestsForUser } from "@/server/auth/session-core";
 import { isClusterNodeOnline, minPositiveUptime, weightedCpuRatio } from "@/lib/cluster-metrics";
+import { attachGuestNotes } from "@/server/services/guest-notes";
 import type { GuestListItem, ProxmoxResource } from "@/server/proxmox/types";
 
 export type HostOverview = {
@@ -79,6 +80,9 @@ export async function getDashboard(user: SessionUser) {
           const diskUsed = pool.reduce((acc, n) => acc + (n.disk ?? 0), 0);
           const diskTotal = pool.reduce((acc, n) => acc + (n.maxdisk ?? 0), 0);
           const onlineNodes = inv.nodes.filter((n) => isClusterNodeOnline(n.status)).length;
+          const vms = filterGuestsForUser(user, host.id, "vm", inv.vms);
+          const containers = filterGuestsForUser(user, host.id, "lxc", inv.containers);
+          await attachGuestNotes(client, vms, containers);
           return {
             overview: hostShell(host, {
               connectionState: "ONLINE",
@@ -93,8 +97,8 @@ export async function getDashboard(user: SessionUser) {
               nodeCount: inv.nodes.length,
               onlineNodes,
             }),
-            vms: filterGuestsForUser(user, host.id, "vm", inv.vms),
-            containers: filterGuestsForUser(user, host.id, "lxc", inv.containers),
+            vms,
+            containers,
           };
         });
       } catch (error) {
