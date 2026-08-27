@@ -15,6 +15,8 @@ export type PublicHost = {
   clusterName: string | null;
   isClusterMember: boolean;
   notes: string | null;
+  aptUpdateCount?: number;
+  aptCheckedAt?: string | Date | null;
 };
 
 export type Guest = {

@@ -67,6 +67,8 @@ export default function UpdatesPage() {
     onSuccess: () => {
       toast.success("Paketliste aktualisiert");
       void qc.invalidateQueries({ queryKey: ["update-details"] });
+      void qc.invalidateQueries({ queryKey: ["apt-summary"] });
+      void qc.invalidateQueries({ queryKey: ["hosts"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -88,6 +90,8 @@ export default function UpdatesPage() {
     onSuccess: () => {
       toast.success("Paketlisten aktualisiert");
       void qc.invalidateQueries({ queryKey: ["update-details"] });
+      void qc.invalidateQueries({ queryKey: ["apt-summary"] });
+      void qc.invalidateQueries({ queryKey: ["hosts"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -98,7 +102,8 @@ export default function UpdatesPage() {
         <div>
           <h1 className="text-2xl font-semibold">Updates</h1>
           <p className="text-sm text-muted-foreground">
-            Paketlisten der Hosts. Upgrade öffnet die Node-Shell wie in der Proxmox-GUI (`apt dist-upgrade`).
+            Paketlisten werden alle 3 Stunden automatisch geprüft. Bei neuen Updates kommt eine Meldung.
+            Upgrade öffnet die Node-Shell wie in der Proxmox-GUI.
           </p>
         </div>
         <Button
@@ -141,7 +146,12 @@ export default function UpdatesPage() {
                 </Badge>
               </CardHeader>
               <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground">Version: {row.version ?? "unbekannt"}</p>
+                <p className="text-sm text-muted-foreground">
+                  Version: {row.version ?? "unbekannt"}
+                  {row.host.aptCheckedAt
+                    ? ` · Zuletzt geprüft ${new Date(row.host.aptCheckedAt).toLocaleString("de-DE")}`
+                    : " · Noch nicht automatisch geprüft"}
+                </p>
                 {row.error ? <p className="text-sm text-destructive">{row.error}</p> : null}
                 <ul className="max-h-32 overflow-auto text-xs text-muted-foreground">
                   {row.updates.flatMap((n) =>

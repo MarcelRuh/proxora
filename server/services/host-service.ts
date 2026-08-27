@@ -53,6 +53,8 @@ export function toPublicHost(host: Host) {
     clusterName: host.clusterName,
     isClusterMember: host.isClusterMember,
     notes: host.notes,
+    aptUpdateCount: host.aptUpdateCount,
+    aptCheckedAt: host.aptCheckedAt,
     createdAt: host.createdAt,
     updatedAt: host.updatedAt,
   };

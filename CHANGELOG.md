@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.19] – 2026-08-27
+
+### Added
+
+- Host package lists refresh automatically every 3 hours. When new updates appear, Proxora shows a banner, a sidebar badge, a toast, and (if configured) Discord/webhook notifications.
+
 ## [1.0.18] – 2026-08-27
 
 ### Changed

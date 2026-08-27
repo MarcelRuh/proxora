@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import type { SessionUser } from "@/server/auth/session";
+import { notifyAptUpdates, persistAptSnapshot } from "@/server/services/apt-refresh";
 import { withHostClient } from "@/server/services/host-service";
 
 export type NodeUpdates = {
@@ -11,6 +12,18 @@ export type NodeUpdates = {
 async function nodesFor(client: { nodes: { list: () => Promise<Array<{ node: string }>> } }, node?: string) {
   const nodes = await client.nodes.list();
   return node ? nodes.filter((n) => n.node === node) : nodes;
+}
+
+async function storeSnapshot(
+  host: { id: string; name: string; aptNotifiedCount: number },
+  updates: NodeUpdates[],
+) {
+  const count = updates.reduce((sum, n) => sum + n.count, 0);
+  const snap = await persistAptSnapshot(host, count);
+  if (snap.notify) {
+    await notifyAptUpdates([{ name: host.name, count, hostId: host.id }]);
+  }
+  return count;
 }
 
 export async function listHostUpdates(hostId: string, user: SessionUser, node?: string) {
@@ -37,6 +50,7 @@ export async function refreshHostUpdates(hostId: string, user: SessionUser, node
       const packages = await client.updates.list(n.node);
       updates.push({ node: n.node, packages, count: packages.length });
     }
+    await storeSnapshot(host, updates);
     return { version: host.proxmoxVersion, updates };
   });
 }

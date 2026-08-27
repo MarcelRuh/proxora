@@ -27,7 +27,9 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { CommandSearch } from "@/components/layout/command-search";
+import { AptUpdateBanner, useAptSummary } from "@/components/layout/apt-update-alert";
 import type { SessionUser } from "@/lib/types";
+import { hasPermission } from "@/lib/permissions";
 import { APP_NAME, APP_VERSION } from "@/lib/version";
 import { useQuery } from "@tanstack/react-query";
 import type { SelfUpdateStatus } from "@/components/settings/self-update-section";
@@ -124,6 +126,11 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
                       label={item.label}
                       icon={item.icon}
                       active={pathname === item.href || pathname.startsWith(`${item.href}/`)}
+                      badge={
+                        item.href === "/updates" && hasPermission(user.role.permissions, "updates.view") ? (
+                          <UpdatesBadge />
+                        ) : undefined
+                      }
                     />
                   ))}
                 </div>
@@ -161,6 +168,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             <LogOut className="h-4 w-4" />
           </Button>
         </header>
+        {hasPermission(user.role.permissions, "updates.view") ? <AptUpdateBanner /> : null}
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </div>
       <CommandSearch open={searchOpen} onOpenChange={setSearchOpen} />
@@ -173,11 +181,13 @@ function NavLink({
   label,
   icon: Icon,
   active,
+  badge,
 }: {
   href: string;
   label: string;
   icon: ComponentType<{ className?: string }>;
   active: boolean;
+  badge?: ReactNode;
 }) {
   return (
     <Link
@@ -188,8 +198,19 @@ function NavLink({
       )}
     >
       <Icon className="h-4 w-4" />
-      {label}
+      <span className="flex-1">{label}</span>
+      {badge}
     </Link>
+  );
+}
+
+function UpdatesBadge() {
+  const { data } = useAptSummary();
+  if (!data?.total) return null;
+  return (
+    <span className="rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
+      {data.total}
+    </span>
   );
 }
 

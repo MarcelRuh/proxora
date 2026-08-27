@@ -6,6 +6,7 @@ import { WebSocketServer } from "ws";
 import { logger } from "@/lib/logger";
 import { attachConsoleProxy } from "@/server/ws/console-proxy";
 import { probeAllHosts } from "@/server/services/host-service";
+import { startAptRefreshScheduler } from "@/server/services/apt-refresh";
 
 const dev = process.env.NODE_ENV !== "production";
 const port = Number(process.env.PORT ?? 3000);
@@ -44,6 +45,7 @@ async function main() {
     void probeAllHosts().catch((error) => {
       logger.warn({ err: error }, "Startup host probe failed");
     });
+    startAptRefreshScheduler();
   });
 }
 

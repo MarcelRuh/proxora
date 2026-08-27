@@ -100,6 +100,9 @@ model Host {
   clusterName      String?
   isClusterMember  Boolean             @default(false)
   notes            String?
+  aptUpdateCount   Int                 @default(0)
+  aptCheckedAt     DateTime?
+  aptNotifiedCount Int                 @default(0)
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   userAccess       UserHostAccess[]
