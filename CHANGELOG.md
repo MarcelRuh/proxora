@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.12] – 2026-08-27
+
+### Changed
+
+- Dashboard shows one ID-sorted list of all VMs and LXC (smallest ID first). Self-update moved to Settings → Proxora. Recent activity removed from the dashboard.
+
 ## [1.0.11] – 2026-08-27
 
 ### Fixed

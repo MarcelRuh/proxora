@@ -12,6 +12,7 @@ import {
   LogOut,
   Menu,
   Moon,
+  RefreshCw,
   Search,
   Server,
   Settings,
@@ -58,6 +59,7 @@ const NAV = [
     label: "Settings",
     items: [
       { href: "/settings", label: "General", icon: Settings },
+      { href: "/proxora", label: "Proxora", icon: RefreshCw },
       { href: "/settings/notifications", label: "Notifications", icon: Activity },
       { href: "/settings/security", label: "Security", icon: Shield },
     ],
@@ -202,7 +204,7 @@ function SidebarVersion() {
   const updating = Boolean(status?.updating);
   const percent = status?.progress?.percent ?? (updating ? 2 : status?.updateAvailable ? 8 : 100);
   return (
-    <Link href="/updates" className="mt-3 block rounded-md bg-white/5 px-2 py-2 hover:bg-white/10">
+    <Link href="/proxora" className="mt-3 block rounded-md bg-white/5 px-2 py-2 hover:bg-white/10">
       <div className="flex items-center justify-between gap-2 text-[11px]">
         <span className="font-mono text-sidebar-foreground">
           {status?.updateAvailable ? `${current} → ${target}` : `v${current}`}

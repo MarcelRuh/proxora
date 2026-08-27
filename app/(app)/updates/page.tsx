@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmAction } from "@/components/confirm-action";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
-import { SelfUpdateSection } from "@/components/settings/self-update-section";
 
 export default function UpdatesPage() {
   const qc = useQueryClient();
@@ -54,7 +53,7 @@ export default function UpdatesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Updates</h1>
-          <p className="text-sm text-muted-foreground">Proxora GitHub self-update and Proxmox APT upgrades.</p>
+          <p className="text-sm text-muted-foreground">Proxmox APT-Upgrades auf den verbundenen Hosts.</p>
         </div>
         <ConfirmAction
           title="Update all hosts?"
@@ -69,7 +68,6 @@ export default function UpdatesPage() {
           <Button>Update all hosts</Button>
         </ConfirmAction>
       </div>
-      <SelfUpdateSection />
       <div className="grid gap-4 md:grid-cols-2">
         {(details ?? []).map((row) => {
           const count = row.updates.reduce((acc, n) => acc + n.count, 0);
