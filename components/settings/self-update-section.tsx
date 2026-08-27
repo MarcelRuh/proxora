@@ -184,7 +184,6 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
                     ? `This syncs from GitHub and rebuilds the Compose stack. ${status.currentVersion} → ${status.targetVersion ?? "latest"}.`
                     : "No newer version was detected. Rebuild from GitHub anyway?"
                 }
-                confirmText="UPDATE"
                 actionLabel="Jetzt aktualisieren"
                 onConfirm={handleApply}
               >

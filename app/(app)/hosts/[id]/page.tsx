@@ -82,7 +82,6 @@ export default function HostDetailPage() {
         <ConfirmAction
           title="Reboot this node?"
           description="Running guests will be interrupted. Confirm you have a maintenance window."
-          confirmText="REBOOT"
           actionLabel="Reboot"
           destructive
           onConfirm={async () => {
@@ -98,7 +97,6 @@ export default function HostDetailPage() {
         <ConfirmAction
           title="Shutdown this node?"
           description="The host will power off. You must start it out-of-band."
-          confirmText="SHUTDOWN"
           actionLabel="Shutdown"
           destructive
           onConfirm={async () => {

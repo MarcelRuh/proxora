@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.28] – 2026-08-27
+
+### Changed
+
+- Destructive actions no longer require typing UPDATE/UPGRADE/DELETE. A click in the confirm dialog is enough.
+
 ## [1.0.27] – 2026-08-27
 
 ### Fixed

@@ -176,7 +176,6 @@ export default function UpdatesPage() {
                       key={n.node || row.host.id}
                       title={`${row.host.name}${n.node ? ` (${n.node})` : ""} upgraden?`}
                       description="Öffnet die Proxmox-Upgrade-Shell (apt dist-upgrade). Du bestätigst dort selbst. Ein stilles API-Upgrade gibt es in Proxmox VE nicht."
-                      confirmText="UPGRADE"
                       actionLabel="Upgrade starten"
                       destructive
                       onConfirm={async () => {

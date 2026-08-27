@@ -99,7 +99,6 @@ export default function HostsPage() {
                 <ConfirmAction
                   title={`Remove ${host.name}?`}
                   description="Credentials and host metadata will be deleted from Proxora. Guests on the host are not affected."
-                  confirmText="DELETE"
                   actionLabel="Remove host"
                   destructive
                   onConfirm={async () => {

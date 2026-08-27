@@ -138,7 +138,6 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           <ConfirmAction
             title={`${kind === "vm" ? "VM" : "LXC"} ${params.vmid} löschen?`}
             description={`Kann nicht rückgängig gemacht werden. ${params.vmid} — ${name}`}
-            confirmText="DELETE"
             actionLabel="Löschen"
             destructive
             onConfirm={() => action("delete", { confirm: true })}

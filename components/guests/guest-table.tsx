@@ -114,7 +114,6 @@ export function GuestTable({
                       <ConfirmAction
                         title={`Delete ${kind.toUpperCase()} ${g.vmid}?`}
                         description={`This action cannot be undone. ${g.vmid} — ${g.name}`}
-                        confirmText="DELETE"
                         actionLabel={`Delete ${kind.toUpperCase()}`}
                         destructive
                         onConfirm={() => guestAction(hid, permPath, g.node, g.vmid, "delete")}
