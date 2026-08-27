@@ -6,6 +6,7 @@ import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { startGuestAfterCreate } from "@/server/services/guest-start";
+import { notifyTopic } from "@/server/notifications/dispatch";
 import type { VmCreateParams } from "@/server/proxmox/vms";
 
 const createVmSchema = z.object({
@@ -102,6 +103,12 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     hostId: params.id,
     result: "SUCCESS",
     metadata: { upid },
+  });
+  notifyTopic("vm.created", {
+    level: "success",
+    title: "VM erstellt",
+    message: `VM ${body.vmid} (${body.name})`,
+    hostId: params.id,
   });
   return json({ upid, started }, 201);
 });

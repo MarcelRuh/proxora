@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.32] – 2026-08-27
+
+### Added
+
+- Discord/webhook channels can choose which events to post (VM/LXC create/delete, host online/offline, host updates, backups).
+
 ## [1.0.31] – 2026-08-27
 
 ### Added

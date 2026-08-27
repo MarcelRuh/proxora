@@ -1,4 +1,7 @@
+import type { NotificationTopic } from "@/lib/notification-topics";
+
 export type NotificationEvent = {
+  topic: NotificationTopic;
   level: "info" | "warning" | "error" | "success";
   title: string;
   message: string;

@@ -4,6 +4,7 @@ import { json } from "@/server/http/respond";
 import { clientIp } from "@/server/auth/session";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
+import { notifyTopic } from "@/server/notifications/dispatch";
 import { withHostClient } from "@/server/services/host-service";
 
 const actionSchema = z.object({
@@ -130,5 +131,13 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
     result: "SUCCESS",
     metadata: { upid, action: body.action },
   });
+  if (body.action === "delete") {
+    notifyTopic("vm.deleted", {
+      level: "warning",
+      title: "VM gelöscht",
+      message: `VM ${vmid} auf ${params.node}`,
+      hostId: params.id,
+    });
+  }
   return json({ upid });
 });

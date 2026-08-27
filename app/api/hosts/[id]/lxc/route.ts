@@ -7,6 +7,7 @@ import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { buildLxcNet0, compactProxmoxBody, normalizeLxcCidr } from "@/lib/lxc-net";
 import { startGuestAfterCreate } from "@/server/services/guest-start";
+import { notifyTopic } from "@/server/notifications/dispatch";
 import type { LxcCreateParams } from "@/server/proxmox/lxc";
 
 const createLxcSchema = z.object({
@@ -86,6 +87,12 @@ export const POST = apiRoute("lxc.create", async (req, session, params) => {
     hostId: params.id,
     result: "SUCCESS",
     metadata: { upid },
+  });
+  notifyTopic("lxc.created", {
+    level: "success",
+    title: "Container erstellt",
+    message: `LXC ${body.vmid} (${body.hostname})`,
+    hostId: params.id,
   });
   return json({ upid, started }, 201);
 });

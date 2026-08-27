@@ -9,6 +9,7 @@ import { compactProxmoxBody } from "@/lib/lxc-net";
 import { newBackupJobId, parseBackupVolid } from "@/lib/backup";
 import { jobBody, listHostBackups, restoreBackup, runBackupJob } from "@/server/services/backup-service";
 import { ValidationError } from "@/lib/errors";
+import { notifyTopic } from "@/server/notifications/dispatch";
 
 const jobFields = {
   enabled: z.boolean().optional(),
@@ -130,5 +131,21 @@ export const POST = apiRoute(["backup.manage", "storage.manage"], async (req, se
     result: "SUCCESS",
     metadata: { action: body.action, ...result },
   });
+  if (body.action === "run" || body.action === "run-job") {
+    notifyTopic("backup.started", {
+      level: "info",
+      title: "Backup gestartet",
+      message: body.action === "run-job" ? `Job ${"id" in body ? body.id : ""}` : `VM/CT ${"vmid" in body ? body.vmid : ""}`,
+      hostId: params.id,
+    });
+  }
+  if (body.action === "restore") {
+    notifyTopic("backup.restored", {
+      level: "warning",
+      title: "Backup wird eingespielt",
+      message: `VM/CT ${body.vmid} ← ${body.volid}`,
+      hostId: params.id,
+    });
+  }
   return json(result);
 });

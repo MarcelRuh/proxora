@@ -5,6 +5,7 @@ import {
   notificationRegistry,
   type NotificationEvent,
 } from "@/server/notifications/providers";
+import { channelAllowsTopic, eventsFromConfig, type NotificationTopic } from "@/lib/notification-topics";
 
 export async function dispatchNotification(event: NotificationEvent): Promise<void> {
   const channels = await prisma.notificationChannel.findMany({ where: { enabled: true } });
@@ -15,6 +16,7 @@ export async function dispatchNotification(event: NotificationEvent): Promise<vo
       if (!provider) return;
       try {
         const config = JSON.parse(decryptSecret(channel.config)) as Record<string, unknown>;
+        if (!channelAllowsTopic(eventsFromConfig(config), event.topic)) return;
         await provider.send(event, config);
       } catch (error) {
         logger.warn(
@@ -24,4 +26,13 @@ export async function dispatchNotification(event: NotificationEvent): Promise<vo
       }
     }),
   );
+}
+
+export function notifyTopic(
+  topic: NotificationTopic,
+  event: Omit<NotificationEvent, "topic">,
+): void {
+  void dispatchNotification({ ...event, topic }).catch((error) => {
+    logger.warn({ err: error, topic }, "Notification dispatch failed");
+  });
 }

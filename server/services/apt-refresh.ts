@@ -32,6 +32,7 @@ export async function notifyAptUpdates(
   const total = alerts.reduce((sum, a) => sum + a.count, 0);
   const lines = alerts.map((a) => `${a.name}: ${a.count} Paket(e)`).join("\n");
   await dispatchNotification({
+    topic: "host.updates",
     level: "warning",
     title: total === 1 ? "1 Host-Update verfügbar" : `${total} Host-Updates verfügbar`,
     message: lines,

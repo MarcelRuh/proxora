@@ -9,6 +9,7 @@ import { canAccessHost } from "@/server/auth/session-core";
 import { createProxmoxClient } from "@/server/proxmox/client";
 import type { ConnectionTestResult, ProxmoxConnectionConfig } from "@/server/proxmox/types";
 import { normalizeProxmoxUsername } from "@/server/proxmox/username";
+import { notifyTopic } from "@/server/notifications/dispatch";
 
 export const hostInputSchema = z.object({
   name: z.string().min(1).max(80),
@@ -108,6 +109,10 @@ export async function testRawConnection(
 }
 
 async function applyTestResult(hostId: string, result: ConnectionTestResult) {
+  const current = await prisma.host.findUnique({
+    where: { id: hostId },
+    select: { id: true, name: true, connectionState: true },
+  });
   if (result.ok) {
     await prisma.host.update({
       where: { id: hostId },
@@ -120,6 +125,7 @@ async function applyTestResult(hostId: string, result: ConnectionTestResult) {
         isClusterMember: Boolean(result.cluster?.isCluster),
       },
     });
+    notifyHostState(current, HostConnectionState.ONLINE);
   } else {
     await prisma.host.update({
       where: { id: hostId },
@@ -127,6 +133,34 @@ async function applyTestResult(hostId: string, result: ConnectionTestResult) {
         connectionState: HostConnectionState.ERROR,
         lastError: result.error ?? "Connection failed",
       },
+    });
+    notifyHostState(current, HostConnectionState.ERROR);
+  }
+}
+
+function notifyHostState(
+  host: { id: string; name: string; connectionState: HostConnectionState } | null,
+  next: HostConnectionState,
+) {
+  if (!host || host.connectionState === next) return;
+  if (host.connectionState === HostConnectionState.CONNECTING || host.connectionState === HostConnectionState.MAINTENANCE) {
+    return;
+  }
+  if (next === HostConnectionState.ONLINE) {
+    notifyTopic("host.online", {
+      level: "success",
+      title: "Host online",
+      message: `${host.name} ist wieder erreichbar.`,
+      hostId: host.id,
+    });
+    return;
+  }
+  if (next === HostConnectionState.ERROR || next === HostConnectionState.OFFLINE) {
+    notifyTopic("host.offline", {
+      level: "error",
+      title: "Host offline",
+      message: `${host.name} ist nicht erreichbar.`,
+      hostId: host.id,
     });
   }
 }
@@ -223,6 +257,7 @@ export async function probeAllHosts() {
           where: { id: host.id },
           data: { connectionState: HostConnectionState.ERROR, lastError: message },
         });
+        notifyHostState(host, HostConnectionState.ERROR);
       }
     }),
   );
@@ -242,6 +277,7 @@ export async function withHostClient<T>(
         where: { id: host.id },
         data: { connectionState: HostConnectionState.ONLINE, lastSeenAt: new Date(), lastError: null },
       });
+      notifyHostState(host, HostConnectionState.ONLINE);
     }
     return result;
   } catch (error) {
@@ -254,6 +290,7 @@ export async function withHostClient<T>(
       where: { id: host.id },
       data: { connectionState: HostConnectionState.ERROR, lastError: message },
     });
+    notifyHostState(host, HostConnectionState.ERROR);
     const { requestHostReconnect } = await import("@/server/services/host-reconnect");
     requestHostReconnect();
     throw new HostUnreachableError(host.name, message);
