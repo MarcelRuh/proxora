@@ -73,11 +73,23 @@ body {
   min-height: 100%;
   background: var(--background);
   color: var(--foreground);
+  color-scheme: dark;
 }
 
 body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   overflow-x: hidden;
+}
+
+select {
+  color: var(--foreground);
+  background-color: #0d0d15;
+}
+
+select option,
+select optgroup {
+  color: #111111;
+  background-color: #ffffff;
 }
 
 ::selection {

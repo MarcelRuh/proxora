@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.27] – 2026-08-27
+
+### Fixed
+
+- Native dropdown options use dark color-scheme and dark-on-light option text so the open list is readable.
+
 ## [1.0.26] – 2026-08-27
 
 ### Fixed
