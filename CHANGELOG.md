@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.43] – 2026-08-27
+
+### Fixed
+
+- CSRF rejects cross-site POSTs that omit `Origin` but send `Sec-Fetch-Site: cross-site` or a foreign `Referer`. Same-origin UI, LAN Host matching, `APP_ALLOWED_ORIGINS`, and curl without those headers still work.
+
 ## [1.0.42] – 2026-08-27
 
 ### Added

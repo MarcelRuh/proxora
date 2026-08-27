@@ -75,13 +75,42 @@ export function isAllowedOrigin(request: Request, origin: string): boolean {
   return extras.some((entry) => originMatchesEntry(origin, entry));
 }
 
+function originFromReferer(referer: string): string | null {
+  try {
+    return new URL(referer).origin;
+  } catch {
+    return null;
+  }
+}
+
+function csrfDenied(): never {
+  throw new AppError(403, "Invalid origin", "CSRF");
+}
+
+/**
+ * CSRF for cookie sessions: browsers sending Origin / Referer / Sec-Fetch-Site
+ * must match this app. curl and other non-browser clients (no those headers) stay allowed.
+ */
 export function assertSameOrigin(request: Request) {
   if (request.method === "GET" || request.method === "HEAD" || request.method === "OPTIONS") {
     return;
   }
+
   const origin = request.headers.get("origin");
-  if (!origin) return;
-  if (!isAllowedOrigin(request, origin)) {
-    throw new AppError(403, "Invalid origin", "CSRF");
+  if (origin) {
+    if (!isAllowedOrigin(request, origin)) csrfDenied();
+    return;
+  }
+
+  const fetchSite = request.headers.get("sec-fetch-site")?.toLowerCase();
+  if (fetchSite === "cross-site") csrfDenied();
+  if (fetchSite === "same-origin" || fetchSite === "same-site" || fetchSite === "none") {
+    return;
+  }
+
+  const referer = request.headers.get("referer");
+  if (referer) {
+    const fromReferer = originFromReferer(referer);
+    if (!fromReferer || !isAllowedOrigin(request, fromReferer)) csrfDenied();
   }
 }
