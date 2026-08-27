@@ -7,6 +7,10 @@ import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { pickGuestName } from "@/server/notifications/guest-name";
 import { withHostClient } from "@/server/services/host-service";
+import { waitGuestAction } from "@/server/proxmox/task-wait";
+import { durationLabel } from "@/lib/duration";
+
+export const maxDuration = 800;
 
 const actionSchema = z.object({
   action: z.enum([
@@ -64,38 +68,69 @@ export const POST = apiRoute("lxc.view", async (req, session, params) => {
   const vmid = Number(params.vmid);
   let hostName = "";
   let guestName: string | undefined;
-  const upid = await withHostClient(params.id, session.user, async (client, host) => {
-    hostName = host.name;
-    const node = params.node;
+  const t0 = Date.now();
+  let upid: unknown;
+  try {
+    upid = await withHostClient(params.id, session.user, async (client, host) => {
+      hostName = host.name;
+      const node = params.node;
+      if (body.action === "delete") {
+        const status = await client.lxc.status(node, vmid).catch(() => null);
+        guestName = pickGuestName(status);
+      }
+      let result: unknown;
+      switch (body.action) {
+        case "start":
+          result = await client.lxc.start(node, vmid);
+          break;
+        case "stop":
+          result = await client.lxc.stop(node, vmid);
+          break;
+        case "shutdown":
+          result = await client.lxc.shutdown(node, vmid);
+          break;
+        case "reboot":
+          result = await client.lxc.reboot(node, vmid);
+          break;
+        case "delete":
+          result = await client.lxc.delete(node, vmid);
+          break;
+        case "clone":
+          result = await client.lxc.clone(node, vmid, { newid: body.newid, hostname: body.hostname });
+          break;
+        case "snapshot":
+          result = await client.lxc.createSnapshot(node, vmid, body.snapname ?? `snap-${Date.now()}`, body.description);
+          break;
+        case "snapshot-delete":
+          result = await client.lxc.deleteSnapshot(node, vmid, body.snapname ?? "");
+          break;
+        case "snapshot-rollback":
+          result = await client.lxc.rollbackSnapshot(node, vmid, body.snapname ?? "");
+          break;
+        case "config":
+          result = await client.lxc.updateConfig(node, vmid, body.config ?? {});
+          break;
+        default:
+          result = null;
+      }
+      await waitGuestAction(client, node, result, body.action);
+      return result;
+    });
+  } catch (error) {
     if (body.action === "delete") {
-      const status = await client.lxc.status(node, vmid).catch(() => null);
-      guestName = pickGuestName(status);
+      notifyTopic("lxc.deleted", {
+        level: "error",
+        title: "Container löschen fehlgeschlagen",
+        message: `LXC ${vmid}${guestName ? ` (${guestName})` : ""} — fehlgeschlagen: ${error instanceof Error ? error.message : "unbekannt"}`,
+        hostId: params.id,
+        name: guestName,
+        id: String(vmid),
+        host: hostName,
+        node: params.node,
+      });
     }
-    switch (body.action) {
-      case "start":
-        return client.lxc.start(node, vmid);
-      case "stop":
-        return client.lxc.stop(node, vmid);
-      case "shutdown":
-        return client.lxc.shutdown(node, vmid);
-      case "reboot":
-        return client.lxc.reboot(node, vmid);
-      case "delete":
-        return client.lxc.delete(node, vmid);
-      case "clone":
-        return client.lxc.clone(node, vmid, { newid: body.newid, hostname: body.hostname });
-      case "snapshot":
-        return client.lxc.createSnapshot(node, vmid, body.snapname ?? `snap-${Date.now()}`, body.description);
-      case "snapshot-delete":
-        return client.lxc.deleteSnapshot(node, vmid, body.snapname ?? "");
-      case "snapshot-rollback":
-        return client.lxc.rollbackSnapshot(node, vmid, body.snapname ?? "");
-      case "config":
-        return client.lxc.updateConfig(node, vmid, body.config ?? {});
-      default:
-        return null;
-    }
-  });
+    throw error;
+  }
   await writeAuditLog({
     userId: session.user.id,
     ip: await clientIp(),
@@ -103,13 +138,13 @@ export const POST = apiRoute("lxc.view", async (req, session, params) => {
     target: `LXC ${vmid}`,
     hostId: params.id,
     result: "SUCCESS",
-    metadata: { upid },
+    metadata: { upid: typeof upid === "string" ? upid : null },
   });
   if (body.action === "delete") {
     notifyTopic("lxc.deleted", {
       level: "warning",
       title: "Container gelöscht",
-      message: `LXC ${vmid}${guestName ? ` (${guestName})` : ""} auf ${params.node}`,
+      message: `LXC ${vmid}${guestName ? ` (${guestName})` : ""} — fertig in ${durationLabel(Date.now() - t0)}`,
       hostId: params.id,
       name: guestName,
       id: String(vmid),

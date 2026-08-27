@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.36] – 2026-08-27
+
+### Added
+
+- TOTP 2FA at sign-in (Authenticator app). Enable/disable under Settings.
+- CPU/RAM usage bars on VM and container lists (and the dashboard guest table).
+- Guest networks are configurable under Settings (defaults + optional per-host override).
+- Create forms skip IDs whose implied IP is already taken and warn when VMID > 254.
+
+### Changed
+
+- Discord reports create/delete/backup **after** the Proxmox task finishes (OK/error + duration).
+- Guest start/stop/delete in the list waits for the UPID, then refreshes the table.
+- VM static IP is written via Cloud-Init only when that option is on (ISO installs default off).
+- Notification channels are Discord/webhook only (no unused email type).
+
 ## [1.0.35] – 2026-08-27
 
 ### Changed

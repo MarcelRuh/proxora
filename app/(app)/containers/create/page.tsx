@@ -10,8 +10,8 @@ import { Input, Label } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
-import { CreateIpFields, ipFieldsFromVmid } from "@/components/guests/create-ip-fields";
-import { DEFAULT_GUEST_NETWORK } from "@/lib/create-ip";
+import { CreateIpFields, ipCollision, ipFieldsFromVmid } from "@/components/guests/create-ip-fields";
+import { DEFAULT_GUEST_NETWORK, type GuestIpNetwork } from "@/lib/create-ip";
 import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
 
@@ -21,6 +21,8 @@ type Options = {
   storage: Array<{ storage: string; content?: string }>;
   templates: Array<{ volid?: string }>;
   bridges: Array<{ iface?: string; type?: string }>;
+  networks?: GuestIpNetwork[];
+  usedIps?: string[];
 };
 
 const selectClass =
@@ -77,6 +79,8 @@ export default function CreateLxcPage() {
     () => (options?.bridges ?? []).map((b) => String(b.iface ?? "")).filter(Boolean),
     [options],
   );
+  const networks = options?.networks ?? [];
+  const usedIps = options?.usedIps ?? [];
 
   useEffect(() => {
     if (!options) return;
@@ -94,11 +98,14 @@ export default function CreateLxcPage() {
       const vols = (options.templates ?? []).map((t) => String(t.volid ?? "")).filter(Boolean);
       const ostemplate = f.ostemplate && vols.includes(f.ostemplate) ? f.ostemplate : "";
       const vmid = f.vmid > 0 ? f.vmid : (options.nextid ?? 0);
+      const netList = options.networks?.length ? options.networks : undefined;
+      const network =
+        f.network && netList?.some((n) => n.id === f.network) ? f.network : (netList?.[0]?.id ?? f.network ?? DEFAULT_GUEST_NETWORK);
       const ip =
         f.ipMode === "static" && !f.cidr.trim()
-          ? ipFieldsFromVmid(f.network || DEFAULT_GUEST_NETWORK, vmid)
+          ? ipFieldsFromVmid(network, vmid, netList)
           : {};
-      return { ...f, node, storage, bridge, ostemplate, vmid, ...ip };
+      return { ...f, node, storage, bridge, ostemplate, vmid, network, ...ip };
     });
   }, [options]);
 
@@ -143,7 +150,8 @@ export default function CreateLxcPage() {
     Boolean(form.ostemplate) &&
     Boolean(form.storage) &&
     Boolean(form.bridge) &&
-    (form.ipMode === "dhcp" || (form.cidr.trim().length > 0 && form.gateway.trim().length > 0));
+    (form.ipMode === "dhcp" || (form.cidr.trim().length > 0 && form.gateway.trim().length > 0)) &&
+    !(form.ipMode === "static" && ipCollision(form.cidr, usedIps));
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -187,7 +195,7 @@ export default function CreateLxcPage() {
               setForm({
                 ...form,
                 vmid,
-                ...(form.ipMode === "static" ? ipFieldsFromVmid(form.network, vmid) : {}),
+                ...(form.ipMode === "static" ? ipFieldsFromVmid(form.network, vmid, networks) : {}),
               });
             }}
           />
@@ -250,6 +258,8 @@ export default function CreateLxcPage() {
           <CreateIpFields
             value={{ ipMode: form.ipMode, network: form.network, cidr: form.cidr, gateway: form.gateway }}
             vmid={form.vmid}
+            networks={networks}
+            usedIps={usedIps}
             onChange={(ip) => setForm({ ...form, ...ip })}
           />
           <label className="flex items-center gap-2 text-sm md:col-span-2">

@@ -114,7 +114,7 @@ describe("guest name lookup", () => {
 
 describe("notification test send", () => {
   it("rejects unknown types and missing URLs without calling a webhook", async () => {
-    await expect(sendNotificationTest("email", { url: "https://example.com/hook" })).rejects.toThrow(
+    await expect(sendNotificationTest("smtp", { url: "https://example.com/hook" })).rejects.toThrow(
       "Unknown channel type",
     );
     await expect(sendNotificationTest("discord", { url: "   " })).rejects.toThrow("Webhook URL is missing");

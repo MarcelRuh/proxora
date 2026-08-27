@@ -7,6 +7,10 @@ import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { pickGuestName } from "@/server/notifications/guest-name";
 import { withHostClient } from "@/server/services/host-service";
+import { waitGuestAction } from "@/server/proxmox/task-wait";
+import { durationLabel } from "@/lib/duration";
+
+export const maxDuration = 800;
 
 const actionSchema = z.object({
   action: z.enum([
@@ -89,7 +93,10 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
   const vmid = Number(params.vmid);
   let hostName = "";
   let guestName: string | undefined;
-  const upid = await withHostClient(params.id, session.user, async (client, host) => {
+  const t0 = Date.now();
+  let upid: unknown;
+  try {
+    upid = await withHostClient(params.id, session.user, async (client, host) => {
     hostName = host.name;
     const vm = client.vms;
     const node = params.node;
@@ -97,39 +104,71 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
       const status = await vm.status(node, vmid).catch(() => null);
       guestName = pickGuestName(status);
     }
+    let result: unknown;
     switch (body.action) {
       case "start":
-        return vm.start(node, vmid);
+        result = await vm.start(node, vmid);
+        break;
       case "stop":
-        return vm.stop(node, vmid);
+        result = await vm.stop(node, vmid);
+        break;
       case "shutdown":
-        return vm.shutdown(node, vmid);
+        result = await vm.shutdown(node, vmid);
+        break;
       case "reboot":
-        return vm.reboot(node, vmid);
+        result = await vm.reboot(node, vmid);
+        break;
       case "reset":
-        return vm.reset(node, vmid);
+        result = await vm.reset(node, vmid);
+        break;
       case "pause":
-        return vm.suspend(node, vmid);
+        result = await vm.suspend(node, vmid);
+        break;
       case "resume":
-        return vm.resume(node, vmid);
+        result = await vm.resume(node, vmid);
+        break;
       case "delete":
-        return vm.delete(node, vmid);
+        result = await vm.delete(node, vmid);
+        break;
       case "clone":
-        return vm.clone(node, vmid, { newid: body.newid, name: body.name, full: 1 });
+        result = await vm.clone(node, vmid, { newid: body.newid, name: body.name, full: 1 });
+        break;
       case "migrate":
-        return vm.migrate(node, vmid, { target: body.target, online: 1 });
+        result = await vm.migrate(node, vmid, { target: body.target, online: 1 });
+        break;
       case "snapshot":
-        return vm.createSnapshot(node, vmid, body.snapname ?? `snap-${Date.now()}`, body.description);
+        result = await vm.createSnapshot(node, vmid, body.snapname ?? `snap-${Date.now()}`, body.description);
+        break;
       case "snapshot-delete":
-        return vm.deleteSnapshot(node, vmid, body.snapname ?? "");
+        result = await vm.deleteSnapshot(node, vmid, body.snapname ?? "");
+        break;
       case "snapshot-rollback":
-        return vm.rollbackSnapshot(node, vmid, body.snapname ?? "");
+        result = await vm.rollbackSnapshot(node, vmid, body.snapname ?? "");
+        break;
       case "config":
-        return vm.updateConfig(node, vmid, body.config ?? {});
+        result = await vm.updateConfig(node, vmid, body.config ?? {});
+        break;
       default:
-        return null;
+        result = null;
     }
-  });
+    await waitGuestAction(client, node, result, body.action);
+    return result;
+    });
+  } catch (error) {
+    if (body.action === "delete") {
+      notifyTopic("vm.deleted", {
+        level: "error",
+        title: "VM löschen fehlgeschlagen",
+        message: `VM ${vmid}${guestName ? ` (${guestName})` : ""} — fehlgeschlagen: ${error instanceof Error ? error.message : "unbekannt"}`,
+        hostId: params.id,
+        name: guestName,
+        id: String(vmid),
+        host: hostName,
+        node: params.node,
+      });
+    }
+    throw error;
+  }
   await writeAuditLog({
     userId: session.user.id,
     ip: await clientIp(),
@@ -137,13 +176,13 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
     target: `VM ${vmid}`,
     hostId: params.id,
     result: "SUCCESS",
-    metadata: { upid, action: body.action },
+    metadata: { upid: typeof upid === "string" ? upid : null, action: body.action },
   });
   if (body.action === "delete") {
     notifyTopic("vm.deleted", {
       level: "warning",
       title: "VM gelöscht",
-      message: `VM ${vmid}${guestName ? ` (${guestName})` : ""} auf ${params.node}`,
+      message: `VM ${vmid}${guestName ? ` (${guestName})` : ""} — fertig in ${durationLabel(Date.now() - t0)}`,
       hostId: params.id,
       name: guestName,
       id: String(vmid),

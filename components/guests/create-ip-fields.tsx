@@ -5,7 +5,8 @@ import {
   GUEST_IP_NETWORKS,
   guestCidrFromVmid,
   guestGateway,
-  type GuestIpNetworkId,
+  ipv4Host,
+  type GuestIpNetwork,
 } from "@/lib/create-ip";
 import type { LxcIpMode } from "@/lib/lxc-net";
 import { Input, Label } from "@/components/ui/input";
@@ -16,15 +17,19 @@ const selectClass =
 
 export type GuestIpFieldsValue = {
   ipMode: LxcIpMode;
-  network: GuestIpNetworkId;
+  network: string;
   cidr: string;
   gateway: string;
 };
 
-export function ipFieldsFromVmid(network: GuestIpNetworkId, vmid: number): Pick<GuestIpFieldsValue, "cidr" | "gateway"> {
+export function ipFieldsFromVmid(
+  network: string,
+  vmid: number,
+  networks: GuestIpNetwork[] = GUEST_IP_NETWORKS,
+): Pick<GuestIpFieldsValue, "cidr" | "gateway"> {
   return {
-    cidr: guestCidrFromVmid(network, vmid),
-    gateway: guestGateway(network),
+    cidr: guestCidrFromVmid(network, vmid, networks),
+    gateway: guestGateway(network, networks),
   };
 }
 
@@ -32,23 +37,34 @@ export function CreateIpFields({
   value,
   vmid,
   onChange,
+  networks = GUEST_IP_NETWORKS,
+  usedIps = [],
+  hint,
 }: {
   value: GuestIpFieldsValue;
   vmid: number;
   onChange: (next: GuestIpFieldsValue) => void;
+  networks?: GuestIpNetwork[];
+  usedIps?: string[];
+  hint?: string;
 }) {
   const { t } = useI18n();
+  const list = networks.length ? networks : GUEST_IP_NETWORKS;
+  const host = ipv4Host(value.cidr);
+  const collision = value.ipMode === "static" && Boolean(host && usedIps.includes(host));
+  const highId = vmid > 254;
 
   function setMode(ipMode: LxcIpMode) {
     if (ipMode === "static") {
-      onChange({ ipMode, network: value.network || DEFAULT_GUEST_NETWORK, ...ipFieldsFromVmid(value.network || DEFAULT_GUEST_NETWORK, vmid) });
+      const network = value.network || list[0]?.id || DEFAULT_GUEST_NETWORK;
+      onChange({ ipMode, network, ...ipFieldsFromVmid(network, vmid, list) });
       return;
     }
     onChange({ ...value, ipMode });
   }
 
-  function setNetwork(network: GuestIpNetworkId) {
-    onChange({ ...value, ipMode: "static", network, ...ipFieldsFromVmid(network, vmid) });
+  function setNetwork(network: string) {
+    onChange({ ...value, ipMode: "static", network, ...ipFieldsFromVmid(network, vmid, list) });
   }
 
   return (
@@ -64,12 +80,8 @@ export function CreateIpFields({
         <>
           <label className="text-sm">
             {t("create.network")}
-            <select
-              className={selectClass}
-              value={value.network}
-              onChange={(e) => setNetwork(e.target.value as GuestIpNetworkId)}
-            >
-              {GUEST_IP_NETWORKS.map((n) => (
+            <select className={selectClass} value={value.network} onChange={(e) => setNetwork(e.target.value)}>
+              {list.map((n) => (
                 <option key={n.id} value={n.id}>
                   {n.id}/{n.prefix}
                 </option>
@@ -79,6 +91,8 @@ export function CreateIpFields({
           <div className="space-y-1">
             <Label>{t("create.address")}</Label>
             <Input value={value.cidr} onChange={(e) => onChange({ ...value, cidr: e.target.value })} />
+            {highId ? <p className="text-xs text-warning">{t("create.vmidHigh")}</p> : null}
+            {collision ? <p className="text-xs text-destructive">{t("create.ipTaken", { ip: host ?? "" })}</p> : null}
           </div>
           <div className="space-y-1">
             <Label>{t("create.gateway")}</Label>
@@ -86,6 +100,12 @@ export function CreateIpFields({
           </div>
         </>
       ) : null}
+      {hint ? <p className="text-xs text-muted-foreground md:col-span-2">{hint}</p> : null}
     </>
   );
+}
+
+export function ipCollision(cidr: string, usedIps: string[]): boolean {
+  const host = ipv4Host(cidr);
+  return Boolean(host && usedIps.includes(host));
 }

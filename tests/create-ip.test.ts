@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_GUEST_NETWORK, guestCidrFromVmid, guestGateway, guestIpFromVmid } from "@/lib/create-ip";
+import {
+  DEFAULT_GUEST_NETWORK,
+  guestCidrFromVmid,
+  guestGateway,
+  guestIpFromVmid,
+  ipv4Host,
+  networksForHost,
+  parseGuestConfigIps,
+  parseGuestIpSettings,
+} from "@/lib/create-ip";
 
 describe("guest IP from VMID", () => {
   it("fills the last octet from the VMID", () => {
@@ -13,5 +22,25 @@ describe("guest IP from VMID", () => {
     expect(guestIpFromVmid("192.168.178.0", 0)).toBeNull();
     expect(guestIpFromVmid("192.168.178.0", 255)).toBeNull();
     expect(guestCidrFromVmid("192.168.178.0", 300)).toBe("");
+  });
+});
+
+describe("guest IP settings and config parse", () => {
+  it("parses host overrides and falls back to defaults", () => {
+    const settings = parseGuestIpSettings({
+      defaults: [{ id: "10.0.0.0", prefix: 24, gateway: "10.0.0.1" }],
+      byHost: { h1: [{ id: "10.1.0.0", prefix: 16, gateway: "10.1.0.1" }] },
+    });
+    expect(networksForHost(settings, "h1")[0]?.id).toBe("10.1.0.0");
+    expect(networksForHost(settings, "other")[0]?.id).toBe("10.0.0.0");
+  });
+
+  it("reads IPs from LXC net0 and QEMU ipconfig0", () => {
+    expect(parseGuestConfigIps({ net0: "name=eth0,bridge=vmbr0,ip=192.168.178.242/24,gw=192.168.178.1" })).toEqual([
+      "192.168.178.242",
+    ]);
+    expect(parseGuestConfigIps({ ipconfig0: "ip=192.168.1.50/24,gw=192.168.1.1" })).toEqual(["192.168.1.50"]);
+    expect(parseGuestConfigIps({ net0: "name=eth0,ip=dhcp" })).toEqual([]);
+    expect(ipv4Host("10.0.0.8/24")).toBe("10.0.0.8");
   });
 });

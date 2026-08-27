@@ -10,8 +10,8 @@ import { Input, Label } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
-import { CreateIpFields, ipFieldsFromVmid } from "@/components/guests/create-ip-fields";
-import { DEFAULT_GUEST_NETWORK } from "@/lib/create-ip";
+import { CreateIpFields, ipCollision, ipFieldsFromVmid } from "@/components/guests/create-ip-fields";
+import { DEFAULT_GUEST_NETWORK, type GuestIpNetwork } from "@/lib/create-ip";
 import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
 
@@ -21,6 +21,8 @@ type Options = {
   storage: Array<{ storage: string; content?: string }>;
   isos: Array<{ volid?: string }>;
   bridges: Array<{ iface?: string }>;
+  networks?: GuestIpNetwork[];
+  usedIps?: string[];
 };
 
 const selectClass =
@@ -49,6 +51,7 @@ export default function CreateVmPage() {
     cidr: "",
     gateway: "",
     startAfter: true,
+    cloudInit: true,
   });
   const { data: options } = useQuery({
     queryKey: ["options", form.hostId],
@@ -75,6 +78,8 @@ export default function CreateVmPage() {
     () => (options?.bridges ?? []).map((b) => String(b.iface ?? "")).filter(Boolean),
     [options],
   );
+  const networks = options?.networks ?? [];
+  const usedIps = options?.usedIps ?? [];
 
   useEffect(() => {
     if (!options) return;
@@ -92,11 +97,15 @@ export default function CreateVmPage() {
       const vmid = f.vmid > 0 ? f.vmid : (options.nextid ?? 0);
       const isoList = (options.isos ?? []).map((i) => String(i.volid ?? "")).filter(Boolean);
       const iso = f.iso && isoList.includes(f.iso) ? f.iso : "";
+      const netList = options.networks?.length ? options.networks : undefined;
+      const network =
+        f.network && netList?.some((n) => n.id === f.network) ? f.network : (netList?.[0]?.id ?? f.network ?? DEFAULT_GUEST_NETWORK);
       const ip =
         f.ipMode === "static" && !f.cidr.trim()
-          ? ipFieldsFromVmid(f.network || DEFAULT_GUEST_NETWORK, vmid)
+          ? ipFieldsFromVmid(network, vmid, netList)
           : {};
-      return { ...f, node, diskStorage, bridge, vmid, iso, ...ip };
+      const cloudInit = iso ? false : f.cloudInit;
+      return { ...f, node, diskStorage, bridge, vmid, iso, network, cloudInit, ...ip };
     });
   }, [options]);
 
@@ -121,6 +130,7 @@ export default function CreateVmPage() {
           ssd: true,
           ipv4: form.ipMode === "dhcp" ? "dhcp" : form.cidr,
           gateway: form.ipMode === "static" ? form.gateway : undefined,
+          cloudInit: form.ipMode === "static" && form.cloudInit,
         }),
       });
     },
@@ -138,7 +148,8 @@ export default function CreateVmPage() {
     form.name.trim().length > 0 &&
     Boolean(form.diskStorage) &&
     Boolean(form.bridge) &&
-    (form.ipMode === "dhcp" || (form.cidr.trim().length > 0 && form.gateway.trim().length > 0));
+    (form.ipMode === "dhcp" || (form.cidr.trim().length > 0 && form.gateway.trim().length > 0)) &&
+    !(form.ipMode === "static" && ipCollision(form.cidr, usedIps));
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -182,14 +193,24 @@ export default function CreateVmPage() {
               setForm({
                 ...form,
                 vmid,
-                ...(form.ipMode === "static" ? ipFieldsFromVmid(form.network, vmid) : {}),
+                ...(form.ipMode === "static" ? ipFieldsFromVmid(form.network, vmid, networks) : {}),
               });
             }}
           />
           <Field label={t("create.name")} value={form.name} onChange={(name) => setForm({ ...form, name })} />
           <label className="text-sm md:col-span-2">
             {t("create.iso")}
-            <select className={selectClass} value={form.iso} onChange={(e) => setForm({ ...form, iso: e.target.value })}>
+            <select
+              className={selectClass}
+              value={form.iso}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  iso: e.target.value,
+                  cloudInit: e.target.value ? false : true,
+                })
+              }
+            >
               <option value="">{t("common.none")}</option>
               {isos.map((volid) => (
                 <option key={volid} value={volid}>
@@ -224,8 +245,21 @@ export default function CreateVmPage() {
           <CreateIpFields
             value={{ ipMode: form.ipMode, network: form.network, cidr: form.cidr, gateway: form.gateway }}
             vmid={form.vmid}
+            networks={networks}
+            usedIps={usedIps}
+            hint={form.iso && form.ipMode === "static" && !form.cloudInit ? t("create.isoIpHint") : undefined}
             onChange={(ip) => setForm({ ...form, ...ip })}
           />
+          {form.ipMode === "static" ? (
+            <label className="flex items-center gap-2 text-sm md:col-span-2">
+              <input
+                type="checkbox"
+                checked={form.cloudInit}
+                onChange={(e) => setForm({ ...form, cloudInit: e.target.checked })}
+              />
+              {t("create.cloudInit")}
+            </label>
+          ) : null}
           <label className="flex items-center gap-2 text-sm md:col-span-2">
             <input
               type="checkbox"

@@ -11,6 +11,10 @@ import { jobBody, listHostBackups, restoreBackup, runBackupJob } from "@/server/
 import { ValidationError } from "@/lib/errors";
 import { lookupGuestName } from "@/server/notifications/guest-name";
 import { notifyTopic } from "@/server/notifications/dispatch";
+import { TASK_TIMEOUT, waitUpid } from "@/server/proxmox/task-wait";
+import { durationLabel } from "@/lib/duration";
+
+export const maxDuration = 800;
 
 const jobFields = {
   enabled: z.boolean().optional(),
@@ -63,7 +67,10 @@ export const POST = apiRoute(["backup.manage", "storage.manage"], async (req, se
   let notifyName: string | undefined;
   let notifyId: string | undefined;
   let notifyNode: string | undefined;
-  const result = await withHostClient(params.id, session.user, async (client, host) => {
+  const t0 = Date.now();
+  let result: Record<string, unknown>;
+  try {
+    result = await withHostClient(params.id, session.user, async (client, host) => {
     hostName = host.name;
     switch (body.action) {
       case "create-job": {
@@ -82,6 +89,7 @@ export const POST = apiRoute(["backup.manage", "storage.manage"], async (req, se
         notifyName = started.job.all ? "Alle Gäste" : started.job.vmid || started.job.id;
         notifyId = started.job.all ? started.job.id : started.job.vmid || started.job.id;
         notifyNode = started.node;
+        await waitUpid(client, started.node, started.upid, TASK_TIMEOUT.backup);
         return { upid: started.upid };
       }
       case "run": {
@@ -98,6 +106,7 @@ export const POST = apiRoute(["backup.manage", "storage.manage"], async (req, se
             compress: body.compress ?? "zstd",
           }),
         );
+        await waitUpid(client, body.node, upid, TASK_TIMEOUT.backup);
         return { upid };
       }
       case "restore": {
@@ -105,6 +114,7 @@ export const POST = apiRoute(["backup.manage", "storage.manage"], async (req, se
         notifyId = String(body.vmid);
         notifyNode = body.node;
         const upid = await restoreBackup(client, body);
+        await waitUpid(client, body.node, upid, TASK_TIMEOUT.backup);
         return { upid };
       }
       case "delete-file": {
@@ -116,8 +126,36 @@ export const POST = apiRoute(["backup.manage", "storage.manage"], async (req, se
       default:
         throw new ValidationError("Unbekannte Aktion");
     }
-  });
+    });
+  } catch (error) {
+    if (body.action === "run" || body.action === "run-job") {
+      notifyTopic("backup.started", {
+        level: "error",
+        title: "Backup fehlgeschlagen",
+        message: `${notifyName ?? params.id} — fehlgeschlagen: ${error instanceof Error ? error.message : "unbekannt"}`,
+        hostId: params.id,
+        name: notifyName,
+        id: notifyId,
+        host: hostName,
+        node: notifyNode,
+      });
+    }
+    if (body.action === "restore") {
+      notifyTopic("backup.restored", {
+        level: "error",
+        title: "Restore fehlgeschlagen",
+        message: `VM/CT ${body.vmid} — fehlgeschlagen: ${error instanceof Error ? error.message : "unbekannt"}`,
+        hostId: params.id,
+        name: notifyName,
+        id: notifyId,
+        host: hostName,
+        node: notifyNode,
+      });
+    }
+    throw error;
+  }
 
+  const took = durationLabel(Date.now() - t0);
   const audit =
     body.action === "create-job"
       ? AUDIT_ACTIONS.BACKUP_JOB_CREATED
@@ -149,9 +187,9 @@ export const POST = apiRoute(["backup.manage", "storage.manage"], async (req, se
   });
   if (body.action === "run" || body.action === "run-job") {
     notifyTopic("backup.started", {
-      level: "info",
-      title: "Backup gestartet",
-      message: body.action === "run-job" ? `Job ${"id" in body ? body.id : ""}` : `VM/CT ${"vmid" in body ? body.vmid : ""}`,
+      level: "success",
+      title: "Backup fertig",
+      message: `${body.action === "run-job" ? `Job ${"id" in body ? body.id : ""}` : `VM/CT ${"vmid" in body ? body.vmid : ""}`} — fertig in ${took}`,
       hostId: params.id,
       name: notifyName,
       id: notifyId,
@@ -161,9 +199,9 @@ export const POST = apiRoute(["backup.manage", "storage.manage"], async (req, se
   }
   if (body.action === "restore") {
     notifyTopic("backup.restored", {
-      level: "warning",
-      title: "Backup wird eingespielt",
-      message: `VM/CT ${body.vmid} ← ${body.volid}`,
+      level: "success",
+      title: "Backup eingespielt",
+      message: `VM/CT ${body.vmid} ← ${body.volid} — fertig in ${took}`,
       hostId: params.id,
       name: notifyName,
       id: notifyId,

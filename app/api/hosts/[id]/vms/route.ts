@@ -5,10 +5,16 @@ import { clientIp } from "@/server/auth/session";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
-import { startGuestAfterCreate } from "@/server/services/guest-start";
+import { completeGuestCreate } from "@/server/services/guest-start";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { normalizeLxcCidr } from "@/lib/lxc-net";
+import { durationLabel } from "@/lib/duration";
+import { ipv4Host } from "@/lib/create-ip";
+import { collectUsedGuestIps } from "@/server/services/guest-ips";
+import { ConflictError } from "@/lib/errors";
 import type { VmCreateParams } from "@/server/proxmox/vms";
+
+export const maxDuration = 800;
 
 const createVmSchema = z.object({
   node: z.string().min(1),
@@ -41,6 +47,7 @@ const createVmSchema = z.object({
   startAfter: z.boolean().optional(),
   ipv4: z.string().optional(),
   gateway: z.string().optional(),
+  cloudInit: z.boolean().optional(),
 });
 
 export const GET = apiRoute("vm.view", async (_req, session, params) => {
@@ -80,8 +87,9 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     net0: net,
     ostype: body.ostype ?? "l26",
   };
-  if (body.ipv4 && body.ipv4 !== "dhcp") {
-    const ip = normalizeLxcCidr(body.ipv4);
+  const applyCloudInit = Boolean(body.cloudInit) && Boolean(body.ipv4) && body.ipv4 !== "dhcp";
+  if (applyCloudInit) {
+    const ip = normalizeLxcCidr(body.ipv4!);
     payload.ipconfig0 = body.gateway?.trim() ? `ip=${ip},gw=${body.gateway.trim()}` : `ip=${ip}`;
     payload.scsi1 = `${body.diskStorage}:cloudinit`;
   }
@@ -93,18 +101,41 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
   if (body.efi) payload.efidisk0 = `${body.diskStorage}:1,efitype=4m,pre-enrolled-keys=1`;
   if (body.tpm) payload.tpmstate0 = `${body.diskStorage}:1,version=v2.0`;
 
+  const staticIp = applyCloudInit ? ipv4Host(body.ipv4 ?? "") : null;
+  const t0 = Date.now();
   let hostName = "";
-  const upid = await withHostClient(params.id, session.user, async (client, host) => {
-    hostName = host.name;
-    return client.vms.create(body.node, payload as VmCreateParams);
-  });
   let started = false;
-  if (body.startAfter) {
-    const result = await withHostClient(params.id, session.user, (client) =>
-      startGuestAfterCreate(client, "vm", body.node, body.vmid, typeof upid === "string" ? upid : undefined),
-    );
+  let startError: string | undefined;
+  let upid: unknown;
+  try {
+    const result = await withHostClient(params.id, session.user, async (client, host) => {
+      hostName = host.name;
+      const used = await collectUsedGuestIps(client);
+      if (used.vmids.includes(body.vmid)) throw new ConflictError(`VMID ${body.vmid} ist bereits vergeben`);
+      if (staticIp && used.ips.includes(staticIp)) throw new ConflictError(`IPv4 ${staticIp} ist bereits vergeben`);
+      const createUpid = await client.vms.create(body.node, payload as VmCreateParams);
+      const done = await completeGuestCreate(client, "vm", body.node, body.vmid, createUpid, Boolean(body.startAfter));
+      return { createUpid, ...done };
+    });
+    upid = result.createUpid;
     started = result.started;
+    startError = result.startError;
+  } catch (error) {
+    notifyTopic("vm.created", {
+      level: "error",
+      title: "VM fehlgeschlagen",
+      message: `VM ${body.vmid} (${body.name}) — fehlgeschlagen: ${error instanceof Error ? error.message : "unbekannt"}`,
+      hostId: params.id,
+      name: body.name,
+      id: String(body.vmid),
+      host: hostName,
+      node: body.node,
+    });
+    throw error;
   }
+
+  const ms = Date.now() - t0;
+  const suffix = startError ? ` — Start fehlgeschlagen: ${startError}` : ` — fertig in ${durationLabel(ms)}`;
   await writeAuditLog({
     userId: session.user.id,
     ip: await clientIp(),
@@ -112,17 +143,17 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     target: `${body.vmid} ${body.name}`,
     hostId: params.id,
     result: "SUCCESS",
-    metadata: { upid },
+    metadata: { upid: typeof upid === "string" ? upid : null, started, startError },
   });
   notifyTopic("vm.created", {
-    level: "success",
+    level: startError ? "warning" : "success",
     title: "VM erstellt",
-    message: `VM ${body.vmid} (${body.name})`,
+    message: `VM ${body.vmid} (${body.name})${suffix}`,
     hostId: params.id,
     name: body.name,
     id: String(body.vmid),
     host: hostName,
     node: body.node,
   });
-  return json({ upid, started }, 201);
+  return json({ upid, started, startError }, 201);
 });

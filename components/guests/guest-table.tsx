@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Play, Square, RotateCcw, Terminal } from "lucide-react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GuestStateBadge } from "@/components/status-badge";
 import { ConfirmAction } from "@/components/confirm-action";
+import { GuestCpuBar, GuestRamBar } from "@/components/guests/guest-usage";
 import { api } from "@/lib/api";
-import { bytesToSize, formatUptime, percentage } from "@/lib/utils";
+import { bytesToSize, formatUptime } from "@/lib/utils";
 import type { Guest } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 
@@ -23,6 +25,7 @@ export function GuestTable({
   hostId?: string;
 }) {
   const { t } = useI18n();
+  const qc = useQueryClient();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const filtered = useMemo(
@@ -36,13 +39,23 @@ export function GuestTable({
   const permPath = kind === "vm" ? "vms" : "lxc";
   const detailBase = kind === "vm" ? "vms" : "containers";
   const kindLabel = kind === "vm" ? "VM" : "LXC";
+  const listKey = kind === "vm" ? "all-vms" : "all-lxc";
 
   async function guestAction(hid: string, node: string, vmid: number, action: string) {
-    await api(`/api/hosts/${hid}/${permPath}/${node}/${vmid}`, {
-      method: "POST",
-      body: JSON.stringify({ action, confirm: action === "delete" }),
-    });
-    toast.success(t("common.taskStarted"));
+    try {
+      await api(`/api/hosts/${hid}/${permPath}/${node}/${vmid}`, {
+        method: "POST",
+        body: JSON.stringify({ action, confirm: action === "delete" }),
+      });
+      toast.success(t("common.taskDone"));
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: [listKey] }),
+        qc.invalidateQueries({ queryKey: ["dashboard"] }),
+      ]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("common.failed"));
+      throw err;
+    }
   }
 
   return (
@@ -92,9 +105,11 @@ export function GuestTable({
                   <td className="px-3 py-2">
                     <GuestStateBadge status={g.status} />
                   </td>
-                  <td className="px-3 py-2">{Math.round(g.cpu * 100)}%</td>
                   <td className="px-3 py-2">
-                    {bytesToSize(g.mem)} / {bytesToSize(g.maxmem)} ({percentage(g.mem, g.maxmem)}%)
+                    <GuestCpuBar guest={g} />
+                  </td>
+                  <td className="px-3 py-2">
+                    <GuestRamBar guest={g} />
                   </td>
                   <td className="px-3 py-2">{bytesToSize(g.maxdisk)}</td>
                   <td className="px-3 py-2">{formatUptime(g.uptime)}</td>

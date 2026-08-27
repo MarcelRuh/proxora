@@ -6,7 +6,7 @@ import { json } from "@/server/http/respond";
 import { eventsFromConfig, NOTIFICATION_TOPICS } from "@/lib/notification-topics";
 
 const schema = z.object({
-  type: z.enum(["discord", "webhook", "email"]),
+  type: z.enum(["discord", "webhook"]),
   name: z.string().min(1),
   enabled: z.boolean().optional(),
   events: z.array(z.enum(NOTIFICATION_TOPICS)).optional(),

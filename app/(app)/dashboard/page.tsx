@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { bytesToSize, formatPercent, formatUptime, percentage } from "@/lib/utils";
 import { useAptSummary } from "@/components/layout/apt-update-alert";
+import { GuestCpuBar, GuestRamBar } from "@/components/guests/guest-usage";
 import { useI18n } from "@/components/i18n/locale-provider";
 
 type Guest = {
@@ -22,6 +23,10 @@ type Guest = {
   hostName: string;
   template?: boolean;
   kind: "vm" | "lxc";
+  cpu?: number;
+  cpus?: number;
+  mem?: number;
+  maxmem?: number;
 };
 
 type Dashboard = {
@@ -239,6 +244,8 @@ export default function DashboardPage() {
                     <th className="px-2 py-2 font-medium">{t("table.name")}</th>
                     <th className="px-2 py-2 font-medium">{t("table.host")}</th>
                     <th className="px-2 py-2 font-medium">{t("table.status")}</th>
+                    <th className="px-2 py-2 font-medium">{t("table.cpu")}</th>
+                    <th className="px-2 py-2 font-medium">{t("table.ram")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -264,6 +271,12 @@ export default function DashboardPage() {
                       </td>
                       <td className="px-2 py-2">
                         <GuestStateBadge status={g.status} />
+                      </td>
+                      <td className="px-2 py-2">
+                        <GuestCpuBar guest={{ cpu: g.cpu ?? 0, cpus: g.cpus ?? 0 }} />
+                      </td>
+                      <td className="px-2 py-2">
+                        <GuestRamBar guest={{ mem: g.mem ?? 0, maxmem: g.maxmem ?? 0 }} />
                       </td>
                     </tr>
                   ))}

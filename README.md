@@ -5,7 +5,7 @@
 [![CI](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-> Status: **v1.0.35** – self-hosted Proxmox control plane with in-app updates.
+> Status: **v1.0.36** – self-hosted Proxmox control plane with in-app updates.
 
 Proxora talks to each node through the official **Proxmox VE API**. No cluster required.
 
@@ -53,6 +53,7 @@ Preserves `.env` and data volumes, syncs from GitHub, then runs `docker compose 
 - Storage overview including ZFS pool health
 - Proxmox APT updates with a job queue
 - Users, roles, granular RBAC, optional per-host allow-list
+- Optional TOTP 2FA at sign-in
 - Append-only audit log, global search (`Ctrl+K`)
 - Dark neon UI (Dockora-inspired)
 - **In-app self-update** from GitHub with version + progress bar

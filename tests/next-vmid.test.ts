@@ -19,4 +19,8 @@ describe("nextSmallerVmid", () => {
     const used = Array.from({ length: 145 }, (_, i) => 100 + i); // 100..244
     expect(nextSmallerVmid(used)).toBe(245);
   });
+
+  it("skips IDs whose implied IP is already used", () => {
+    expect(nextSmallerVmid([243, 244], 100, (id) => id === 242)).toBe(241);
+  });
 });

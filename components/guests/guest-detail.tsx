@@ -73,7 +73,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
       router.push(listPath);
       return;
     }
-    toast.success(name === "config" ? t("guest.configSaved") : t("common.taskStarted"));
+    toast.success(name === "config" ? t("guest.configSaved") : t("common.taskDone"));
     void refetch();
   }
 

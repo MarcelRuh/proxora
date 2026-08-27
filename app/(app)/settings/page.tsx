@@ -2,6 +2,8 @@
 
 import { PageHeader } from "@/components/layout/page-header";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
+import { TotpSection } from "@/components/settings/totp-section";
+import { GuestNetworksSection } from "@/components/settings/guest-networks-section";
 import { SelfUpdateSection } from "@/components/settings/self-update-section";
 import { NotificationsSection } from "@/components/settings/notifications-section";
 import { useI18n } from "@/components/i18n/locale-provider";
@@ -12,6 +14,8 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <PageHeader kicker={t("settings.kicker")} title={t("settings.title")} />
       <ChangePasswordForm />
+      <TotpSection />
+      <GuestNetworksSection />
       <div id="proxora">
         <SelfUpdateSection />
       </div>
