@@ -31,6 +31,7 @@ const TOPIC_LABELS: Record<NotificationTopic | "test", string> = {
   "vm.deleted": "VM gelöscht",
   "lxc.deleted": "Container gelöscht",
   "backup.started": "Backup gestartet",
+  "backup.failed": "Backup fehlgeschlagen",
   "backup.restored": "Backup eingespielt",
   test: "Test",
 };

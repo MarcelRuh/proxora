@@ -6,6 +6,7 @@ import { WebSocketServer } from "ws";
 import { logger } from "@/lib/logger";
 import { attachConsoleProxy } from "@/server/ws/console-proxy";
 import { startAptRefreshScheduler } from "@/server/services/apt-refresh";
+import { startBackupWatchScheduler } from "@/server/services/backup-watch";
 import { startHostReconnectScheduler } from "@/server/services/host-reconnect";
 import { ensureSystemRoles } from "@/server/services/role-sync";
 
@@ -46,6 +47,7 @@ async function main() {
     void ensureSystemRoles();
     startHostReconnectScheduler();
     startAptRefreshScheduler();
+    startBackupWatchScheduler();
   });
 }
 

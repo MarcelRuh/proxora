@@ -7,6 +7,7 @@ export const NOTIFICATION_TOPICS = [
   "vm.deleted",
   "lxc.deleted",
   "backup.started",
+  "backup.failed",
   "backup.restored",
 ] as const;
 
@@ -24,7 +25,9 @@ export function parseNotificationEvents(value: unknown): NotificationTopic[] | n
 /** `null` / missing list = all topics (legacy channels). Empty list = nothing. */
 export function channelAllowsTopic(events: NotificationTopic[] | null | undefined, topic: NotificationTopic): boolean {
   if (events == null) return true;
-  return events.includes(topic);
+  if (events.includes(topic)) return true;
+  // Failures used to ride on backup.started; keep existing Discord filters working.
+  return topic === "backup.failed" && events.includes("backup.started");
 }
 
 export function eventsFromConfig(config: Record<string, unknown>): NotificationTopic[] | null {

@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.42] – 2026-08-27
+
+### Added
+
+- Guest lists show Proxmox tags; filter by tag or search name/ID/tag.
+- Table headers sort by ID, name, host, status, CPU, RAM, disk, and uptime.
+- Discord event **Backup fehlgeschlagen**, including scheduled vzdump jobs (polled each minute).
+
 ## [1.0.41] – 2026-08-27
 
 ### Changed

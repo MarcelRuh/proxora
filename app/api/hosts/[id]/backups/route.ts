@@ -136,7 +136,7 @@ export const POST = apiRoute(
     });
   } catch (error) {
     if (body.action === "run" || body.action === "run-job") {
-      notifyTopic("backup.started", {
+      notifyTopic("backup.failed", {
         level: "error",
         title: "Backup fehlgeschlagen",
         message: `${notifyName ?? params.id} — fehlgeschlagen: ${error instanceof Error ? error.message : "unbekannt"}`,

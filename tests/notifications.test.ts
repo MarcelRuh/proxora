@@ -20,6 +20,8 @@ describe("notification topic filters", () => {
     expect(channelAllowsTopic(["host.updates", "vm.created"], "vm.created")).toBe(true);
     expect(channelAllowsTopic(["host.updates"], "lxc.created")).toBe(false);
     expect(channelAllowsTopic([], "host.online")).toBe(false);
+    expect(channelAllowsTopic(["backup.started"], "backup.failed")).toBe(true);
+    expect(channelAllowsTopic(["backup.restored"], "backup.failed")).toBe(false);
   });
 
   it("drops unknown event ids", () => {
