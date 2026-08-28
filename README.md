@@ -9,6 +9,32 @@
 
 Proxora talks to each node through the official **Proxmox VE API**. No cluster required.
 
+## Screenshots
+
+Host, guest, and disk identifiers in these shots are anonymized lab labels.
+
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" alt="Proxora dashboard" width="920">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/login.png" alt="Sign in" width="450">
+  &nbsp;
+  <img src="docs/screenshots/hosts.png" alt="Hosts" width="450">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/vms.png" alt="VMs" width="450">
+  &nbsp;
+  <img src="docs/screenshots/containers.png" alt="Containers" width="450">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/backups.png" alt="Backups" width="450">
+  &nbsp;
+  <img src="docs/screenshots/storage.png" alt="Storage and ZFS" width="450">
+</p>
+
 ## One-line install (wget)
 
 Requires Docker + Compose V2. Installs to `/opt/proxora` by default and generates strong secrets.
