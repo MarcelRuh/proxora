@@ -102,6 +102,20 @@ export function RestoreDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task]);
 
+  useEffect(() => {
+    if (!finished) return;
+    const timer = window.setTimeout(() => {
+      setBusy(false);
+      setUpid(null);
+      setFinished(false);
+      setErrorMsg(null);
+      settledRef.current = false;
+      onOpenChange(false);
+    }, 800);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finished]);
+
   function resetAndClose() {
     setBusy(false);
     setUpid(null);

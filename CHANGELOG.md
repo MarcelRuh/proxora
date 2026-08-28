@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.47] – 2026-08-28
+
+### Changed
+
+- Restore dialog closes automatically after a successful restore.
+
 ## [1.0.46] – 2026-08-28
 
 ### Added
