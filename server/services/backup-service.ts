@@ -1,18 +1,21 @@
 import { compactProxmoxBody } from "@/lib/lxc-net";
 import {
   backupCtimeMs,
+  guestNeedsStopForRestore,
   jobSchedulePayload,
   newBackupJobId,
   normalizeBackupJob,
   parseBackupVolid,
   pruneKeepLast,
+  waitUntilGuestStopped,
 } from "@/lib/backup";
+import { TASK_TIMEOUT, waitUpid } from "@/server/proxmox/task-wait";
 import { withHostClient } from "@/server/services/host-service";
 import type { SessionUser } from "@/server/auth/session";
 import { filterGuestsForUser } from "@/server/auth/session-core";
 import type { ProxmoxClient } from "@/server/proxmox/client";
 
-export type BackupGuest = { vmid: number; name: string; kind: "vm" | "lxc"; node: string };
+export type BackupGuest = { vmid: number; name: string; kind: "vm" | "lxc"; node: string; status: string };
 
 export type BackupFile = {
   volid: string;
@@ -96,12 +99,14 @@ export async function listHostBackups(hostId: string, user: SessionUser) {
         name: g.name,
         kind: "vm" as const,
         node: g.node,
+        status: g.status,
       })),
       ...filterGuestsForUser(user, hostId, "lxc", containers).map((g) => ({
         vmid: g.vmid,
         name: g.name,
         kind: "lxc" as const,
         node: g.node,
+        status: g.status,
       })),
     ].sort((a, b) => a.vmid - b.vmid);
     const allowedVmids =
@@ -161,12 +166,69 @@ export async function runBackupJob(client: ProxmoxClient, jobId: string, nodeHin
   return { upid, job, node };
 }
 
+async function currentGuestStatus(
+  client: ProxmoxClient,
+  kind: "vm" | "lxc",
+  node: string,
+  vmid: number,
+): Promise<string | null> {
+  try {
+    const rec = kind === "lxc" ? await client.lxc.status(node, vmid) : await client.vms.status(node, vmid);
+    return String(rec.status ?? "");
+  } catch {
+    return null;
+  }
+}
+
+async function stopGuestIfRunningForRestore(
+  client: ProxmoxClient,
+  input: { node: string; vmid: number; kind: "vm" | "lxc" },
+) {
+  const listed = await client.listGuests().catch(() => ({ vms: [], containers: [] }));
+  const ct = listed.containers.find((g) => g.vmid === input.vmid);
+  const vm = listed.vms.find((g) => g.vmid === input.vmid);
+  const match = input.kind === "lxc" ? ct ?? vm : vm ?? ct;
+  const kind: "vm" | "lxc" = match ? (match === ct ? "lxc" : "vm") : input.kind;
+  const node = match?.node || input.node;
+  const status = match?.status ?? (await currentGuestStatus(client, kind, node, input.vmid));
+  if (!guestNeedsStopForRestore(status)) return;
+
+  const api = kind === "lxc" ? client.lxc : client.vms;
+  try {
+    await api.shutdown(node, input.vmid);
+  } catch {
+    // already stopping or not running
+  }
+
+  const stoppedGracefully = await waitUntilGuestStopped(() => currentGuestStatus(client, kind, node, input.vmid), {
+    timeoutMs: 45_000,
+  });
+  if (!stoppedGracefully) {
+    try {
+      const upid = await api.stop(node, input.vmid);
+      await waitUpid(client, node, upid, TASK_TIMEOUT.stop);
+    } catch {
+      // poll below
+    }
+  }
+
+  const stopped = await waitUntilGuestStopped(() => currentGuestStatus(client, kind, node, input.vmid), {
+    timeoutMs: 30_000,
+  });
+  if (!stopped) {
+    throw new Error("Gast läuft noch und konnte nicht heruntergefahren werden");
+  }
+}
+
 export async function restoreBackup(
   client: ProxmoxClient,
   input: { node: string; volid: string; vmid: number; storage: string; force?: boolean; startAfter?: boolean },
 ) {
   const parsed = parseBackupVolid(input.volid);
   const kind = parsed.kind === "unknown" ? "vm" : parsed.kind;
+  if (input.force) {
+    await stopGuestIfRunningForRestore(client, { node: input.node, vmid: input.vmid, kind });
+  }
   const payload = compactProxmoxBody({
     vmid: input.vmid,
     storage: input.storage,

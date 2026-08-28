@@ -16,7 +16,7 @@ import { ForbiddenError } from "@/lib/errors";
 import { TASK_TIMEOUT, waitUpid } from "@/server/proxmox/task-wait";
 import { durationLabel } from "@/lib/duration";
 
-export const maxDuration = 800;
+export const maxDuration = 900;
 
 const jobFields = {
   enabled: z.boolean().optional(),

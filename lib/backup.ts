@@ -91,6 +91,36 @@ export function newBackupJobId(): string {
   return `backup-${Date.now().toString(36)}`;
 }
 
+/** True when an existing guest must be stopped before a force-restore. */
+export function guestNeedsStopForRestore(status: string | null | undefined): boolean {
+  const s = String(status ?? "")
+    .trim()
+    .toLowerCase();
+  return Boolean(s) && s !== "stopped";
+}
+
+export async function waitUntilGuestStopped(
+  readStatus: () => Promise<string | null | undefined>,
+  options?: {
+    timeoutMs?: number;
+    intervalMs?: number;
+    now?: () => number;
+    sleepFn?: (ms: number) => Promise<void>;
+  },
+): Promise<boolean> {
+  const timeoutMs = options?.timeoutMs ?? 90_000;
+  const intervalMs = options?.intervalMs ?? 1_500;
+  const now = options?.now ?? Date.now;
+  const sleepFn = options?.sleepFn ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const started = now();
+  for (;;) {
+    const status = await readStatus();
+    if (!guestNeedsStopForRestore(status)) return true;
+    if (now() - started >= timeoutMs) return false;
+    await sleepFn(intervalMs);
+  }
+}
+
 export type BackupFileFilter = {
   query: string;
   kind: "all" | "vm" | "lxc";

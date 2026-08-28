@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input, Label } from "@/components/ui/input";
 import { api } from "@/lib/api";
+import { guestNeedsStopForRestore } from "@/lib/backup";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { SELECT_CLASS, type BackupFile, type BackupOverview } from "@/components/backups/types";
 
@@ -42,6 +43,17 @@ export function RestoreDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, file?.volid]);
 
+  const target = useMemo(() => {
+    const id = Number(vmid);
+    if (!id) return null;
+    return overview.guests.find((g) => g.vmid === id) ?? null;
+  }, [overview.guests, vmid]);
+
+  const kind = target?.kind ?? (file?.kind === "vm" ? "vm" : "lxc");
+  const kindLabel = t(kind === "vm" ? "backup.kind.vm" : "backup.kind.lxc");
+  const running = guestNeedsStopForRestore(target?.status);
+  const shutdownRestore = force && running;
+
   async function submit() {
     if (!file) return;
     setBusy(true);
@@ -73,7 +85,11 @@ export function RestoreDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("backup.restoreTitle")}</DialogTitle>
-          <DialogDescription>{t("backup.restoreBody")}</DialogDescription>
+          <DialogDescription>
+            {shutdownRestore
+              ? t("backup.restoreRunningBody", { kind: kindLabel, id: vmid })
+              : t("backup.restoreBody")}
+          </DialogDescription>
         </DialogHeader>
         <p className="break-all text-xs text-muted-foreground">{file?.volid}</p>
         <div className="mt-3 grid gap-3">
@@ -105,6 +121,12 @@ export function RestoreDialog({
             <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
             {t("backup.force")}
           </label>
+          {force ? <p className="text-xs text-muted-foreground">{t("backup.restoreForceHint")}</p> : null}
+          {running && !force ? (
+            <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+              {t("backup.restoreRunningBody", { kind: kindLabel, id: vmid })}
+            </p>
+          ) : null}
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={startAfter} onChange={(e) => setStartAfter(e.target.checked)} />
             {t("backup.startAfter")}
@@ -113,8 +135,14 @@ export function RestoreDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
               {t("common.cancel")}
             </Button>
-            <Button onClick={() => void submit()} disabled={busy || !Number(vmid) || !node || !storage}>
-              {t("backup.restoreAction")}
+            <Button
+              variant={shutdownRestore ? "destructive" : "default"}
+              onClick={() => void submit()}
+              disabled={busy || !Number(vmid) || !node || !storage || (running && !force)}
+            >
+              {shutdownRestore
+                ? t("backup.restoreRunningAction", { kind: kindLabel })
+                : t("backup.restoreAction")}
             </Button>
           </div>
         </div>

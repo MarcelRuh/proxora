@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.45] – 2026-08-28
+
+### Added
+
+- Restore of a running VM or container: confirmation **Container/VM herunterfahren und Backup einspielen**, then shutdown (force-stop if needed) before the backup is applied.
+
 ## [1.0.44] – 2026-08-27
 
 ### Added

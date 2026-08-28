@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   backupCtimeMs,
   filterBackupFiles,
+  guestNeedsStopForRestore,
   jobSchedulePayload,
   normalizeBackupJob,
   parseBackupVolid,
   parseKeepLast,
   pruneKeepLast,
+  waitUntilGuestStopped,
 } from "@/lib/backup";
 
 describe("backup volid parsing", () => {
@@ -62,5 +64,39 @@ describe("backup file filter", () => {
     expect(
       filterBackupFiles(files, { query: "", kind: "all", storage: "all", period: "week", now: 1_700_060_000_000 }).map((f) => f.vmid),
     ).toEqual([100, 204]);
+  });
+});
+
+describe("restore stop helpers", () => {
+  it("requires a stop unless the guest is already stopped", () => {
+    expect(guestNeedsStopForRestore("running")).toBe(true);
+    expect(guestNeedsStopForRestore("paused")).toBe(true);
+    expect(guestNeedsStopForRestore("unknown")).toBe(true);
+    expect(guestNeedsStopForRestore("stopped")).toBe(false);
+    expect(guestNeedsStopForRestore(null)).toBe(false);
+    expect(guestNeedsStopForRestore("")).toBe(false);
+  });
+
+  it("resolves once the guest reports stopped", async () => {
+    let n = 0;
+    await expect(
+      waitUntilGuestStopped(async () => (++n < 2 ? "running" : "stopped"), {
+        timeoutMs: 10_000,
+        intervalMs: 1,
+        sleepFn: async () => {},
+      }),
+    ).resolves.toBe(true);
+  });
+
+  it("times out while the guest stays running", async () => {
+    let t = 0;
+    await expect(
+      waitUntilGuestStopped(async () => "running", {
+        timeoutMs: 5,
+        intervalMs: 1,
+        now: () => (t += 3),
+        sleepFn: async () => {},
+      }),
+    ).resolves.toBe(false);
   });
 });

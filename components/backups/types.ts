@@ -24,7 +24,7 @@ export type BackupFile = {
   format?: string;
 };
 
-export type BackupGuest = { vmid: number; name: string; kind: "vm" | "lxc"; node: string };
+export type BackupGuest = { vmid: number; name: string; kind: "vm" | "lxc"; node: string; status: string };
 
 export type BackupOverview = {
   nodes: string[];
