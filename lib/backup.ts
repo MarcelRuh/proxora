@@ -99,6 +99,37 @@ export function guestNeedsStopForRestore(status: string | null | undefined): boo
   return Boolean(s) && s !== "stopped";
 }
 
+export type ProxmoxLogLine = string | { t?: string; n?: number };
+
+export function logLineText(line: ProxmoxLogLine): string {
+  return (typeof line === "string" ? line : String(line.t ?? "")).replace(/\r$/, "");
+}
+
+/** Best-effort percent from Proxmox vzdump/qmrestore/vzrestore log lines. */
+export function parseProxmoxTaskProgress(lines: ProxmoxLogLine[]): { percent: number | null; detail: string } {
+  let percent: number | null = null;
+  let detail = "";
+  for (const line of lines) {
+    const text = logLineText(line).trim();
+    if (!text) continue;
+    detail = text;
+    const tagged = /\bprogress\s+(\d+(?:\.\d+)?)\s*%/i.exec(text);
+    const generic = /(?:^|[\s(])(\d{1,3}(?:\.\d+)?)\s*%(?:\s|[),]|$)/.exec(text);
+    const raw = tagged?.[1] ?? generic?.[1];
+    if (raw) {
+      const n = Number(raw);
+      if (Number.isFinite(n) && n >= 0 && n <= 100) percent = Math.max(percent ?? 0, n);
+    }
+    if (/extracting archive/i.test(text) && (percent == null || percent < 10)) {
+      percent = Math.max(percent ?? 0, 10);
+    }
+    if (/\b(restore is finished|restore successful)\b/i.test(text) || /^TASK OK$/i.test(text)) {
+      percent = 100;
+    }
+  }
+  return { percent, detail };
+}
+
 export async function waitUntilGuestStopped(
   readStatus: () => Promise<string | null | undefined>,
   options?: {

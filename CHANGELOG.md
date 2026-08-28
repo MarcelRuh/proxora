@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.46] – 2026-08-28
+
+### Added
+
+- Restore dialog shows live Proxmox task output and a progress bar (percent from vzdump/qmrestore/vzrestore logs).
+
 ## [1.0.45] – 2026-08-28
 
 ### Added

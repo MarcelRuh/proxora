@@ -7,6 +7,7 @@ import {
   normalizeBackupJob,
   parseBackupVolid,
   parseKeepLast,
+  parseProxmoxTaskProgress,
   pruneKeepLast,
   waitUntilGuestStopped,
 } from "@/lib/backup";
@@ -98,5 +99,28 @@ describe("restore stop helpers", () => {
         sleepFn: async () => {},
       }),
     ).resolves.toBe(false);
+  });
+});
+
+describe("proxmox restore log progress", () => {
+  it("reads vzdump-style progress lines and never goes backwards", () => {
+    const parsed = parseProxmoxTaskProgress([
+      "restore vma archive: local:backup/vzdump-qemu-100.vma.zst",
+      "progress 1% (read 1048576 bytes, duration 1 sec)",
+      "progress 45% (read 47185920 bytes, duration 12 sec)",
+      "progress 12% (read 12582912 bytes, duration 3 sec)",
+      "restore is finished",
+    ]);
+    expect(parsed.percent).toBe(100);
+    expect(parsed.detail).toBe("restore is finished");
+  });
+
+  it("treats LXC archive extract as early progress", () => {
+    const parsed = parseProxmoxTaskProgress([
+      { n: 1, t: "extracting archive '/var/lib/vz/dump/vzdump-lxc-204.tar.zst'" },
+      { n: 2, t: "Total bytes: 12345" },
+    ]);
+    expect(parsed.percent).toBe(10);
+    expect(parsed.detail).toContain("Total bytes");
   });
 });

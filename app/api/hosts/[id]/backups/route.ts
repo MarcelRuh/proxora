@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { after } from "next/server";
 import { apiRoute } from "@/server/http/api-route";
 import { json } from "@/server/http/respond";
 import { clientIp } from "@/server/auth/session";
@@ -13,7 +14,7 @@ import { lookupGuestName } from "@/server/notifications/guest-name";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { backupPermissionForAction, hasPermission } from "@/lib/permissions";
 import { ForbiddenError } from "@/lib/errors";
-import { TASK_TIMEOUT, waitUpid } from "@/server/proxmox/task-wait";
+import { TASK_TIMEOUT, isUpid, waitUpid } from "@/server/proxmox/task-wait";
 import { durationLabel } from "@/lib/duration";
 
 export const maxDuration = 900;
@@ -121,7 +122,6 @@ export const POST = apiRoute(
         notifyId = String(body.vmid);
         notifyNode = body.node;
         const upid = await restoreBackup(client, body);
-        await waitUpid(client, body.node, upid, TASK_TIMEOUT.backup);
         return { upid };
       }
       case "delete-file": {
@@ -205,15 +205,41 @@ export const POST = apiRoute(
     });
   }
   if (body.action === "restore") {
-    notifyTopic("backup.restored", {
-      level: "success",
-      title: "Backup eingespielt",
-      message: `VM/CT ${body.vmid} ← ${body.volid} — fertig in ${took}`,
-      hostId: params.id,
-      name: notifyName,
-      id: notifyId,
-      host: hostName,
-      node: notifyNode,
+    const restoreUpid = typeof result.upid === "string" ? result.upid : "";
+    const restoreNode = body.node;
+    const restoreHost = hostName;
+    const restoreName = notifyName;
+    const restoreId = notifyId;
+    after(async () => {
+      const started = Date.now();
+      try {
+        if (isUpid(restoreUpid)) {
+          await withHostClient(params.id, session.user, async (client) => {
+            await waitUpid(client, restoreNode, restoreUpid, TASK_TIMEOUT.backup);
+          });
+        }
+        notifyTopic("backup.restored", {
+          level: "success",
+          title: "Backup eingespielt",
+          message: `VM/CT ${body.vmid} ← ${body.volid} — fertig in ${durationLabel(Date.now() - started)}`,
+          hostId: params.id,
+          name: restoreName,
+          id: restoreId,
+          host: restoreHost,
+          node: restoreNode,
+        });
+      } catch (error) {
+        notifyTopic("backup.restored", {
+          level: "error",
+          title: "Restore fehlgeschlagen",
+          message: `VM/CT ${body.vmid} — fehlgeschlagen: ${error instanceof Error ? error.message : "unbekannt"}`,
+          hostId: params.id,
+          name: restoreName,
+          id: restoreId,
+          host: restoreHost,
+          node: restoreNode,
+        });
+      }
     });
   }
   return json(result);
