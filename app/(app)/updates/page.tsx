@@ -62,10 +62,10 @@ export default function UpdatesPage() {
   });
 
   const checkOne = useMutation({
-    mutationFn: (hostId: string) =>
+    mutationFn: ({ hostId, node }: { hostId: string; node?: string }) =>
       api(`/api/hosts/${hostId}/updates`, {
         method: "POST",
-        body: JSON.stringify({ action: "check" }),
+        body: JSON.stringify({ action: "check", node }),
       }),
     onSuccess: () => {
       toast.success("Paketliste aktualisiert");
@@ -121,14 +121,24 @@ export default function UpdatesPage() {
           <CardHeader>
             <CardTitle>Upgrade-Konsole · {shell.name}</CardTitle>
             <CardDescription>
-              Interaktives Upgrade auf {shell.node}. Nach Abschluss die Konsole schließen und die Paketliste neu
-              prüfen. Benötigt root@pam, wie in Proxmox selbst.
+              Interaktives Upgrade auf {shell.node}. Nach Abschluss die Konsole schließen — die Paketliste wird dann
+              automatisch neu geprüft. Benötigt root@pam, wie in Proxmox selbst.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <WebConsole hostId={shell.hostId} node={shell.node} kind="node" cmd="upgrade" />
-            <Button variant="outline" size="sm" onClick={() => setShell(null)}>
-              Konsole schließen
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={checkOne.isPending}
+              onClick={() => {
+                const hostId = shell.hostId;
+                const node = shell.node;
+                setShell(null);
+                checkOne.mutate({ hostId, node });
+              }}
+            >
+              {checkOne.isPending ? "Prüfe Paketliste…" : "Konsole schließen"}
             </Button>
           </CardContent>
         </Card>
@@ -137,7 +147,7 @@ export default function UpdatesPage() {
       <div className="grid gap-4 md:grid-cols-2">
         {(details ?? []).map((row) => {
           const count = row.updates.reduce((acc, n) => acc + n.count, 0);
-          const checking = checkOne.isPending && checkOne.variables === row.host.id;
+          const checking = checkOne.isPending && checkOne.variables?.hostId === row.host.id;
           return (
             <Card key={row.host.id}>
               <CardHeader className="flex flex-row items-center justify-between">
@@ -169,7 +179,7 @@ export default function UpdatesPage() {
                     size="sm"
                     variant="outline"
                     disabled={checking || checkAll.isPending}
-                    onClick={() => checkOne.mutate(row.host.id)}
+                    onClick={() => checkOne.mutate({ hostId: row.host.id })}
                   >
                     {checking ? "Prüfe…" : "Paketliste prüfen"}
                   </Button>

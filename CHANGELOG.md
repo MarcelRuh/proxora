@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.48] – 2026-08-28
+
+### Changed
+
+- Closing the host upgrade console refreshes that node's APT package list automatically.
+
 ## [1.0.47] – 2026-08-28
 
 ### Changed
