@@ -158,5 +158,5 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     host: hostName,
     node: body.node,
   });
-  return json({ upid, started, startError }, 201);
+  return json({ upid, started, startError, node: body.node, vmid: body.vmid }, 201);
 });

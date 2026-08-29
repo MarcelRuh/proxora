@@ -7,11 +7,11 @@ import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { ValidationError } from "@/lib/errors";
 import { parseBackupVolid } from "@/lib/backup";
-import { mergeTemplateCatalog, normalizeAplTemplate, vztmplVolid } from "@/lib/lxc-templates";
-import { collectVztmplVolumes } from "@/server/services/lxc-template-catalog";
+import { filenameFromUrl, isHttpUrl, isoVolid, mergeIsoCatalog } from "@/lib/iso-images";
+import { collectIsoVolumes } from "@/server/services/lxc-template-catalog";
 import { collectVolumeUsers } from "@/server/services/volume-usage";
 
-export const GET = apiRoute("lxc.create", async (req, session, params) => {
+export const GET = apiRoute("vm.create", async (req, session, params) => {
   const nodeParam = new URL(req.url).searchParams.get("node")?.trim() || undefined;
   const data = await withHostClient(params.id, session.user, async (client) => {
     const nodes = await client.nodes.list();
@@ -20,14 +20,8 @@ export const GET = apiRoute("lxc.create", async (req, session, params) => {
       return { nodes: [], node: "", storages: [], installed: [] as string[], catalog: [], usedBy: {} };
     }
     const nodeNames = nodes.map((n) => n.node);
-    const [catalogRaw, volumes] = await Promise.all([
-      client.nodes.aplinfo(selected).catch(() => [] as Array<Record<string, unknown>>),
-      collectVztmplVolumes(client, nodeNames),
-    ]);
-    const catalog = mergeTemplateCatalog(
-      catalogRaw.map((row) => normalizeAplTemplate(row)).filter((row): row is NonNullable<typeof row> => Boolean(row)),
-      volumes.volids,
-    );
+    const volumes = await collectIsoVolumes(client, nodeNames);
+    const catalog = mergeIsoCatalog(volumes.volids);
     const usedBy = await collectVolumeUsers(client, volumes.volids);
     return {
       nodes: nodeNames,
@@ -45,7 +39,8 @@ const downloadSchema = z.object({
   action: z.literal("download").optional(),
   node: z.string().min(1, "Node fehlt"),
   storage: z.string().min(1, "Storage fehlt"),
-  template: z.string().min(1, "Template fehlt"),
+  url: z.string().min(1, "URL fehlt"),
+  filename: z.string().optional(),
 });
 
 const deleteSchema = z.object({
@@ -54,19 +49,19 @@ const deleteSchema = z.object({
   volid: z.string().min(1, "Volume fehlt"),
 });
 
-export const POST = apiRoute("lxc.create", async (req, session, params) => {
+export const POST = apiRoute("vm.create", async (req, session, params) => {
   const raw = await req.json();
   const action = raw && typeof raw === "object" && "action" in raw && raw.action === "delete" ? "delete" : "download";
   if (action === "delete") {
     const body = deleteSchema.parse(raw);
     const parsed = parseBackupVolid(body.volid);
-    if (!parsed.storage || !parsed.volume) throw new ValidationError("Ungültiges Template-Volume");
+    if (!parsed.storage || !parsed.volume) throw new ValidationError("Ungültiges ISO-Volume");
     await withHostClient(params.id, session.user, async (client, host) => {
       await client.storage.deleteContent(body.node, parsed.storage, parsed.volume);
       await writeAuditLog({
         userId: session.user.id,
         ip: await clientIp(),
-        action: AUDIT_ACTIONS.LXC_TEMPLATE_DELETED,
+        action: AUDIT_ACTIONS.ISO_DELETED,
         target: parsed.filename || body.volid,
         hostId: params.id,
         result: "SUCCESS",
@@ -77,19 +72,27 @@ export const POST = apiRoute("lxc.create", async (req, session, params) => {
   }
 
   const body = downloadSchema.parse(raw);
+  if (!isHttpUrl(body.url)) throw new ValidationError("Nur http(s)-URLs sind erlaubt");
+  const filename = (body.filename?.trim() || filenameFromUrl(body.url)).trim();
+  if (!filename || !/\.iso$/i.test(filename)) throw new ValidationError("ISO-Dateiname fehlt (.iso)");
+
   const result = await withHostClient(params.id, session.user, async (client, host) => {
-    const upid = await client.nodes.downloadAppliance(body.node, body.storage, body.template);
+    const upid = await client.storage.downloadUrl(body.node, body.storage, {
+      content: "iso",
+      url: body.url,
+      filename,
+    });
     if (!upid) throw new ValidationError("Proxmox hat keinen Download-Task zurückgegeben");
     await writeAuditLog({
       userId: session.user.id,
       ip: await clientIp(),
-      action: AUDIT_ACTIONS.LXC_TEMPLATE_DOWNLOADED,
-      target: body.template,
+      action: AUDIT_ACTIONS.ISO_DOWNLOADED,
+      target: filename,
       hostId: params.id,
       result: "SUCCESS",
-      metadata: { node: body.node, storage: body.storage, upid, host: host.name },
+      metadata: { node: body.node, storage: body.storage, url: body.url, upid, host: host.name },
     });
-    return { upid, node: body.node, volid: vztmplVolid(body.storage, body.template) };
+    return { upid, node: body.node, volid: isoVolid(body.storage, filename), filename };
   });
   return json(result, 201);
 });

@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.55] – 2026-08-29
+
+### Added
+
+- Templates page has an ISO tab (catalog + URL download, update, delete) with the same progress dialog as LXC templates.
+- Create VM/container shows a progress dialog and opens the new guest when done.
+- Create forms link to Templates when no ISO or LXC template is installed.
+- Deleting a template or ISO warns when a guest still references it.
+
 ## [1.0.54] – 2026-08-29
 
 ### Changed

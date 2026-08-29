@@ -1,9 +1,10 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { CreateIpFields, ipCollision, ipFieldsFromVmid } from "@/components/guests/create-ip-fields";
+import { CreateProgressDialog } from "@/components/guests/create-progress-dialog";
 import { DEFAULT_GUEST_NETWORK, type GuestIpNetwork } from "@/lib/create-ip";
 import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
@@ -53,6 +55,9 @@ export default function CreateVmPage() {
     startAfter: true,
     cloudInit: true,
   });
+  const [progress, setProgress] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [progressError, setProgressError] = useState<string | null>(null);
+  const createdRef = useRef<{ hostId: string; node: string; vmid: number } | null>(null);
   const { data: options } = useQuery({
     queryKey: ["options", form.hostId],
     enabled: Boolean(form.hostId),
@@ -113,7 +118,7 @@ export default function CreateVmPage() {
     mutationFn: () => {
       const node = form.node || options?.nodes[0]?.node || "";
       const vmid = form.vmid || options?.nextid || 0;
-      return api(`/api/hosts/${form.hostId}/vms`, {
+      return api<{ node?: string; vmid?: number; startError?: string }>(`/api/hosts/${form.hostId}/vms`, {
         method: "POST",
         body: JSON.stringify({
           node,
@@ -134,12 +139,32 @@ export default function CreateVmPage() {
         }),
       });
     },
-    onSuccess: () => {
-      toast.success(t("vms.created"));
-      router.push("/vms");
+    onMutate: () => {
+      setProgressError(null);
+      setProgress("running");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onSuccess: (res) => {
+      const node = res.node || form.node || options?.nodes[0]?.node || "";
+      const vmid = res.vmid || form.vmid || options?.nextid || 0;
+      createdRef.current = { hostId: form.hostId, node, vmid };
+      if (res.startError) toast.error(t("create.startFailed", { error: res.startError }));
+      else toast.success(t("vms.created"));
+      setProgress("done");
+    },
+    onError: (e: Error) => {
+      setProgressError(e.message);
+      setProgress("error");
+    },
   });
+
+  useEffect(() => {
+    if (progress !== "done" || !createdRef.current) return;
+    const target = createdRef.current;
+    const timer = window.setTimeout(() => {
+      router.push(`/vms/${target.hostId}/${target.node}/${target.vmid}`);
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [progress, router]);
 
   const canSubmit =
     Boolean(form.hostId) &&
@@ -218,6 +243,14 @@ export default function CreateVmPage() {
                 </option>
               ))}
             </select>
+            {form.hostId && !isos.length ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("create.noIsoHint")}{" "}
+                <Link className="text-primary underline-offset-4 hover:underline" href={`/templates?host=${form.hostId}&tab=iso`}>
+                  {t("create.openIsos")}
+                </Link>
+              </p>
+            ) : null}
           </label>
           <label className="text-sm">
             {t("create.storage")}
@@ -275,6 +308,19 @@ export default function CreateVmPage() {
           </div>
         </CardContent>
       </Card>
+      <CreateProgressDialog
+        open={progress !== "idle"}
+        locked={progress === "running"}
+        finished={progress === "done"}
+        error={progressError}
+        title={t("create.progressVm")}
+        detail={form.name.trim() || t("create.progressVm")}
+        onClose={() => {
+          if (progress === "running") return;
+          setProgress("idle");
+          setProgressError(null);
+        }}
+      />
     </div>
   );
 }

@@ -29,6 +29,13 @@ export class StorageApi {
       `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/content/${encodeURIComponent(volume)}`,
     );
   }
+
+  downloadUrl(node: string, storage: string, params: { content: "iso" | "vztmpl"; url: string; filename: string }) {
+    return this.http.post<string>(
+      `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/download-url`,
+      params,
+    );
+  }
 }
 
 export class ZfsApi {
