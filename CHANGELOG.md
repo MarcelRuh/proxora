@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.62] – 2026-08-29
+
+### Fixed
+
+- Inbox popover is portaled next to the sidebar so it is no longer clipped by the shell.
+
 ## [1.0.61] – 2026-08-29
 
 ### Fixed
