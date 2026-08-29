@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.61] – 2026-08-29
+
+### Fixed
+
+- Disk-full alerts no longer fire for VMs whose usage cannot be read (no guest agent, 0/0, or tiny leftover mounts at 100%). Unreadable LXC disks (`disk=0`) are skipped the same way.
+
 ## [1.0.60] – 2026-08-29
 
 ### Added

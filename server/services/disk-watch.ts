@@ -8,6 +8,7 @@ import {
   diskUsagePercent,
   guestDiskKey,
   guestFilesystemPercent,
+  guestClusterDiskPercent,
   isStorageMonitored,
   storageDiskKey,
   type DiskSample,
@@ -32,7 +33,11 @@ function agentEntries(payload: unknown): GuestFsEntry[] {
 
 async function remember(samples: DiskSample[], alertPercent: number, clearPercent: number): Promise<number> {
   const state = await loadDiskWatchState();
-  const notified = { ...state.notified };
+  const liveKeys = new Set(samples.map((sample) => sample.key));
+  const notified: Record<string, boolean> = {};
+  for (const [key, flag] of Object.entries(state.notified)) {
+    if (liveKeys.has(key)) notified[key] = flag;
+  }
   let count = 0;
   for (const sample of samples) {
     const prev = notified[sample.key] ?? false;
@@ -115,7 +120,7 @@ export async function scanDiskUsage(): Promise<number> {
       }
       for (const guest of guests.containers) {
         if (guest.template || !guest.vmid) continue;
-        const percent = diskUsagePercent(guest.disk, guest.maxdisk);
+        const percent = guestClusterDiskPercent(guest.disk, guest.maxdisk);
         if (percent == null) continue;
         const sample: DiskSample = {
           key: guestDiskKey(host.id, "lxc", guest.vmid),

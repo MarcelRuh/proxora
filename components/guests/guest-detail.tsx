@@ -19,7 +19,7 @@ import { BackupNowDialog } from "@/components/backups/backup-now-dialog";
 import { RestoreDialog } from "@/components/backups/restore-dialog";
 import type { BackupFile, BackupOverview } from "@/components/backups/types";
 import { api } from "@/lib/api";
-import { bytesToSize, formatUptime, guestCpuPercent, percentage } from "@/lib/utils";
+import { bytesToSize, formatUptime, guestCpuPercent, guestSizeDetail, percentage } from "@/lib/utils";
 import type { PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
@@ -249,7 +249,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Resource label={t("dashboard.cpu")} value={cpuPercent} detail={t("dashboard.cores", { n: cores || "—" }) + ` · ${Math.round(cpuPercent)}%`} />
         <Resource label={t("dashboard.ram")} value={percentage(mem, maxmem)} detail={`${bytesToSize(mem)} / ${bytesToSize(maxmem)}`} />
-        <Resource label={t("dashboard.disk")} value={percentage(disk, maxdisk)} detail={`${bytesToSize(disk)} / ${bytesToSize(maxdisk)}`} />
+        <Resource label={t("dashboard.disk")} value={percentage(disk, maxdisk)} detail={guestSizeDetail(disk, maxdisk)} />
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-muted-foreground">{t("guest.network")}</CardTitle>

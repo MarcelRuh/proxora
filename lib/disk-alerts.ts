@@ -31,6 +31,7 @@ export type GuestFsEntry = {
   type?: string;
   "total-bytes"?: number;
   "used-bytes"?: number;
+  disk?: Array<{ "total-bytes"?: number; "used-bytes"?: number }>;
 };
 
 export function parseDiskAlertSettings(value: unknown): DiskAlertSettings {
@@ -79,24 +80,46 @@ export function isStorageMonitored(storage: { enabled?: number; active?: number;
 
 const SKIP_FS = /^(tmpfs|devtmpfs|devfs|overlay|squashfs|rpc_pipefs|nsfs|cgroup2?|proc|sysfs|fusectl|debugfs|tracefs|ramfs)$/i;
 const SKIP_MOUNT = /^\/(proc|sys|dev|run|snap|boot\/efi)(\/|$)/;
+/** Ignore EFI/config leftovers that sit at 100% while the guest disk still shows 0. */
+export const MIN_GUEST_FS_BYTES = 512 * 1024 * 1024;
+
+function fsUsage(entry: GuestFsEntry): { used: number; total: number } | null {
+  const candidates = [
+    { used: entry["used-bytes"], total: entry["total-bytes"] },
+    ...(entry.disk ?? []).map((disk) => ({ used: disk["used-bytes"], total: disk["total-bytes"] })),
+  ];
+  for (const candidate of candidates) {
+    if (diskUsagePercent(candidate.used, candidate.total) == null) continue;
+    if ((candidate.total ?? 0) < MIN_GUEST_FS_BYTES) continue;
+    return { used: candidate.used as number, total: candidate.total as number };
+  }
+  return null;
+}
 
 export function guestFilesystemPercent(entries: GuestFsEntry[] | undefined | null): number | null {
   if (!entries?.length) return null;
-  const usable = entries.filter((entry) => {
+  const usable = entries.flatMap((entry) => {
     const mount = entry.mountpoint ?? "";
     const type = entry.type ?? "";
-    if (!mount || mount === "none") return false;
-    if (SKIP_FS.test(type) || SKIP_MOUNT.test(mount)) return false;
-    return diskUsagePercent(entry["used-bytes"], entry["total-bytes"]) != null;
+    if (!mount || mount === "none") return [];
+    if (SKIP_FS.test(type) || SKIP_MOUNT.test(mount)) return [];
+    const usage = fsUsage(entry);
+    if (!usage) return [];
+    return [{ mount, ...usage }];
   });
   if (!usable.length) return null;
-  const root = usable.find((entry) => entry.mountpoint === "/");
-  const pick = root ?? usable.reduce((best, entry) => {
-    const pct = diskUsagePercent(entry["used-bytes"], entry["total-bytes"]) ?? 0;
-    const bestPct = diskUsagePercent(best["used-bytes"], best["total-bytes"]) ?? 0;
-    return pct > bestPct ? entry : best;
-  });
-  return diskUsagePercent(pick["used-bytes"], pick["total-bytes"]);
+  const root = usable.find((entry) => entry.mount === "/");
+  if (root) return diskUsagePercent(root.used, root.total);
+  const unixRoot = entries.some((entry) => entry.mountpoint === "/");
+  if (unixRoot) return null;
+  const biggest = usable.reduce((best, entry) => (entry.total > best.total ? entry : best));
+  return diskUsagePercent(biggest.used, biggest.total);
+}
+
+/** Cluster disk=0 means "unknown", not empty — do not treat as 0% or 100%. */
+export function guestClusterDiskPercent(used: number | undefined | null, total: number | undefined | null): number | null {
+  if (used == null || used <= 0) return null;
+  return diskUsagePercent(used, total);
 }
 
 /** Rising edge at alert%, reset below clear% so we do not spam while it hovers. */

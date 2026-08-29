@@ -1,6 +1,6 @@
 {
   "name": "proxora",
-  "version": "1.0.60",
+  "version": "1.0.61",
   "private": true,
   "description": "Proxora – central management for independent Proxmox VE hosts",
   "license": "MIT",
