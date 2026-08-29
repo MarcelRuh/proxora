@@ -1,13 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { api } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import { useI18n } from "@/components/i18n/locale-provider";
 
 export type AptSummary = {
   total: number;
@@ -23,61 +17,4 @@ export function useAptSummary() {
     refetchInterval: 60_000,
     retry: false,
   });
-}
-
-export function AptUpdateBanner() {
-  const { t } = useI18n();
-  const pathname = usePathname();
-  const { data } = useAptSummary();
-  const [hidden, setHidden] = useState(false);
-
-  useEffect(() => {
-    if (!data?.total || !data.fingerprint) return;
-    const toastKey = `proxora-apt-toast:${data.fingerprint}`;
-    if (typeof sessionStorage !== "undefined" && !sessionStorage.getItem(toastKey)) {
-      sessionStorage.setItem(toastKey, "1");
-      const names = data.hosts
-        .filter((h) => h.count > 0)
-        .map((h) => `${h.name} (${h.count})`)
-        .join(", ");
-      toast.warning(t("apt.available", { n: data.total }), {
-        description: names,
-        duration: 12_000,
-      });
-    }
-    const bannerKey = `proxora-apt-banner:${data.fingerprint}`;
-    setHidden(typeof sessionStorage !== "undefined" && sessionStorage.getItem(bannerKey) === "1");
-  }, [data?.fingerprint, data?.total, data?.hosts, t]);
-
-  if (!data?.total || hidden || pathname === "/updates") return null;
-
-  const names = data.hosts
-    .filter((h) => h.count > 0)
-    .map((h) => h.name)
-    .join(", ");
-
-  function dismiss() {
-    if (data?.fingerprint && typeof sessionStorage !== "undefined") {
-      sessionStorage.setItem(`proxora-apt-banner:${data.fingerprint}`, "1");
-    }
-    setHidden(true);
-  }
-
-  return (
-    <div className="flex flex-wrap items-center gap-3 border-b border-warning/35 bg-warning/10 px-4 py-2 text-sm">
-      <p className="min-w-0 flex-1">
-        <span className="font-[family-name:var(--font-display)] text-[10px] tracking-[0.22em] text-warning">
-          {t("apt.banner")}
-        </span>
-        <span className="ml-3 font-medium text-warning">{t("apt.available", { n: data.total })}</span>
-        <span className="text-muted-foreground"> · {names}</span>
-      </p>
-      <Button size="sm" variant="outline" asChild>
-        <Link href="/updates">{t("apt.show")}</Link>
-      </Button>
-      <Button size="sm" variant="ghost" onClick={dismiss}>
-        {t("apt.close")}
-      </Button>
-    </div>
-  );
 }

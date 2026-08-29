@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.66] – 2026-08-30
+
+### Changed
+
+- Website no longer shows inbox, disk-full, or APT banners. Alerts still go to Discord.
+
 ## [1.0.65] – 2026-08-29
 
 ### Fixed
