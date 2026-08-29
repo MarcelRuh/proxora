@@ -13,6 +13,7 @@ export interface VmCreateParams {
   cpu?: string;
   scsihw?: string;
   ide2?: string;
+  ide3?: string;
   scsi0?: string;
   virtio0?: string;
   sata0?: string;

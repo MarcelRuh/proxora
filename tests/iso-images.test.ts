@@ -5,7 +5,12 @@ import {
   isoVersionFromFilename,
   isoVolid,
   isHttpUrl,
+  isVirtioIso,
+  isWindowsIso,
   mergeIsoCatalog,
+  ostypeFromIso,
+  suggestVirtioIso,
+  vmCdromDisks,
 } from "@/lib/iso-images";
 import { configReferencesVolume, formatVolumeUsers, usersForVolids } from "@/lib/volume-usage";
 
@@ -38,6 +43,26 @@ describe("iso images", () => {
   it("keeps unknown installed isos in the table", () => {
     const rows = mergeIsoCatalog(["local:iso/windows-11.iso"]);
     expect(rows.some((row) => row.installedFilename === "windows-11.iso")).toBe(true);
+  });
+
+  it("detects Windows and VirtIO ISOs and maps CD-ROMs", () => {
+    expect(isWindowsIso("local:iso/Win11_24H2.iso")).toBe(true);
+    expect(isWindowsIso("local:iso/debian-13.6.0-amd64-netinst.iso")).toBe(false);
+    expect(isVirtioIso("local:iso/virtio-win-0.1.266.iso")).toBe(true);
+    expect(ostypeFromIso("local:iso/Win11_24H2.iso")).toBe("win11");
+    expect(ostypeFromIso("local:iso/Win10_22H2.iso")).toBe("win10");
+    expect(
+      suggestVirtioIso(
+        ["local:iso/Win11_24H2.iso", "local:iso/virtio-win-0.1.266.iso"],
+        "local:iso/Win11_24H2.iso",
+      ),
+    ).toBe("local:iso/virtio-win-0.1.266.iso");
+    expect(
+      vmCdromDisks("local:iso/Win11_24H2.iso", "local:iso/virtio-win-0.1.266.iso"),
+    ).toEqual({
+      ide2: "local:iso/Win11_24H2.iso,media=cdrom",
+      ide3: "local:iso/virtio-win-0.1.266.iso,media=cdrom",
+    });
   });
 });
 

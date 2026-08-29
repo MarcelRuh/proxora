@@ -15,6 +15,7 @@ import { CreateIpFields, ipCollision, ipFieldsFromVmid } from "@/components/gues
 import { CreateProgressDialog } from "@/components/guests/create-progress-dialog";
 import { DEFAULT_GUEST_NETWORK, type GuestIpNetwork } from "@/lib/create-ip";
 import type { LxcIpMode } from "@/lib/lxc-net";
+import { isWindowsIso, suggestVirtioIso } from "@/lib/iso-images";
 import { useI18n } from "@/components/i18n/locale-provider";
 
 type Options = {
@@ -43,6 +44,7 @@ export default function CreateVmPage() {
     vmid: 0,
     name: "",
     iso: "",
+    iso2: "",
     diskStorage: "",
     diskSize: "32",
     cores: 2,
@@ -102,6 +104,7 @@ export default function CreateVmPage() {
       const vmid = f.vmid > 0 ? f.vmid : (options.nextid ?? 0);
       const isoList = (options.isos ?? []).map((i) => String(i.volid ?? "")).filter(Boolean);
       const iso = f.iso && isoList.includes(f.iso) ? f.iso : "";
+      const iso2 = f.iso2 && isoList.includes(f.iso2) && f.iso2 !== iso ? f.iso2 : "";
       const netList = options.networks?.length ? options.networks : undefined;
       const network =
         f.network && netList?.some((n) => n.id === f.network) ? f.network : (netList?.[0]?.id ?? f.network ?? DEFAULT_GUEST_NETWORK);
@@ -110,7 +113,7 @@ export default function CreateVmPage() {
           ? ipFieldsFromVmid(network, vmid, netList)
           : {};
       const cloudInit = iso ? false : f.cloudInit;
-      return { ...f, node, diskStorage, bridge, vmid, iso, network, cloudInit, ...ip };
+      return { ...f, node, diskStorage, bridge, vmid, iso, iso2, network, cloudInit, ...ip };
     });
   }, [options]);
 
@@ -125,6 +128,7 @@ export default function CreateVmPage() {
           vmid,
           name: form.name.trim(),
           iso: form.iso || undefined,
+          iso2: form.iso2 || undefined,
           diskStorage: form.diskStorage,
           diskSize: String(Number(form.diskSize) || 32),
           cores: form.cores,
@@ -187,7 +191,7 @@ export default function CreateVmPage() {
               className={selectClass}
               value={form.hostId}
               onChange={(e) =>
-                setForm({ ...form, hostId: e.target.value, node: "", iso: "", diskStorage: "", bridge: "", vmid: 0 })
+                setForm({ ...form, hostId: e.target.value, node: "", iso: "", iso2: "", diskStorage: "", bridge: "", vmid: 0 })
               }
             >
               <option value="">{t("common.chooseHost")}</option>
@@ -228,13 +232,23 @@ export default function CreateVmPage() {
             <select
               className={selectClass}
               value={form.iso}
-              onChange={(e) =>
+              onChange={(e) => {
+                const iso = e.target.value;
+                const iso2 =
+                  iso && isWindowsIso(iso)
+                    ? form.iso2 && form.iso2 !== iso
+                      ? form.iso2
+                      : suggestVirtioIso(isos, iso)
+                    : form.iso2 === iso
+                      ? ""
+                      : form.iso2;
                 setForm({
                   ...form,
-                  iso: e.target.value,
-                  cloudInit: e.target.value ? false : true,
-                })
-              }
+                  iso,
+                  iso2,
+                  cloudInit: iso ? false : true,
+                });
+              }}
             >
               <option value="">{t("common.none")}</option>
               {isos.map((volid) => (
@@ -250,6 +264,26 @@ export default function CreateVmPage() {
                   {t("create.openIsos")}
                 </Link>
               </p>
+            ) : null}
+          </label>
+          <label className="text-sm md:col-span-2">
+            {t("create.iso2")}
+            <select
+              className={selectClass}
+              value={form.iso2}
+              onChange={(e) => setForm({ ...form, iso2: e.target.value })}
+            >
+              <option value="">{t("common.none")}</option>
+              {isos
+                .filter((volid) => volid !== form.iso)
+                .map((volid) => (
+                  <option key={volid} value={volid}>
+                    {volid.split("/").pop() ?? volid}
+                  </option>
+                ))}
+            </select>
+            {form.iso && isWindowsIso(form.iso) ? (
+              <p className="mt-1 text-sm text-muted-foreground">{t("create.iso2Hint")}</p>
             ) : null}
           </label>
           <label className="text-sm">

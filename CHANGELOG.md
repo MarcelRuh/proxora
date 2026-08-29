@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.68] – 2026-08-30
+
+### Added
+
+- VM create accepts a second CD (VirtIO). Windows install ISO goes to `ide2`, VirtIO drivers to `ide3`.
+
 ## [1.0.67] – 2026-08-30
 
 ### Fixed

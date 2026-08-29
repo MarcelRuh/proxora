@@ -62,6 +62,36 @@ export function isoFamily(filename: string): string {
   return file.replace(/\.iso$/i, "") || file;
 }
 
+export function isVirtioIso(volid: string): boolean {
+  return /virtio/i.test(volidFilename(volid));
+}
+
+export function isWindowsIso(volid: string): boolean {
+  const file = volidFilename(volid).toLowerCase();
+  return /windows|win(?:dows)?(?:10|11)|win(?:dows)?[-_]?server|server[-_]?20(?:1[69]|2[025])/.test(file);
+}
+
+export function suggestVirtioIso(isos: string[], installIso: string): string {
+  if (!installIso || !isWindowsIso(installIso)) return "";
+  return isos.find((volid) => volid !== installIso && isVirtioIso(volid)) ?? "";
+}
+
+export function ostypeFromIso(volid: string): string | undefined {
+  if (!isWindowsIso(volid)) return undefined;
+  const file = volidFilename(volid).toLowerCase();
+  if (/win10|2016|2019/.test(file)) return "win10";
+  return "win11";
+}
+
+export function vmCdromDisks(iso?: string, iso2?: string): Record<string, string> {
+  const first = iso?.trim() ?? "";
+  const second = iso2?.trim() ?? "";
+  const disks: Record<string, string> = {};
+  if (first) disks.ide2 = `${first},media=cdrom`;
+  if (second && second !== first) disks[first ? "ide3" : "ide2"] = `${second},media=cdrom`;
+  return disks;
+}
+
 export function isoVersionFromFilename(filename: string): string {
   const file = volidFilename(filename);
   const debian = /debian(?:-edu|-mac)?-(\d+(?:\.\d+)*)-/i.exec(file);

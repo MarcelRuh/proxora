@@ -14,6 +14,7 @@ import { normalizeLxcCidr } from "@/lib/lxc-net";
 import { durationLabel } from "@/lib/duration";
 import { ipv4Host } from "@/lib/create-ip";
 import { assertGuestIdentityFree } from "@/server/services/guest-ips";
+import { ostypeFromIso, vmCdromDisks } from "@/lib/iso-images";
 import type { VmCreateParams } from "@/server/proxmox/vms";
 
 export const maxDuration = 800;
@@ -32,6 +33,7 @@ const createVmSchema = z.object({
   cpu: z.string().optional(),
   scsihw: z.string().optional(),
   iso: z.string().optional(),
+  iso2: z.string().optional(),
   diskStorage: z.string().min(1),
   diskSize: z.string().min(1),
   diskBus: z.enum(["scsi", "virtio", "sata", "ide"]).default("scsi"),
@@ -91,7 +93,7 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     bios: body.bios,
     machine: body.machine,
     net0: net,
-    ostype: body.ostype ?? "l26",
+    ostype: body.ostype ?? ostypeFromIso(body.iso ?? "") ?? "l26",
     agent: "1",
   };
   const applyCloudInit = Boolean(body.cloudInit) && Boolean(body.ipv4) && body.ipv4 !== "dhcp";
@@ -104,7 +106,7 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
   else if (body.diskBus === "sata") payload.sata0 = disk;
   else if (body.diskBus === "ide") payload.ide0 = disk;
   else payload.scsi0 = disk;
-  if (body.iso) payload.ide2 = `${body.iso},media=cdrom`;
+  Object.assign(payload, vmCdromDisks(body.iso, body.iso2));
   if (body.efi) payload.efidisk0 = `${body.diskStorage}:1,efitype=4m,pre-enrolled-keys=1`;
   if (body.tpm) payload.tpmstate0 = `${body.diskStorage}:1,version=v2.0`;
 
