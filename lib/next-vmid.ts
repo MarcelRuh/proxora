@@ -1,5 +1,21 @@
 export const MIN_VMID = 100;
 
+export function mergeUsedGuestSets(
+  parts: Array<{ vmids?: Iterable<number>; ips?: Iterable<string> }>,
+): { vmids: number[]; ips: string[] } {
+  const vmids = new Set<number>();
+  const ips = new Set<string>();
+  for (const part of parts) {
+    for (const id of part.vmids ?? []) {
+      if (Number.isInteger(id) && id > 0) vmids.add(id);
+    }
+    for (const ip of part.ips ?? []) {
+      if (ip) ips.add(ip);
+    }
+  }
+  return { vmids: [...vmids], ips: [...ips] };
+}
+
 /** Next free VMID below the highest used ID (all nodes). Falls back above max if 100..max are taken. */
 export function nextSmallerVmid(
   used: Iterable<number>,

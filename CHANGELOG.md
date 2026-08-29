@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.49] – 2026-08-29
+
+### Changed
+
+- Create and clone suggest the next free VMID across **all** Proxora hosts, not only the selected one (e.g. 246 on pve-power and 250 on pve-main → 250).
+
 ## [1.0.48] – 2026-08-28
 
 ### Changed

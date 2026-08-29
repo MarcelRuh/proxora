@@ -9,6 +9,7 @@ import { pickGuestName } from "@/server/notifications/guest-name";
 import { hasPermission, permissionForGuestAction } from "@/lib/permissions";
 import { ForbiddenError } from "@/lib/errors";
 import { assertGuestAccess } from "@/server/auth/session-core";
+import { assertGuestIdentityFree } from "@/server/services/guest-ips";
 import { withHostClient } from "@/server/services/host-service";
 import { waitGuestAction } from "@/server/proxmox/task-wait";
 import { durationLabel } from "@/lib/duration";
@@ -131,6 +132,7 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
         result = await vm.delete(node, vmid);
         break;
       case "clone":
+        if (body.newid) await assertGuestIdentityFree(body.newid);
         result = await vm.clone(node, vmid, { newid: body.newid, name: body.name, full: 1 });
         break;
       case "migrate":

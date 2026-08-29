@@ -9,6 +9,7 @@ import { pickGuestName } from "@/server/notifications/guest-name";
 import { permissionForGuestAction, hasPermission } from "@/lib/permissions";
 import { ForbiddenError } from "@/lib/errors";
 import { assertGuestAccess } from "@/server/auth/session-core";
+import { assertGuestIdentityFree } from "@/server/services/guest-ips";
 import { withHostClient } from "@/server/services/host-service";
 import { waitGuestAction } from "@/server/proxmox/task-wait";
 import { durationLabel } from "@/lib/duration";
@@ -108,6 +109,7 @@ export const POST = apiRoute("lxc.view", async (req, session, params) => {
           result = await client.lxc.delete(node, vmid);
           break;
         case "clone":
+          if (body.newid) await assertGuestIdentityFree(body.newid);
           result = await client.lxc.clone(node, vmid, { newid: body.newid, hostname: body.hostname });
           break;
         case "snapshot":

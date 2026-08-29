@@ -12,8 +12,7 @@ import { notifyTopic } from "@/server/notifications/dispatch";
 import { normalizeLxcCidr } from "@/lib/lxc-net";
 import { durationLabel } from "@/lib/duration";
 import { ipv4Host } from "@/lib/create-ip";
-import { collectUsedGuestIps } from "@/server/services/guest-ips";
-import { ConflictError } from "@/lib/errors";
+import { assertGuestIdentityFree } from "@/server/services/guest-ips";
 import type { VmCreateParams } from "@/server/proxmox/vms";
 
 export const maxDuration = 800;
@@ -116,9 +115,7 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
   try {
     const result = await withHostClient(params.id, session.user, async (client, host) => {
       hostName = host.name;
-      const used = await collectUsedGuestIps(client);
-      if (used.vmids.includes(body.vmid)) throw new ConflictError(`VMID ${body.vmid} ist bereits vergeben`);
-      if (staticIp && used.ips.includes(staticIp)) throw new ConflictError(`IPv4 ${staticIp} ist bereits vergeben`);
+      await assertGuestIdentityFree(body.vmid, staticIp);
       const createUpid = await client.vms.create(body.node, payload as VmCreateParams);
       const done = await completeGuestCreate(client, "vm", body.node, body.vmid, createUpid, Boolean(body.startAfter));
       return { createUpid, ...done };

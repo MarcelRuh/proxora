@@ -12,8 +12,7 @@ import { completeGuestCreate } from "@/server/services/guest-start";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { durationLabel } from "@/lib/duration";
 import { ipv4Host } from "@/lib/create-ip";
-import { collectUsedGuestIps } from "@/server/services/guest-ips";
-import { ConflictError } from "@/lib/errors";
+import { assertGuestIdentityFree } from "@/server/services/guest-ips";
 import type { LxcCreateParams } from "@/server/proxmox/lxc";
 
 export const maxDuration = 800;
@@ -72,9 +71,7 @@ export const POST = apiRoute("lxc.create", async (req, session, params) => {
   try {
     const result = await withHostClient(params.id, session.user, async (client, host) => {
       hostName = host.name;
-      const used = await collectUsedGuestIps(client);
-      if (used.vmids.includes(body.vmid)) throw new ConflictError(`VMID ${body.vmid} ist bereits vergeben`);
-      if (staticIp && used.ips.includes(staticIp)) throw new ConflictError(`IPv4 ${staticIp} ist bereits vergeben`);
+      await assertGuestIdentityFree(body.vmid, staticIp);
       const createUpid = await client.lxc.create(
         body.node,
         compactProxmoxBody({
