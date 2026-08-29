@@ -4,6 +4,7 @@ import { guestIpFromVmid } from "@/lib/create-ip";
 import { nextSmallerVmid } from "@/lib/next-vmid";
 import { collectUsedGuestIpsAllHosts } from "@/server/services/guest-ips";
 import { networksForHostId } from "@/server/services/guest-ip-settings";
+import { collectVztmplVolumes } from "@/server/services/lxc-template-catalog";
 import { withHostClient } from "@/server/services/host-service";
 
 export const GET = apiRoute(["vm.create", "lxc.create", "vm.clone", "lxc.clone"], async (req, session, params) => {
@@ -31,17 +32,13 @@ export const GET = apiRoute(["vm.create", "lxc.create", "vm.clone", "lxc.clone"]
         client.cluster.nextId().catch(() => null),
       ]);
       const isoStorages = storage.filter((s) => (s.content ?? "").includes("iso"));
-      const tmplStorages = storage.filter((s) => (s.content ?? "").includes("vztmpl"));
-      const isos = (
-        await Promise.all(
-          isoStorages.map((s) => client.storage.content(selected, s.storage, "iso").catch(() => [])),
-        )
-      ).flat();
-      const templates = (
-        await Promise.all(
-          tmplStorages.map((s) => client.storage.content(selected, s.storage, "vztmpl").catch(() => [])),
-        )
-      ).flat();
+      const nodeNames = nodes.map((n) => n.node);
+      const [{ volids: templateVolids }, isoLists] = await Promise.all([
+        collectVztmplVolumes(client, nodeNames),
+        Promise.all(isoStorages.map((s) => client.storage.content(selected, s.storage, "iso").catch(() => []))),
+      ]);
+      const templates = templateVolids.map((volid) => ({ volid }));
+      const isos = isoLists.flat();
       const bridges = network.filter((n) => n.type === "bridge" || String(n.iface ?? "").startsWith("vmbr"));
       return { nodes, storage, isos, templates, bridges, fallbackNext };
     }),

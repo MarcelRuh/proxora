@@ -6,7 +6,8 @@ import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { ValidationError } from "@/lib/errors";
-import { normalizeAplTemplate, sortAplTemplates, volidFilename, vztmplVolid } from "@/lib/lxc-templates";
+import { mergeTemplateCatalog, normalizeAplTemplate, vztmplVolid } from "@/lib/lxc-templates";
+import { collectVztmplVolumes } from "@/server/services/lxc-template-catalog";
 
 export const GET = apiRoute("lxc.create", async (req, session, params) => {
   const nodeParam = new URL(req.url).searchParams.get("node")?.trim() || undefined;
@@ -16,30 +17,20 @@ export const GET = apiRoute("lxc.create", async (req, session, params) => {
     if (!selected) {
       return { nodes: [], node: "", storages: [], installed: [] as string[], catalog: [] };
     }
-    const [storage, catalogRaw] = await Promise.all([
-      client.storage.list(selected),
+    const nodeNames = nodes.map((n) => n.node);
+    const [catalogRaw, volumes] = await Promise.all([
       client.nodes.aplinfo(selected).catch(() => [] as Array<Record<string, unknown>>),
+      collectVztmplVolumes(client, nodeNames),
     ]);
-    const tmplStorages = storage.filter((s) => (s.content ?? "").includes("vztmpl"));
-    const installedRows = (
-      await Promise.all(
-        tmplStorages.map((s) => client.storage.content(selected, s.storage, "vztmpl").catch(() => [])),
-      )
-    ).flat();
-    const installed = installedRows
-      .map((row) => String((row as { volid?: string }).volid ?? ""))
-      .filter(Boolean);
-    const installedNames = new Set(installed.map(volidFilename));
-    const catalog = catalogRaw
-      .map((row) => normalizeAplTemplate(row))
-      .filter((row): row is NonNullable<typeof row> => Boolean(row))
-      .sort(sortAplTemplates)
-      .map((row) => ({ ...row, installed: installedNames.has(row.template) }));
+    const catalog = mergeTemplateCatalog(
+      catalogRaw.map((row) => normalizeAplTemplate(row)).filter((row): row is NonNullable<typeof row> => Boolean(row)),
+      volumes.volids,
+    );
     return {
-      nodes: nodes.map((n) => n.node),
+      nodes: nodeNames,
       node: selected,
-      storages: tmplStorages.map((s) => s.storage),
-      installed,
+      storages: volumes.storages,
+      installed: volumes.volids,
       catalog,
     };
   });

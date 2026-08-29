@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.52] – 2026-08-29
+
+### Fixed
+
+- Templates page lists locally installed CT images (e.g. Debian 13.1-2) even when the Proxmox catalog has a newer filename, with the same search/filter/scroll pattern as other tables.
+
 ## [1.0.51] – 2026-08-29
 
 ### Changed
