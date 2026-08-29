@@ -1,6 +1,6 @@
 {
   "name": "proxora",
-  "version": "1.0.56",
+  "version": "1.0.57",
   "private": true,
   "description": "Proxora – central management for independent Proxmox VE hosts",
   "license": "MIT",
@@ -31,6 +31,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
+    "@novnc/novnc": "^1.6.0",
     "@prisma/client": "^6.19.0",
     "@radix-ui/react-alert-dialog": "^1.1.23",
     "@radix-ui/react-avatar": "^1.2.6",

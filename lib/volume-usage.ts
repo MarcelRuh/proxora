@@ -7,17 +7,34 @@ export type VolumeUser = {
   node: string;
 };
 
-export function configReferencesVolume(config: Record<string, unknown>, volid: string): boolean {
+const UNUSED_KEY = /^unused\d+$/i;
+
+export type VolumeUseRole = "attached" | "unused" | "none";
+
+function volumeHitsValue(volid: string, value: unknown): boolean {
   const file = volidFilename(volid).toLowerCase();
-  if (!file) return false;
   const full = volid.toLowerCase();
-  for (const value of Object.values(config)) {
-    const text = String(value ?? "").toLowerCase();
-    if (!text) continue;
-    if (text.includes(full)) return true;
-    if (file.length >= 12 && text.includes(file)) return true;
+  const text = String(value ?? "").toLowerCase();
+  if (!text) return false;
+  if (full && text.includes(full)) return true;
+  return file.length >= 8 && text.includes(file);
+}
+
+export function configVolumeRole(config: Record<string, unknown>, volid: string): VolumeUseRole {
+  let unused = false;
+  let attached = false;
+  for (const [key, value] of Object.entries(config)) {
+    if (!volumeHitsValue(volid, value)) continue;
+    if (UNUSED_KEY.test(key)) unused = true;
+    else attached = true;
   }
-  return false;
+  if (attached) return "attached";
+  if (unused) return "unused";
+  return "none";
+}
+
+export function configReferencesVolume(config: Record<string, unknown>, volid: string): boolean {
+  return configVolumeRole(config, volid) !== "none";
 }
 
 export function formatVolumeUsers(users: VolumeUser[]): string {

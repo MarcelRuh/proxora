@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.57] – 2026-08-29
+
+### Added
+
+- Tasks page filters by host, guest kind, status and type, shows guest names, live log progress, and can cancel running tasks.
+- Storage lists files per datastore (ISO, templates, disks, unused volumes) with delete and in-use warnings.
+- VM console defaults to VGA via noVNC; serial/xterm remains available as a toggle.
+
 ## [1.0.56] – 2026-08-29
 
 ### Fixed

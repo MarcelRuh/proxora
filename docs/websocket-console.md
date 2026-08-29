@@ -3,10 +3,11 @@
 The browser never receives Proxmox tickets, tokens or passwords.
 
 ```
-xterm.js  --ws-->  Proxora  --wss-->  Proxmox termproxy
+xterm.js     --ws /ws/console-->  Proxora  --wss-->  Proxmox termproxy
+noVNC (VGA)  --ws /ws/vnc------>  Proxora  --wss-->  Proxmox vncproxy
 ```
 
-## Flow
+## Serial / shell (xterm.js)
 
 1. Authenticated UI opens `WebConsole` (`components/console/web-console.tsx`).
 2. Browser connects to `ws(s)://{manager}/ws/console?hostId&node&kind&vmid`.
@@ -25,9 +26,17 @@ xterm.js  --ws-->  Proxora  --wss-->  Proxmox termproxy
 
 This matches [pve-xtermjs](https://github.com/proxmox/pve-xtermjs).
 
+## VGA (noVNC, VMs only)
+
+1. VM detail opens `VncConsole` (`components/console/vnc-console.tsx`) by default. Serial remains available as a toggle.
+2. Browser connects to `ws(s)://{manager}/ws/vnc?hostId&node&kind=vm&vmid`.
+3. Backend calls `POST /nodes/{node}/qemu/{vmid}/vncproxy` with `{ websocket: 1 }`.
+4. Backend opens the same `vncwebsocket` path, sends `{user}:{ticket}\n`, waits for `OK`, then pipes **raw RFB** both ways. The `OK` acknowledgement never reaches the browser.
+5. `@novnc/novnc` speaks RFB against Proxora. Tickets stay on the server.
+
+LXC and node shells stay on termproxy. QEMU SPICE is not implemented.
+
 ## Process model
 
 - **Development:** `next dev` on `:3000` plus `tsx server/ws/standalone.ts` on `:3001`. Set `NEXT_PUBLIC_WS_URL=ws://localhost:3001` if you do not use the combined server.
-- **Production:** `node dist/server.cjs` serves Next.js and upgrades `/ws/console` on the same port.
-
-QEMU VGA/SPICE (noVNC) is not implemented in v1. The console is the native **xterm.js / termproxy** console used by Proxmox for LXC, node shell, and serial-enabled VMs.
+- **Production:** `node dist/server.cjs` serves Next.js and upgrades `/ws/console` and `/ws/vnc` on the same port.

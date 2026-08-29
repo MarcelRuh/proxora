@@ -35,6 +35,8 @@ describe("RBAC", () => {
     expect(hasPermission(granted, "vm.view")).toBe(true);
     expect(hasPermission(granted, "backup.view")).toBe(true);
     expect(hasPermission(granted, "backup.run")).toBe(false);
+    expect(hasPermission(granted, "storage.delete")).toBe(false);
+    expect(hasPermission(granted, "tasks.cancel")).toBe(false);
     expect(hasPermission(granted, "vm.delete")).toBe(false);
     expect(hasPermission(granted, "hosts.reboot")).toBe(false);
     expect(hasAnyPermission(granted, ["vm.start", "lxc.start"])).toBe(false);
@@ -46,6 +48,8 @@ describe("RBAC", () => {
     expect(hasPermission(granted, "vm.shutdown")).toBe(true);
     expect(hasPermission(granted, "vm.force-stop")).toBe(true);
     expect(hasPermission(granted, "lxc.console")).toBe(true);
+    expect(hasPermission(granted, "tasks.cancel")).toBe(true);
+    expect(hasPermission(granted, "storage.delete")).toBe(false);
     expect(hasPermission(granted, "vm.reset")).toBe(false);
     expect(hasPermission(granted, "vm.config")).toBe(false);
     expect(hasPermission(granted, "users.create")).toBe(false);

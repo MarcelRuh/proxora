@@ -12,6 +12,7 @@ import { ProgressBar } from "@/components/ui/misc";
 import { GuestStateBadge } from "@/components/status-badge";
 import { ConfirmAction } from "@/components/confirm-action";
 import { WebConsole } from "@/components/console/web-console";
+import { VncConsole } from "@/components/console/vnc-console";
 import { GuestConfigForm } from "@/components/guests/guest-config-form";
 import { CloneDialog } from "@/components/guests/clone-dialog";
 import { BackupNowDialog } from "@/components/backups/backup-now-dialog";
@@ -64,6 +65,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const [snap, setSnap] = useState("");
   const [saving, setSaving] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(search.get("tab") === "console" || search.get("console") === "1");
+  const [consoleMode, setConsoleMode] = useState<"vga" | "serial">(kind === "vm" ? "vga" : "serial");
   const path = `/api/hosts/${params.hostId}/${kind === "vm" ? "vms" : "lxc"}/${params.node}/${params.vmid}`;
   const { data, refetch, isLoading } = useQuery({
     queryKey: ["guest", kind, params.hostId, params.node, params.vmid],
@@ -258,7 +260,31 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
       </div>
 
       {consoleOpen && can.console ? (
-        <WebConsole hostId={params.hostId} node={params.node} kind={kind} vmid={Number(params.vmid)} />
+        <div className="space-y-2">
+          {kind === "vm" ? (
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant={consoleMode === "vga" ? "default" : "outline"}
+                onClick={() => setConsoleMode("vga")}
+              >
+                {t("guest.consoleVga")}
+              </Button>
+              <Button
+                size="sm"
+                variant={consoleMode === "serial" ? "default" : "outline"}
+                onClick={() => setConsoleMode("serial")}
+              >
+                {t("guest.consoleSerial")}
+              </Button>
+            </div>
+          ) : null}
+          {kind === "vm" && consoleMode === "vga" ? (
+            <VncConsole hostId={params.hostId} node={params.node} vmid={Number(params.vmid)} />
+          ) : (
+            <WebConsole hostId={params.hostId} node={params.node} kind={kind} vmid={Number(params.vmid)} />
+          )}
+        </div>
       ) : null}
 
       {isLoading ? <p className="text-sm text-muted-foreground">{t("common.loading")}</p> : null}

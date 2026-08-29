@@ -8,6 +8,7 @@ import { hasPermission } from "@/lib/permissions";
 import { getSessionFromToken, assertGuestAccess, canAccessHost } from "@/server/auth/session-core";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { clientForHost } from "@/server/services/host-service";
+import { consumeProxmoxVncHandshake, wsPayloadToBuffer } from "@/lib/vnc-handshake";
 
 function cookieValue(req: IncomingMessage, name: string): string | undefined {
   const header = req.headers.cookie;
@@ -20,6 +21,10 @@ function cookieValue(req: IncomingMessage, name: string): string | undefined {
 }
 
 export type ConsoleKind = "vm" | "lxc" | "node";
+
+function asBuffer(data: WebSocket.RawData): Buffer {
+  return wsPayloadToBuffer(data as Buffer | ArrayBuffer | Buffer[] | string);
+}
 
 export function attachConsoleProxy(wss: WebSocketServer) {
   wss.on("connection", (client, req) => {
@@ -36,8 +41,13 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
   const cols = Number(url.searchParams.get("cols") ?? 80);
   const rows = Number(url.searchParams.get("rows") ?? 24);
   const cmd = url.searchParams.get("cmd");
+  const display = url.pathname.endsWith("/vnc") || url.searchParams.get("display") === "vga" ? "vga" : "serial";
   if (cmd && (kind !== "node" || cmd !== "upgrade")) {
     browser.close(4400, "Invalid console command");
+    return;
+  }
+  if (display === "vga" && kind !== "vm") {
+    browser.close(4400, "VGA console is only available for VMs");
     return;
   }
 
@@ -75,11 +85,13 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
 
     const proxmox = await clientForHost(host);
     const term =
-      kind === "node"
-        ? await proxmox.nodes.termproxy(node, cmd === "upgrade" ? { cmd: "upgrade" } : undefined)
-        : kind === "vm"
-          ? await proxmox.vms.termproxy(node, Number(vmid))
-          : await proxmox.lxc.termproxy(node, Number(vmid));
+      display === "vga"
+        ? await proxmox.vms.vncproxy(node, Number(vmid))
+        : kind === "node"
+          ? await proxmox.nodes.termproxy(node, cmd === "upgrade" ? { cmd: "upgrade" } : undefined)
+          : kind === "vm"
+            ? await proxmox.vms.termproxy(node, Number(vmid))
+            : await proxmox.lxc.termproxy(node, Number(vmid));
 
     const path =
       kind === "node"
@@ -112,70 +124,145 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
       }
     };
 
-    remote.on("open", () => {
-      remote.send(Buffer.from(`${term.user}:${term.ticket}\n`));
-      if (browser.readyState === WebSocket.OPEN) {
-        browser.send(JSON.stringify({ type: "status", status: "connected" }));
-      }
-      setTimeout(() => {
-        if (remote.readyState === WebSocket.OPEN) {
-          remote.send(Buffer.from(`1:${cols}:${rows}:`));
-        }
-      }, 250);
-    });
-
-    remote.on("message", (data) => {
-      if (browser.readyState === WebSocket.OPEN) browser.send(data);
-    });
-
-    browser.on("message", (data) => {
-      if (remote.readyState !== WebSocket.OPEN) return;
-      const text = typeof data === "string" ? data : Buffer.from(data as Buffer).toString();
-      try {
-        const parsed = JSON.parse(text) as {
-          type?: string;
-          cols?: number;
-          rows?: number;
-          data?: string;
-        };
-        if (parsed.type === "resize" && parsed.cols && parsed.rows) {
-          remote.send(Buffer.from(`1:${parsed.cols}:${parsed.rows}:`));
-          return;
-        }
-        if (parsed.type === "input" && parsed.data !== undefined) {
-          remote.send(Buffer.from(`0:${Buffer.byteLength(parsed.data)}:${parsed.data}`));
-          return;
-        }
-        if (parsed.type === "ping") {
-          remote.send(Buffer.from("2"));
-        }
-      } catch {
-        remote.send(Buffer.from(`0:${Buffer.byteLength(text)}:${text}`));
-      }
-    });
-
-    remote.on("close", () => closeBoth());
-    browser.on("close", () => closeBoth());
-    remote.on("error", (err) => {
-      logger.warn({ err: err.message }, "Console upstream error");
-      closeBoth(1011, "Upstream error");
-    });
-    browser.on("error", () => closeBoth());
+    if (display === "vga") {
+      pipeVnc(browser, remote, `${term.user}:${term.ticket}\n`, closeBoth);
+    } else {
+      pipeTerm(browser, remote, term, cols, rows, closeBoth);
+    }
 
     await writeAuditLog({
       userId: session.user.id,
       action: AUDIT_ACTIONS.CONSOLE_OPENED,
-      target: `${kind}:${node}:${vmid ?? ""}`,
+      target: `${kind}:${display}:${node}:${vmid ?? ""}`,
       hostId: host.id,
       result: "SUCCESS",
     });
   } catch (error) {
     logger.error({ err: error }, "Failed to open console");
     if (browser.readyState === WebSocket.OPEN) {
-      browser.send(
-        JSON.stringify({ type: "status", status: "error", message: "Failed to open console" }),
-      );
+      try {
+        browser.send(JSON.stringify({ type: "status", status: "error", message: "Failed to open console" }));
+      } catch {
+        /* ignore */
+      }
     }
     browser.close(1011, "Failed to open console");
   }
+}
+
+function pipeTerm(
+  browser: WebSocket,
+  remote: WebSocket,
+  term: { user: string; ticket: string },
+  cols: number,
+  rows: number,
+  closeBoth: (code?: number, reason?: string) => void,
+) {
+  remote.on("open", () => {
+    remote.send(Buffer.from(`${term.user}:${term.ticket}\n`));
+    if (browser.readyState === WebSocket.OPEN) {
+      browser.send(JSON.stringify({ type: "status", status: "connected" }));
+    }
+    setTimeout(() => {
+      if (remote.readyState === WebSocket.OPEN) {
+        remote.send(Buffer.from(`1:${cols}:${rows}:`));
+      }
+    }, 250);
+  });
+
+  remote.on("message", (data) => {
+    if (browser.readyState === WebSocket.OPEN) browser.send(data);
+  });
+
+  browser.on("message", (data) => {
+    if (remote.readyState !== WebSocket.OPEN) return;
+    const text = typeof data === "string" ? data : asBuffer(data).toString();
+    try {
+      const parsed = JSON.parse(text) as {
+        type?: string;
+        cols?: number;
+        rows?: number;
+        data?: string;
+      };
+      if (parsed.type === "resize" && parsed.cols && parsed.rows) {
+        remote.send(Buffer.from(`1:${parsed.cols}:${parsed.rows}:`));
+        return;
+      }
+      if (parsed.type === "input" && parsed.data !== undefined) {
+        remote.send(Buffer.from(`0:${Buffer.byteLength(parsed.data)}:${parsed.data}`));
+        return;
+      }
+      if (parsed.type === "ping") {
+        remote.send(Buffer.from("2"));
+      }
+    } catch {
+      remote.send(Buffer.from(`0:${Buffer.byteLength(text)}:${text}`));
+    }
+  });
+
+  remote.on("close", () => closeBoth());
+  browser.on("close", () => closeBoth());
+  remote.on("error", (err) => {
+    logger.warn({ err: err.message }, "Console upstream error");
+    closeBoth(1011, "Upstream error");
+  });
+  browser.on("error", () => closeBoth());
+}
+
+function pipeVnc(
+  browser: WebSocket,
+  remote: WebSocket,
+  ticketLine: string,
+  closeBoth: (code?: number, reason?: string) => void,
+) {
+  let handshake: Buffer = Buffer.alloc(0);
+  let ready = false;
+  const pending: Buffer[] = [];
+
+  const flushPending = () => {
+    if (!ready || remote.readyState !== WebSocket.OPEN) return;
+    for (const chunk of pending.splice(0)) remote.send(chunk);
+  };
+
+  remote.on("open", () => {
+    remote.send(Buffer.from(ticketLine));
+  });
+
+  remote.on("message", (data) => {
+    const chunk = asBuffer(data);
+    if (!ready) {
+      const next = consumeProxmoxVncHandshake(handshake, chunk);
+      handshake = Buffer.from(next.rest);
+      if (!next.done) return;
+      if ("error" in next && next.error) {
+        logger.warn({ err: next.error }, "VNC handshake failed");
+        closeBoth(1011, "VNC handshake failed");
+        return;
+      }
+      ready = true;
+      if (next.rest.length && browser.readyState === WebSocket.OPEN) {
+        browser.send(next.rest);
+      }
+      flushPending();
+      return;
+    }
+    if (browser.readyState === WebSocket.OPEN) browser.send(chunk);
+  });
+
+  browser.on("message", (data) => {
+    const chunk = asBuffer(data);
+    if (!ready) {
+      pending.push(chunk);
+      return;
+    }
+    if (remote.readyState === WebSocket.OPEN) remote.send(chunk);
+  });
+
+  remote.on("close", () => closeBoth());
+  browser.on("close", () => closeBoth());
+  remote.on("error", (err) => {
+    logger.warn({ err: err.message }, "VNC upstream error");
+    closeBoth(1011, "Upstream error");
+  });
+  browser.on("error", () => closeBoth());
 }

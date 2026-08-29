@@ -17,7 +17,7 @@ attachConsoleProxy(wss);
 
 server.on("upgrade", (req, socket, head) => {
   const { pathname } = parse(req.url ?? "");
-  if (pathname === "/ws/console") {
+  if (pathname === "/ws/console" || pathname === "/ws/vnc") {
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit("connection", ws, req);
     });

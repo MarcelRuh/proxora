@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/misc";
@@ -10,6 +11,7 @@ import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { ZfsSection, type ZfsHostBlock } from "@/components/storage/zfs-section";
+import { StorageContentPanel } from "@/components/storage/storage-content-panel";
 
 type StorageResp = {
   storage: Array<{
@@ -26,8 +28,11 @@ type StorageResp = {
   }>;
 };
 
+type OpenStorage = { hostId: string; node: string; storage: string };
+
 export default function StoragePage() {
   const { t } = useI18n();
+  const [open, setOpen] = useState<OpenStorage | null>(null);
   const { data: hosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
@@ -103,9 +108,22 @@ export default function StoragePage() {
                     {block.storage.flatMap((n) =>
                       n.storage.map((s) => {
                         const pct = percentage(s.used, s.total);
+                        const selected =
+                          open?.hostId === block.host.id && open.node === n.node && open.storage === s.storage;
                         return (
-                          <tr key={`${n.node}-${s.storage}`} className="border-t border-border">
-                            <td className="py-2">{s.storage}</td>
+                          <tr
+                            key={`${n.node}-${s.storage}`}
+                            className={`cursor-pointer border-t border-border ${selected ? "bg-primary/5" : "hover:bg-white/[0.03]"}`}
+                            onClick={() =>
+                              setOpen(selected ? null : { hostId: block.host.id, node: n.node, storage: s.storage })
+                            }
+                          >
+                            <td className="py-2">
+                              <button type="button" className="text-left font-medium text-primary hover:underline">
+                                {s.storage}
+                              </button>
+                              <p className="text-[11px] text-muted-foreground">{t("storage.browse")}</p>
+                            </td>
                             <td>{s.type}</td>
                             <td>
                               <Badge variant={s.active ? "success" : "danger"}>
@@ -126,6 +144,14 @@ export default function StoragePage() {
                 </table>
               </div>
             )}
+            {open?.hostId === block.host.id ? (
+              <StorageContentPanel
+                hostId={open.hostId}
+                node={open.node}
+                storage={open.storage}
+                onClose={() => setOpen(null)}
+              />
+            ) : null}
             <ZfsSection block={zfs?.find((row) => row.hostId === block.host.id)} />
           </CardContent>
         </Card>
