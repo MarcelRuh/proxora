@@ -25,7 +25,7 @@ wget -qO- https://raw.githubusercontent.com/MarcelRuh/proxora/main/scripts/updat
 
 In-app: **Updates → Proxora self-update**. The UI shows `current → latest` and a live progress bar while Compose rebuilds. Set `PROXORA_INSTALL_DIR` to the host path that contains `docker-compose.yml` (the installer does this automatically).
 
-The app container does **not** mount `docker.sock` and does **not** mount the install tree (so `.env` stays off the app). A sidecar (`proxora-updater`) talks to `docker-socket-proxy` and starts the updater only when the app writes `/update-signal/request`. The request file is a trigger, not a command channel — the sidecar runs the local `scripts/self-update-apply.sh`.
+The app container does **not** mount `docker.sock` and does **not** mount the install tree (so `.env` stays off the app). A sidecar (`proxora-updater`) has the Docker socket and starts the updater only when the app writes `/update-signal/request`. The request file is a trigger, not a command channel — the sidecar runs the local `scripts/self-update-apply.sh`. Compose build cannot run through `docker-socket-proxy` (HTTP 403 on TCP upgrade).
 
 The wget installer prints username and password again in the final summary box. Re-running it keeps `.env` and rebuilds.
 

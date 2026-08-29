@@ -19,34 +19,6 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-proxora}"]
 
-  docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:latest
-    restart: unless-stopped
-    environment:
-      POST: 1
-      CONTAINERS: 1
-      IMAGES: 1
-      NETWORKS: 1
-      VOLUMES: 1
-      BUILD: 1
-      SYSTEM: 1
-      INFO: 1
-      SESSION: 1
-      ALLOW_START: 1
-      ALLOW_STOP: 1
-      ALLOW_RESTARTS: 1
-      EXEC: 0
-      AUTH: 0
-      SECRETS: 0
-      SWARM: 0
-      PLUGINS: 0
-      COMMIT: 0
-      CONFIGS: 0
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    security_opt:
-      - no-new-privileges:true
-
   proxora:
     build: .
     container_name: proxora
@@ -85,7 +57,7 @@ services:
     container_name: proxora-updater
     restart: unless-stopped
     environment:
-      DOCKER_HOST: tcp://docker-socket-proxy:2375
+      COMPOSE_BAKE: "false"
       PROXORA_INSTALL_DIR: ${PROXORA_INSTALL_DIR:-/opt/proxora}
       PROXORA_REPO: ${PROXORA_REPO:-MarcelRuh/proxora}
       PROXORA_BRANCH: ${PROXORA_BRANCH:-main}
@@ -94,12 +66,11 @@ services:
       PROXORA_DOCKER_NETWORK: ${COMPOSE_PROJECT_NAME:-proxora}_default
       PROXORA_UPDATER_IMAGE: docker:27.5.1-cli
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
       - ${PROXORA_INSTALL_DIR:-/opt/proxora}:${PROXORA_INSTALL_DIR:-/opt/proxora}
       - ${PROXORA_INSTALL_DIR:-/opt/proxora}/scripts/update-watcher.sh:/update-watcher.sh:ro
       - proxora_update_signal:/update-signal
     entrypoint: ["sh", "/update-watcher.sh"]
-    depends_on:
-      - docker-socket-proxy
     security_opt:
       - no-new-privileges:true
 

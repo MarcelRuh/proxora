@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.63] – 2026-08-29
+
+### Fixed
+
+- Self-update compose build no longer fails with `unable to upgrade to tcp, received 403`. `proxora-updater` uses the Docker socket directly; the app still does not.
+
 ## [1.0.62] – 2026-08-29
 
 ### Fixed

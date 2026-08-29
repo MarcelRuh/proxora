@@ -1,5 +1,6 @@
 #!/bin/sh
-# Sidecar: talks to docker-socket-proxy (or docker.sock as fallback).
+# Sidecar: docker.sock on this helper only (not the app).
+# Compose build needs HTTP hijack; docker-socket-proxy returns 403 for that.
 # The Proxora app only writes an empty request file.
 set -eu
 
@@ -10,7 +11,6 @@ BRANCH="${PROXORA_BRANCH:-main}"
 UPDATER_NAME="proxora-self-updater"
 UPDATER_IMAGE="${PROXORA_UPDATER_IMAGE:-docker:27.5.1-cli}"
 SIGNAL_VOLUME="${PROXORA_SIGNAL_VOLUME:-proxora_update_signal}"
-NETWORK="${PROXORA_DOCKER_NETWORK:-proxora_default}"
 APPLY="${INSTALL_DIR}/scripts/self-update-apply.sh"
 REQUEST="${SIGNAL_DIR}/request"
 LOCK="${SIGNAL_DIR}/.proxora-update.lock"
@@ -46,22 +46,19 @@ start_updater() {
     return 1
   fi
   docker rm -f "$UPDATER_NAME" >/dev/null 2>&1 || true
-  set -- docker run -d --init --name "$UPDATER_NAME" \
+  docker run -d --init --name "$UPDATER_NAME" \
+    -v /var/run/docker.sock:/var/run/docker.sock \
     -v "${INSTALL_DIR}:${INSTALL_DIR}" \
     -v "${SIGNAL_VOLUME}:/update-signal" \
+    -e "COMPOSE_BAKE=false" \
     -e "PROXORA_INSTALL_DIR=${INSTALL_DIR}" \
     -e "PROXORA_REPO=${REPO}" \
     -e "PROXORA_BRANCH=${BRANCH}" \
     -e "PROXORA_SKIP_COMPOSE=0" \
     -e "PROXORA_UPDATE_SIGNAL_DIR=/update-signal" \
     -w "$INSTALL_DIR" \
-    --label proxora.update=self
-  if [ -n "${DOCKER_HOST:-}" ]; then
-    set -- "$@" --network "$NETWORK" -e "DOCKER_HOST=${DOCKER_HOST}"
-  else
-    set -- "$@" -v /var/run/docker.sock:/var/run/docker.sock
-  fi
-  "$@" "$UPDATER_IMAGE" sh "$APPLY"
+    --label proxora.update=self \
+    "$UPDATER_IMAGE" sh "$APPLY"
 }
 
 sync_lock

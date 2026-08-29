@@ -250,6 +250,11 @@ free_docker_space 26
 write_progress 28 build "Stack rebuild starting"
 cd "$INSTALL_DIR"
 sync_app_url_if_localhost "${INSTALL_DIR}/.env"
+# Compose/BuildKit hijack fails through docker-socket-proxy (403). Prefer the unix socket.
+if [ -S /var/run/docker.sock ]; then
+  unset DOCKER_HOST
+fi
+export COMPOSE_BAKE=false
 COMPOSE_FILE="docker-compose.yml"
 if [ -f docker-compose.prod.yml ]; then COMPOSE_FILE="docker-compose.prod.yml"; fi
 docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans > "$TMP/compose.log" 2>&1 &
@@ -268,9 +273,13 @@ if [ -n "$SIGNAL_DIR" ] && [ -d "$SIGNAL_DIR" ]; then
   cp "$TMP/compose.log" "${SIGNAL_DIR}/.proxora-update-compose.log" 2>/dev/null || true
 fi
 if [ "$COMPOSE_RC" -ne 0 ]; then
-  err="$(grep -E 'ERROR|error:|failed|ELIFECYCLE|no space' "$TMP/compose.log" | tail -1 | tr '\n' ' ' | cut -c1-180)"
+  if grep -q 'unable to upgrade to tcp' "$TMP/compose.log"; then
+    err="Docker-Socket-Proxy blockiert den Image-Build (403). Einmal auf dem Host: docker compose -f docker-compose.prod.yml up -d --build --remove-orphans"
+  else
+    err="$(grep -Ei 'ERROR|error:|failed|ELIFECYCLE|no space|forbidden' "$TMP/compose.log" | grep -viE 'COMPOSE_BAKE|better performances' | tail -1 | tr '\n' ' ' | cut -c1-180)"
+  fi
   if [ -z "$err" ]; then
-    err="$(tail -8 "$TMP/compose.log" | tr '\n' ' ' | cut -c1-180)"
+    err="$(tail -8 "$TMP/compose.log" | grep -viE 'COMPOSE_BAKE|better performances' | tr '\n' ' ' | cut -c1-180)"
   fi
   write_progress 0 error "${err:-Compose rebuild failed}"
   echo "ERROR: compose rebuild failed (see ${COMPOSE_LOG_FILE})" >&2
