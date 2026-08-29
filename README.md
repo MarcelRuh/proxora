@@ -5,7 +5,7 @@
 [![CI](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-> Status: **v1.0.58** – self-hosted Proxmox control plane with in-app updates.
+> Status: **v1.0.59** – self-hosted Proxmox control plane with in-app updates.
 
 Proxora talks to each node through the official **Proxmox VE API**. No cluster required.
 
@@ -82,7 +82,7 @@ Preserves `.env` and data volumes, syncs from GitHub, then runs `docker compose 
 - Optional TOTP 2FA at sign-in
 - Append-only audit log, global search (`Ctrl+K`)
 - Dark neon UI (Dockora-inspired)
-- **In-app self-update** from GitHub with version + progress bar
+- **In-app self-update** from GitHub with version + progress bar (sidecar owns `docker.sock`)
 
 ## Stack
 
@@ -164,6 +164,7 @@ On the host (Datacenter → Permissions → API Tokens):
 - API tokens are encrypted at rest (AES-256-GCM)
 - The browser never receives Proxmox credentials
 - Treat Proxora as a privileged control plane
+- The app container does not get `docker.sock`; only `proxora-updater` does
 - Report vulnerabilities privately — see [SECURITY.md](./SECURITY.md)
 
 ## License

@@ -1,4 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  isUpdateBusyFromSignal,
+  resolveUpdateSignalDir,
+  UPDATE_LOCK_FILE,
+  UPDATE_REQUEST_FILE,
+  writeUpdateRequest,
+} from "@/lib/self-update-signal";
 import { compareSemver, isSelfUpdateAvailable, newerVersion, selfUpdateTargetVersion } from "@/lib/version";
 import { extractNewerChangelog } from "@/server/services/github-revision";
 import { mergeProgress, parseProgressFile, parseUpdaterLogs } from "@/server/services/self-update-progress";
@@ -57,5 +67,31 @@ describe("progress parser", () => {
     const p = parseUpdaterLogs(logs);
     expect(p?.percent).toBeGreaterThanOrEqual(90);
     expect(mergeProgress({ percent: 100, step: "done", detail: null }, { percent: 12, step: "resolve", detail: null })?.percent).toBe(12);
+  });
+});
+
+describe("update signal files", () => {
+  const dirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of dirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("treats request and lock as busy and writes only a timestamp", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "proxora-signal-"));
+    dirs.push(dir);
+    expect(isUpdateBusyFromSignal(dir)).toBe(false);
+    writeUpdateRequest(dir, "2026-08-29T12:00:00.000Z");
+    expect(readFileSync(path.join(dir, UPDATE_REQUEST_FILE), "utf8")).toBe("2026-08-29T12:00:00.000Z\n");
+    expect(isUpdateBusyFromSignal(dir)).toBe(true);
+    writeFileSync(path.join(dir, UPDATE_LOCK_FILE), "");
+    expect(isUpdateBusyFromSignal(dir)).toBe(true);
+  });
+
+  it("reads PROXORA_UPDATE_SIGNAL_DIR", () => {
+    expect(resolveUpdateSignalDir({})).toBeNull();
+    expect(resolveUpdateSignalDir({ PROXORA_UPDATE_SIGNAL_DIR: " /update-signal " })).toBe("/update-signal");
   });
 });

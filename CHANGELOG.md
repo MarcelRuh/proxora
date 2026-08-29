@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.59] – 2026-08-29
+
+### Added
+
+- Discord and in-app notifications when a datastore or guest disk reaches 90% (once, until usage drops below 85%). Channels with a custom event list must enable **Disk fast voll**.
+
+### Security
+
+- The app container no longer mounts `docker.sock`. Self-update writes a request file; sidecar `proxora-updater` owns the socket and runs the apply script.
+
 ## [1.0.58] – 2026-08-29
 
 ### Added

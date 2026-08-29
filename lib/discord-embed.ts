@@ -34,6 +34,7 @@ const TOPIC_LABELS: Record<NotificationTopic | "test", string> = {
   "backup.failed": "Backup fehlgeschlagen",
   "backup.restored": "Backup eingespielt",
   "task.failed": "Task fehlgeschlagen",
+  "disk.full": "Disk fast voll",
   test: "Test",
 };
 

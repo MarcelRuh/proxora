@@ -40,6 +40,10 @@ Dashboard and list endpoints use `Promise.all` / `allSettled` per host. A timeou
 
 These are stored on the `Host` row and shown as badges. Live telemetry is fetched on demand and polled with TanStack Query (8–15s). High-frequency metrics are not hammered globally.
 
+## Self-update
+
+The Proxora app never receives `docker.sock`. Compose runs `proxora-updater` (Docker CLI image) with the socket. The app writes `/update-signal/request`; the sidecar starts `proxora-self-updater`, which applies `scripts/self-update-apply.sh`.
+
 ## Extensibility
 
 `server/plugins/registry.ts` and `server/notifications/providers.ts` are the intended extension points for backup, Ceph, HA, SDN, Prometheus and additional notifiers. They are registered, not hardcoded into UI tables.

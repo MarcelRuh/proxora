@@ -8,6 +8,7 @@ export type SelfUpdateProgress = {
 };
 
 export const PROGRESS_FILE = ".proxora-update-progress";
+export const COMPOSE_LOG_FILE = ".proxora-update-compose.log";
 export const REVISION_FILE = ".proxora-revision";
 
 const LOG_RULES: Array<{ test: RegExp; percent: number; step: string }> = [
@@ -85,6 +86,17 @@ export function readProgressFromDir(dir: string | null): SelfUpdateProgress | nu
   if (!existsSync(file)) return null;
   try {
     return parseProgressFile(readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+export function readComposeLogsFromDir(dir: string | null): string | null {
+  if (!dir) return null;
+  const file = path.join(dir, COMPOSE_LOG_FILE);
+  if (!existsSync(file)) return null;
+  try {
+    return readFileSync(file, "utf8");
   } catch {
     return null;
   }

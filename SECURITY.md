@@ -11,6 +11,7 @@ Please report vulnerabilities privately. Do not open a public issue with working
 - Put the app behind HTTPS
 - Prefer Proxmox API tokens with least privilege over `root@pam` passwords
 - Restrict manager users with host allow-lists when needed
+- Do not mount `docker.sock` into the Proxora app container; keep it on `proxora-updater` only
 - Back up PostgreSQL **and** `ENCRYPTION_KEY` together
 
 ## What is stored encrypted

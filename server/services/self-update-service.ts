@@ -4,6 +4,13 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { logger } from "@/lib/logger";
 import {
+  hasDockerSocket,
+  isSignalDirReady,
+  isUpdateBusyFromSignal,
+  resolveUpdateSignalDir,
+  writeUpdateRequest,
+} from "@/lib/self-update-signal";
+import {
   APP_VERSION,
   DEFAULT_GITHUB_BRANCH,
   DEFAULT_GITHUB_REPO,
@@ -18,6 +25,7 @@ import {
 import {
   mergeProgress,
   parseUpdaterLogs,
+  readComposeLogsFromDir,
   readProgressFromDir,
   REVISION_FILE,
   type SelfUpdateProgress,
@@ -94,7 +102,8 @@ function readLocalRevision(dir: string): string | null {
   return process.env.GIT_SHA ?? null;
 }
 
-async function isUpdaterRunning(): Promise<boolean> {
+async function isDockerUpdaterRunning(): Promise<boolean> {
+  if (!hasDockerSocket()) return false;
   try {
     const { stdout } = await execFileAsync(
       "docker",
@@ -107,7 +116,16 @@ async function isUpdaterRunning(): Promise<boolean> {
   }
 }
 
-async function updaterLogs(): Promise<string | null> {
+async function isUpdaterRunning(): Promise<boolean> {
+  const signalDir = resolveUpdateSignalDir();
+  if (isSignalDirReady(signalDir) && isUpdateBusyFromSignal(signalDir)) return true;
+  return isDockerUpdaterRunning();
+}
+
+async function updaterLogs(mount: string | null): Promise<string | null> {
+  const fromFile = readComposeLogsFromDir(mount);
+  if (fromFile) return fromFile;
+  if (!hasDockerSocket()) return null;
   try {
     const { stdout } = await execFileAsync("docker", ["logs", "--tail", "200", UPDATER_NAME], { timeout: 5_000 });
     return stdout;
@@ -202,7 +220,7 @@ export async function getSelfUpdateStatus(): Promise<SelfUpdateStatus> {
 
 async function withProgress(status: SelfUpdateStatus, mount: string | null): Promise<SelfUpdateStatus> {
   const file = readProgressFromDir(mount);
-  const logs = status.updating ? parseUpdaterLogs((await updaterLogs()) ?? "") : null;
+  const logs = status.updating ? parseUpdaterLogs((await updaterLogs(mount)) ?? "") : null;
   const progress = mergeProgress(file, logs);
   if (progress && status.updating && progress.step === "done") {
     return { ...status, progress };
@@ -265,8 +283,44 @@ async function applyOnHost(installMount: string, repo: string, branch: string) {
 }
 
 async function applyViaDocker(hostDir: string, repo: string, branch: string) {
+  const signalDir = resolveUpdateSignalDir();
+  if (isSignalDirReady(signalDir)) {
+    if (isUpdateBusyFromSignal(signalDir)) {
+      return { ok: false, mode: "compose" as const, message: "Update already running" };
+    }
+    try {
+      writeUpdateRequest(signalDir);
+      logger.info({ hostDir, repo, signalDir }, "Proxora update requested via sidecar");
+      return {
+        ok: true,
+        mode: "compose" as const,
+        message: "Updater started. Proxora will rebuild and come back shortly.",
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        mode: "compose" as const,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  if (hasDockerSocket()) {
+    return applyViaLegacyDocker(hostDir, repo, branch);
+  }
+
+  return {
+    ok: false,
+    mode: "compose" as const,
+    message:
+      "Self-update sidecar is missing. Recreate the stack with docker compose up -d so proxora-updater can own docker.sock.",
+  };
+}
+
+/** 1.0.58 and older mounted docker.sock into the app. Keep this path so the first jump to the sidecar works. */
+async function applyViaLegacyDocker(hostDir: string, repo: string, branch: string) {
   try {
-    if (await isUpdaterRunning()) {
+    if (await isDockerUpdaterRunning()) {
       return { ok: false, mode: "compose" as const, message: "Update already running" };
     }
     await execFileAsync("docker", ["rm", "-f", UPDATER_NAME], { timeout: 10_000 }).catch(() => undefined);
@@ -302,7 +356,7 @@ async function applyViaDocker(hostDir: string, repo: string, branch: string) {
       ],
       { timeout: 60_000 },
     );
-    logger.info({ hostDir, repo }, "Proxora self-updater started");
+    logger.info({ hostDir, repo }, "Proxora self-updater started (legacy docker.sock)");
     return {
       ok: true,
       mode: "compose" as const,

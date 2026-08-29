@@ -37,14 +37,35 @@ services:
       PROXORA_INSTALL_MOUNT: /install
       PROXORA_REPO: ${PROXORA_REPO:-MarcelRuh/proxora}
       PROXORA_BRANCH: ${PROXORA_BRANCH:-main}
+      PROXORA_UPDATE_SIGNAL_DIR: /update-signal
     volumes:
-      - ${PROXORA_INSTALL_DIR:-.}:/install
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PROXORA_INSTALL_DIR:-.}:/install:ro
+      - proxora_update_signal:/update-signal
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
 
+  # Owns docker.sock. The app only writes /update-signal/request.
+  proxora-updater:
+    image: docker:27-cli
+    container_name: proxora-updater
+    restart: unless-stopped
+    environment:
+      PROXORA_INSTALL_DIR: ${PROXORA_INSTALL_DIR:-/opt/proxora}
+      PROXORA_REPO: ${PROXORA_REPO:-MarcelRuh/proxora}
+      PROXORA_BRANCH: ${PROXORA_BRANCH:-main}
+      PROXORA_UPDATE_SIGNAL_DIR: /update-signal
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PROXORA_INSTALL_DIR:-/opt/proxora}:${PROXORA_INSTALL_DIR:-/opt/proxora}
+      - ${PROXORA_INSTALL_DIR:-/opt/proxora}/scripts/update-watcher.sh:/update-watcher.sh:ro
+      - proxora_update_signal:/update-signal
+    entrypoint: ["sh", "/update-watcher.sh"]
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   postgres_data:
+  proxora_update_signal:

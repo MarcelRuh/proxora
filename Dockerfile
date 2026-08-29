@@ -29,7 +29,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV LISTEN_HOST=0.0.0.0
 ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
-RUN apt-get update && apt-get install -y --no-install-recommends openssl libssl3 ca-certificates wget git docker.io && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends openssl libssl3 ca-certificates wget && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/dist ./dist

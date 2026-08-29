@@ -22,6 +22,8 @@ describe("notification topic filters", () => {
     expect(channelAllowsTopic([], "host.online")).toBe(false);
     expect(channelAllowsTopic(["backup.started"], "backup.failed")).toBe(true);
     expect(channelAllowsTopic(["backup.restored"], "backup.failed")).toBe(false);
+    expect(channelAllowsTopic(["disk.full"], "disk.full")).toBe(true);
+    expect(channelAllowsTopic(["host.updates"], "disk.full")).toBe(false);
   });
 
   it("drops unknown event ids", () => {
@@ -77,6 +79,17 @@ describe("discord embeds", () => {
     expect(buildDiscordWebhookPayload({ ...TEST_NOTIFICATION_EVENT, level: "error", topic: "host.offline" }).embeds[0].color).toBe(
       DISCORD_EMBED_COLORS.error,
     );
+  });
+
+  it("labels disk.full", () => {
+    expect(
+      buildDiscordWebhookPayload({
+        topic: "disk.full",
+        level: "warning",
+        title: "Storage 91 % voll",
+        message: "local-lvm",
+      }).embeds[0].fields?.find((f) => f.name === "Ereignis")?.value,
+    ).toBe("Disk fast voll");
   });
 
   it("appends wait=true without dropping the token", () => {
