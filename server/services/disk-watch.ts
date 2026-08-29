@@ -4,26 +4,40 @@ import { notifyTopic } from "@/server/notifications/dispatch";
 import { clientForHost } from "@/server/services/host-service";
 import {
   applyDiskWatchState,
+  diskSampleHref,
   diskUsagePercent,
   guestDiskKey,
+  guestFilesystemPercent,
+  isStorageMonitored,
   storageDiskKey,
   type DiskSample,
+  type GuestFsEntry,
 } from "@/lib/disk-alerts";
+import { loadDiskAlertSettings, loadDiskWatchState, saveDiskWatchState } from "@/server/services/disk-settings";
 
 export const DISK_WATCH_INTERVAL_MS = 5 * 60_000;
 export const DISK_WATCH_STARTUP_DELAY_MS = 45_000;
 
-const notified = new Map<string, boolean>();
 let scheduled = false;
 let running = false;
 let timer: ReturnType<typeof setTimeout> | null = null;
 
-function remember(samples: DiskSample[]): number {
+function agentEntries(payload: unknown): GuestFsEntry[] {
+  if (Array.isArray(payload)) return payload as GuestFsEntry[];
+  if (payload && typeof payload === "object" && Array.isArray((payload as { result?: unknown }).result)) {
+    return (payload as { result: GuestFsEntry[] }).result;
+  }
+  return [];
+}
+
+async function remember(samples: DiskSample[], alertPercent: number, clearPercent: number): Promise<number> {
+  const state = await loadDiskWatchState();
+  const notified = { ...state.notified };
   let count = 0;
   for (const sample of samples) {
-    const prev = notified.get(sample.key) ?? false;
-    const next = applyDiskWatchState(prev, sample.percent);
-    notified.set(sample.key, next.notified);
+    const prev = notified[sample.key] ?? false;
+    const next = applyDiskWatchState(prev, sample.percent, alertPercent, clearPercent);
+    notified[sample.key] = next.notified;
     if (!next.notify) continue;
     count += 1;
     const pct = sample.percent.toLocaleString("de-DE", { maximumFractionDigits: 1 });
@@ -38,12 +52,15 @@ function remember(samples: DiskSample[]): number {
       id: sample.id ?? sample.key,
       host: sample.hostName,
       node: sample.node,
+      href: sample.href,
     });
   }
+  await saveDiskWatchState({ notified, samples });
   return count;
 }
 
 export async function scanDiskUsage(): Promise<number> {
+  const { alertPercent, clearPercent } = await loadDiskAlertSettings();
   const hosts = await prisma.host.findMany({ orderBy: { name: "asc" } });
   const samples: DiskSample[] = [];
 
@@ -58,9 +75,10 @@ export async function scanDiskUsage(): Promise<number> {
         nodes.map(async (n) => {
           const list = await client.storage.list(n.node).catch(() => []);
           for (const storage of list) {
+            if (!isStorageMonitored(storage)) continue;
             const percent = diskUsagePercent(storage.used, storage.total);
             if (percent == null) continue;
-            samples.push({
+            const sample: DiskSample = {
               key: storageDiskKey(host.id, n.node, storage.storage),
               kind: "storage",
               name: storage.storage,
@@ -69,16 +87,19 @@ export async function scanDiskUsage(): Promise<number> {
               hostName: host.name,
               node: n.node,
               id: storage.storage,
-            });
+            };
+            sample.href = diskSampleHref(sample);
+            samples.push(sample);
           }
         }),
       );
 
       for (const guest of guests.vms) {
-        if (guest.template || !guest.vmid) continue;
-        const percent = diskUsagePercent(guest.disk, guest.maxdisk);
+        if (guest.template || !guest.vmid || guest.status !== "running" || !guest.node) continue;
+        const fs = await client.vms.agentFsInfo(guest.node, guest.vmid).catch(() => null);
+        const percent = guestFilesystemPercent(agentEntries(fs));
         if (percent == null) continue;
-        samples.push({
+        const sample: DiskSample = {
           key: guestDiskKey(host.id, "vm", guest.vmid),
           kind: "guest",
           guestKind: "vm",
@@ -88,13 +109,15 @@ export async function scanDiskUsage(): Promise<number> {
           hostName: host.name,
           node: guest.node,
           id: String(guest.vmid),
-        });
+        };
+        sample.href = diskSampleHref(sample);
+        samples.push(sample);
       }
       for (const guest of guests.containers) {
         if (guest.template || !guest.vmid) continue;
         const percent = diskUsagePercent(guest.disk, guest.maxdisk);
         if (percent == null) continue;
-        samples.push({
+        const sample: DiskSample = {
           key: guestDiskKey(host.id, "lxc", guest.vmid),
           kind: "guest",
           guestKind: "lxc",
@@ -104,7 +127,9 @@ export async function scanDiskUsage(): Promise<number> {
           hostName: host.name,
           node: guest.node,
           id: String(guest.vmid),
-        });
+        };
+        sample.href = diskSampleHref(sample);
+        samples.push(sample);
       }
     } catch (error) {
       logger.warn(
@@ -114,7 +139,7 @@ export async function scanDiskUsage(): Promise<number> {
     }
   }
 
-  return remember(samples);
+  return remember(samples, alertPercent, clearPercent);
 }
 
 async function tick() {
@@ -145,9 +170,4 @@ export function startDiskWatchScheduler() {
     void tick();
   }, DISK_WATCH_STARTUP_DELAY_MS);
   startup.unref?.();
-}
-
-/** Tests only. */
-export function resetDiskWatchState() {
-  notified.clear();
 }

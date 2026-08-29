@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.60] – 2026-08-29
+
+### Added
+
+- In-app inbox for notifications, with links to Storage / VM / Container.
+- Disk alert threshold in Settings (default 90 % / 85 %).
+- Storage rows and a banner when a datastore is above the threshold.
+
+### Changed
+
+- Disk alerts persist across restarts. Inactive storage is ignored. VMs are measured via qemu-guest-agent, not image allocation.
+- Existing Discord event lists pick up newly introduced topics until the channel is saved again.
+- Self-update runs the local apply script through `docker-socket-proxy`. The app no longer mounts the install tree.
+
 ## [1.0.59] – 2026-08-29
 
 ### Added

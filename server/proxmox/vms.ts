@@ -126,6 +126,12 @@ export class VmApi {
     return this.http.put<string>(`/nodes/${encodeURIComponent(node)}/qemu/${vmid}/resize`, { disk, size });
   }
 
+  agentFsInfo(node: string, vmid: number) {
+    return this.http.get<{ result?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>>(
+      `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/agent/get-fsinfo`,
+    );
+  }
+
   termproxy(node: string, vmid: number) {
     return this.http.post<{ port: string; ticket: string; user: string }>(
       `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/termproxy`,

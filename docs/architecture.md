@@ -42,7 +42,7 @@ These are stored on the `Host` row and shown as badges. Live telemetry is fetche
 
 ## Self-update
 
-The Proxora app never receives `docker.sock`. Compose runs `proxora-updater` (Docker CLI image) with the socket. The app writes `/update-signal/request`; the sidecar starts `proxora-self-updater`, which applies `scripts/self-update-apply.sh`.
+The Proxora app never receives `docker.sock` or the install checkout. Compose runs `docker-socket-proxy` (restricted Docker API) and `proxora-updater`. The app writes `/update-signal/request`; the sidecar starts `proxora-self-updater` with the local apply script.
 
 ## Extensibility
 

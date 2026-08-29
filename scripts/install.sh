@@ -104,6 +104,8 @@ DATABASE_URL=postgresql://proxora:proxora@postgres:5432/proxora?schema=public
 POSTGRES_USER=proxora
 POSTGRES_PASSWORD=proxora
 POSTGRES_DB=proxora
+REDIS_PASSWORD=proxora
+REDIS_URL=redis://:proxora@redis:6379
 ENCRYPTION_KEY=$(rand)
 SESSION_SECRET=$(rand)
 BOOTSTRAP_ADMIN_USERNAME=${ADMIN_USER}

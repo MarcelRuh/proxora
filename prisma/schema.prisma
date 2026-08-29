@@ -171,6 +171,25 @@ model NotificationChannel {
   updatedAt DateTime @updatedAt
 }
 
+model InboxEvent {
+  id        String    @id @default(cuid())
+  topic     String
+  level     String
+  title     String
+  message   String
+  hostId    String?
+  name      String?
+  refId     String?
+  node      String?
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([readAt])
+  @@index([hostId])
+}
+
 model Job {
   id          String    @id @default(cuid())
   type        String

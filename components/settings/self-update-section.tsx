@@ -15,6 +15,7 @@ import type { MessageKey } from "@/lib/i18n/messages";
 export type SelfUpdateStatus = {
   enabled: boolean;
   mode: string;
+  sidecar: "ready" | "missing" | "host";
   currentVersion: string;
   sourceVersion: string | null;
   remoteVersion: string | null;
@@ -163,6 +164,8 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
                 <dd className="font-mono">{shortRev(status.localRevision)}</dd>
                 <dt>{t("proxora.remoteRev")}</dt>
                 <dd className="font-mono">{shortRev(status.remoteRevision)}</dd>
+                <dt>{t("proxora.sidecar")}</dt>
+                <dd>{t(`proxora.sidecar.${status.sidecar}` as MessageKey)}</dd>
               </dl>
             ) : null}
             {showProgress ? (
@@ -187,17 +190,19 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
                 <ConfirmAction
                   title={t("proxora.confirmTitle")}
                   description={
-                    status.updateAvailable
+                    (status.updateAvailable
                       ? t("proxora.confirmBody", {
                           from: status.currentVersion,
                           to: status.targetVersion ?? t("proxora.latest"),
                         })
-                      : t("proxora.confirmAnyway")
+                      : t("proxora.confirmAnyway")) +
+                    " " +
+                    t("proxora.confirmOverwrite")
                   }
                   actionLabel={t("proxora.apply")}
                   onConfirm={handleApply}
                 >
-                  <Button size="sm" disabled={busy || status.updating}>
+                  <Button size="sm" disabled={busy || status.updating || status.sidecar === "missing"}>
                     {busy || status.updating ? t("proxora.applying") : t("proxora.apply")}
                   </Button>
                 </ConfirmAction>

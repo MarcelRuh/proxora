@@ -56,6 +56,13 @@ export default function StoragePage() {
     },
     refetchInterval: 30_000,
   });
+  const { data: diskAlerts } = useQuery({
+    queryKey: ["disk-alerts"],
+    queryFn: () => api<{ alertPercent: number }>("/api/disk-alerts"),
+    refetchInterval: 60_000,
+    retry: false,
+  });
+  const alertAt = diskAlerts?.alertPercent ?? 90;
   const { data: zfs } = useQuery({
     queryKey: ["zfs", hostIds],
     enabled: Boolean(hosts),
@@ -126,9 +133,14 @@ export default function StoragePage() {
                             </td>
                             <td>{s.type}</td>
                             <td>
-                              <Badge variant={s.active ? "success" : "danger"}>
-                                {s.active ? t("settings.enabled") : t("settings.disabled")}
-                              </Badge>
+                              <div className="flex items-center gap-2">
+                                {s.active ? (
+                                  <Badge variant="success">{t("settings.enabled")}</Badge>
+                                ) : (
+                                  <Badge variant="danger">{t("settings.disabled")}</Badge>
+                                )}
+                                {s.active && pct >= alertAt ? <Badge variant="warning">{t("disk.fullBadge")}</Badge> : null}
+                              </div>
                             </td>
                             <td className="text-muted-foreground">{s.content}</td>
                             <td>{bytesToSize(s.used)}</td>

@@ -13,6 +13,7 @@ export type DiscordNotificationEvent = {
   id?: string;
   host?: string;
   node?: string;
+  href?: string;
 };
 
 export const DISCORD_EMBED_COLORS: Record<NotificationLevel, number> = {
@@ -109,6 +110,10 @@ export function buildDiscordWebhookPayload(
     { name: "Ereignis", value: TOPIC_LABELS[event.topic] ?? event.topic, inline: true },
     { name: "Stufe", value: LEVEL_LABELS[event.level] ?? event.level, inline: true },
   ];
+  const origin = process.env.APP_URL?.replace(/\/+$/, "");
+  if (event.href && origin) {
+    fields.push({ name: "Link", value: clip(`${origin}${event.href}`, 1024), inline: false });
+  }
 
   return {
     username: APP_NAME,

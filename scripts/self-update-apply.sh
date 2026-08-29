@@ -13,7 +13,14 @@ CLONE_URL="https://github.com/${REPO}.git"
 PROGRESS_FILE="${INSTALL_DIR}/.proxora-update-progress"
 LOCK_DIR="${INSTALL_DIR}/.proxora-update.lock"
 COMPOSE_LOG_FILE="${INSTALL_DIR}/.proxora-update-compose.log"
+SIGNAL_DIR="${PROXORA_UPDATE_SIGNAL_DIR:-}"
 rm -f "$PROGRESS_FILE"
+
+mirror_progress() {
+  if [ -n "$SIGNAL_DIR" ] && [ -d "$SIGNAL_DIR" ] && [ -f "$PROGRESS_FILE" ]; then
+    cp "$PROGRESS_FILE" "${SIGNAL_DIR}/.proxora-update-progress" 2>/dev/null || true
+  fi
+}
 
 if [ -d "$LOCK_DIR" ]; then
   echo "==> Clearing leftover update lock"
@@ -22,6 +29,7 @@ fi
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   echo "ERROR: another Proxora update is already running" >&2
   printf 'percent=%s\nstep=%s\ndetail=%s\n' 0 error "Update already running" > "$PROGRESS_FILE"
+  mirror_progress
   exit 1
 fi
 trap 'rm -rf "$LOCK_DIR"' EXIT
@@ -42,6 +50,7 @@ write_progress() {
   fi
   echo "==> [${percent}%] ${step}${detail:+ – $detail}"
   printf 'percent=%s\nstep=%s\ndetail=%s\n' "$percent" "$step" "$detail" > "$PROGRESS_FILE"
+  mirror_progress
 }
 
 watch_compose_log() {
@@ -166,6 +175,8 @@ sync_via_git() {
     echo "ERROR: fetch did not return a revision" >&2
     return 1
   fi
+  echo "==> Local changes that will be overwritten (except .env / data / progress files):"
+  git -C "$INSTALL_DIR" status --porcelain --untracked-files=no | grep -vE '^\s*\.env$|^\s*\.proxora-' || true
   # Appliance install: match GitHub exactly. ff-only fails on dirty/diverged trees
   # left by earlier tarball overlays and local commits.
   git -C "$INSTALL_DIR" reset --hard "$REMOTE"
@@ -224,6 +235,9 @@ fi
 
 if [ "$SKIP_COMPOSE" = "1" ]; then
   printf '%s\n' "$SHA" > "${INSTALL_DIR}/.proxora-revision"
+  if [ -n "$SIGNAL_DIR" ] && [ -d "$SIGNAL_DIR" ]; then
+    printf '%s\n' "$SHA" > "${SIGNAL_DIR}/.proxora-revision"
+  fi
   echo " wrote .proxora-revision"
   write_progress 100 done "Files updated"
   echo "==> Done. Restart Proxora if it does not hot-reload."
@@ -249,8 +263,11 @@ set -e
 kill "$WATCH" 2>/dev/null || true
 wait "$WATCH" 2>/dev/null || true
 cat "$TMP/compose.log" || true
+cp "$TMP/compose.log" "$COMPOSE_LOG_FILE" 2>/dev/null || true
+if [ -n "$SIGNAL_DIR" ] && [ -d "$SIGNAL_DIR" ]; then
+  cp "$TMP/compose.log" "${SIGNAL_DIR}/.proxora-update-compose.log" 2>/dev/null || true
+fi
 if [ "$COMPOSE_RC" -ne 0 ]; then
-  cp "$TMP/compose.log" "$COMPOSE_LOG_FILE" 2>/dev/null || true
   err="$(grep -E 'ERROR|error:|failed|ELIFECYCLE|no space' "$TMP/compose.log" | tail -1 | tr '\n' ' ' | cut -c1-180)"
   if [ -z "$err" ]; then
     err="$(tail -8 "$TMP/compose.log" | tr '\n' ' ' | cut -c1-180)"
@@ -261,6 +278,9 @@ if [ "$COMPOSE_RC" -ne 0 ]; then
 fi
 
 printf '%s\n' "$SHA" > "${INSTALL_DIR}/.proxora-revision"
+if [ -n "$SIGNAL_DIR" ] && [ -d "$SIGNAL_DIR" ]; then
+  printf '%s\n' "$SHA" > "${SIGNAL_DIR}/.proxora-revision"
+fi
 echo " wrote .proxora-revision"
 write_progress 96 finalize "Revision saved"
 docker builder prune -af >/dev/null 2>&1 || true

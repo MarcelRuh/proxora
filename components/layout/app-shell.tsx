@@ -27,6 +27,8 @@ import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { CommandSearch } from "@/components/layout/command-search";
 import { AptUpdateBanner, useAptSummary } from "@/components/layout/apt-update-alert";
+import { InboxMenu } from "@/components/layout/inbox-menu";
+import { DiskAlertBanner } from "@/components/layout/disk-alert-banner";
 import { NeonAtmosphere } from "@/components/layout/neon-atmosphere";
 import { BrandMark } from "@/components/layout/brand-mark";
 import type { SessionUser } from "@/lib/types";
@@ -138,6 +140,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             {t("nav.search")}
             <kbd className="ml-auto text-[10px] text-sidebar-muted">⌘K</kbd>
           </button>
+          {hasAnyPermission(user.role.permissions, ["hosts.view", "notifications.view"]) ? <InboxMenu /> : null}
           {hasAnyPermission(user.role.permissions, ["proxora.update", "updates.view"]) ? <SidebarVersion /> : null}
           <div className="flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider">
             <button
@@ -178,6 +181,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
           <span className="proxora-logo text-sm">{APP_NAME.toUpperCase()}</span>
         </header>
         {hasPermission(user.role.permissions, "updates.view") ? <AptUpdateBanner /> : null}
+        {hasAnyPermission(user.role.permissions, ["storage.view", "hosts.view"]) ? <DiskAlertBanner /> : null}
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </div>
       <CommandSearch open={searchOpen} onOpenChange={setSearchOpen} />

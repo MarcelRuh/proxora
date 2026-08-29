@@ -6,7 +6,7 @@ import {
   discordWaitUrl,
   TEST_NOTIFICATION_EVENT,
 } from "@/lib/discord-embed";
-import { channelAllowsTopic, parseNotificationEvents } from "@/lib/notification-topics";
+import { channelAllowsTopic, eventsWithNewTopics, LEGACY_EVENTS_SEEN, NOTIFICATION_TOPICS, parseNotificationEvents } from "@/lib/notification-topics";
 import { sendNotificationTest } from "@/server/notifications/send-test";
 import { pickGuestName } from "@/server/notifications/guest-name";
 
@@ -22,12 +22,16 @@ describe("notification topic filters", () => {
     expect(channelAllowsTopic([], "host.online")).toBe(false);
     expect(channelAllowsTopic(["backup.started"], "backup.failed")).toBe(true);
     expect(channelAllowsTopic(["backup.restored"], "backup.failed")).toBe(false);
-    expect(channelAllowsTopic(["disk.full"], "disk.full")).toBe(true);
-    expect(channelAllowsTopic(["host.updates"], "disk.full")).toBe(false);
+    expect(channelAllowsTopic(["host.updates"], "disk.full")).toBe(true);
+    expect(channelAllowsTopic(["host.updates"], "disk.full", [...NOTIFICATION_TOPICS])).toBe(false);
   });
 
   it("drops unknown event ids", () => {
     expect(parseNotificationEvents(["vm.created", "nope", 1])).toEqual(["vm.created"]);
+  });
+
+  it("adds topics that did not exist when the channel was saved", () => {
+    expect(eventsWithNewTopics(["host.updates"], LEGACY_EVENTS_SEEN)).toContain("disk.full");
   });
 });
 

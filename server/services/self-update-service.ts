@@ -4,7 +4,6 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { logger } from "@/lib/logger";
 import {
-  hasDockerSocket,
   isSignalDirReady,
   isUpdateBusyFromSignal,
   resolveUpdateSignalDir,
@@ -32,14 +31,15 @@ import {
 } from "@/server/services/self-update-progress";
 
 const execFileAsync = promisify(execFile);
-const UPDATER_NAME = "proxora-self-updater";
 const APPLY_TIMEOUT_MS = 20 * 60 * 1000;
 
 export type SelfUpdateMode = "compose" | "none";
+export type SelfUpdateSidecar = "ready" | "missing" | "host";
 
 export interface SelfUpdateStatus {
   enabled: boolean;
   mode: SelfUpdateMode;
+  sidecar: SelfUpdateSidecar;
   currentVersion: string;
   sourceVersion: string | null;
   remoteVersion: string | null;
@@ -67,6 +67,18 @@ function options() {
   };
 }
 
+function progressDir(): string | null {
+  const signal = resolveUpdateSignalDir();
+  if (isSignalDirReady(signal)) return signal;
+  const mount = options().installDirMount;
+  return mount && existsSync(mount) ? mount : null;
+}
+
+function sidecarState(): SelfUpdateSidecar {
+  if (!existsSync("/.dockerenv")) return "host";
+  return isSignalDirReady(resolveUpdateSignalDir()) ? "ready" : "missing";
+}
+
 function readSourceVersion(dir: string): string | null {
   try {
     const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8")) as { version?: string };
@@ -76,7 +88,8 @@ function readSourceVersion(dir: string): string | null {
   }
 }
 
-function readLocalRevision(dir: string): string | null {
+function readLocalRevision(dir: string | null): string | null {
+  if (!dir) return process.env.GIT_SHA ?? null;
   const file = path.join(dir, REVISION_FILE);
   if (existsSync(file)) {
     try {
@@ -85,75 +98,39 @@ function readLocalRevision(dir: string): string | null {
       /* ignore */
     }
   }
-  try {
-    const head = path.join(dir, ".git", "HEAD");
-    if (existsSync(head)) {
-      const ref = readFileSync(head, "utf8").trim();
-      if (ref.startsWith("ref:")) {
-        const refPath = path.join(dir, ".git", ref.slice(4).trim());
-        if (existsSync(refPath)) return readFileSync(refPath, "utf8").trim();
-      } else if (/^[a-f0-9]{40}$/.test(ref)) {
-        return ref;
-      }
-    }
-  } catch {
-    /* ignore */
-  }
   return process.env.GIT_SHA ?? null;
 }
 
-async function isDockerUpdaterRunning(): Promise<boolean> {
-  if (!hasDockerSocket()) return false;
-  try {
-    const { stdout } = await execFileAsync(
-      "docker",
-      ["ps", "--filter", `name=^${UPDATER_NAME}$`, "--filter", "status=running", "--format", "{{.Names}}"],
-      { timeout: 5_000 },
-    );
-    return stdout.split("\n").some((n) => n.trim() === UPDATER_NAME);
-  } catch {
-    return false;
-  }
-}
-
-async function isUpdaterRunning(): Promise<boolean> {
+function isUpdaterRunning(): boolean {
   const signalDir = resolveUpdateSignalDir();
-  if (isSignalDirReady(signalDir) && isUpdateBusyFromSignal(signalDir)) return true;
-  return isDockerUpdaterRunning();
-}
-
-async function updaterLogs(mount: string | null): Promise<string | null> {
-  const fromFile = readComposeLogsFromDir(mount);
-  if (fromFile) return fromFile;
-  if (!hasDockerSocket()) return null;
-  try {
-    const { stdout } = await execFileAsync("docker", ["logs", "--tail", "200", UPDATER_NAME], { timeout: 5_000 });
-    return stdout;
-  } catch {
-    return null;
-  }
+  return isSignalDirReady(signalDir) && isUpdateBusyFromSignal(signalDir);
 }
 
 export async function getSelfUpdateStatus(): Promise<SelfUpdateStatus> {
   const opts = options();
-  const updating = applyInFlight || (await isUpdaterRunning());
+  const sidecar = sidecarState();
+  const updating = applyInFlight || isUpdaterRunning();
   const mount = opts.installDirMount;
-  const sourceVersion = mount ? readSourceVersion(mount) : null;
-  const composeFile = mount ? path.join(mount, "docker-compose.yml") : "";
-  const enabled = Boolean(mount && existsSync(composeFile));
+  const sourceDir = mount && existsSync(path.join(mount, "package.json")) ? mount : null;
+  const sourceVersion = sourceDir ? readSourceVersion(mount) : null;
+  const enabled = Boolean(opts.installDirHost) || sidecar === "ready" || sidecar === "host";
 
   const base: SelfUpdateStatus = {
     enabled,
     mode: enabled ? "compose" : "none",
+    sidecar,
     currentVersion: APP_VERSION,
     sourceVersion,
     remoteVersion: null,
-    localRevision: mount ? readLocalRevision(mount) : null,
+    localRevision: readLocalRevision(progressDir()),
     remoteRevision: null,
     updateAvailable: false,
-    message: enabled
-      ? "Checking GitHub…"
-      : "Self-update unavailable. Set PROXORA_INSTALL_DIR to the Compose install path.",
+    message:
+      sidecar === "missing"
+        ? "Self-update sidecar is missing. Recreate the stack with docker compose up -d."
+        : enabled
+          ? "Checking GitHub…"
+          : "Self-update unavailable. Set PROXORA_INSTALL_DIR to the Compose install path.",
     installDir: opts.installDirHost ?? mount,
     repo: opts.repo,
     branch: opts.branch,
@@ -163,7 +140,7 @@ export async function getSelfUpdateStatus(): Promise<SelfUpdateStatus> {
     targetVersion: null,
   };
 
-  if (!enabled) return withProgress(base, mount);
+  if (!enabled || sidecar === "missing") return withProgress(base);
 
   let remoteRevision: string | null = null;
   let shaError: string | null = null;
@@ -196,31 +173,29 @@ export async function getSelfUpdateStatus(): Promise<SelfUpdateStatus> {
     }
   }
 
-  return withProgress(
-    {
-      ...base,
-      remoteVersion,
-      remoteRevision,
-      updateAvailable,
-      targetVersion,
-      changelog,
-      message: updating
-        ? "Update running…"
-        : shaError && !updateAvailable
-          ? `GitHub check failed: ${shaError}`
-          : updateAvailable
-            ? targetVersion
-              ? `Update available — ${APP_VERSION} → ${targetVersion}`
-              : "Update available from GitHub"
-            : "Up to date",
-    },
-    mount,
-  );
+  return withProgress({
+    ...base,
+    remoteVersion,
+    remoteRevision,
+    updateAvailable,
+    targetVersion,
+    changelog,
+    message: updating
+      ? "Update running…"
+      : shaError && !updateAvailable
+        ? `GitHub check failed: ${shaError}`
+        : updateAvailable
+          ? targetVersion
+            ? `Update available — ${APP_VERSION} → ${targetVersion}`
+            : "Update available from GitHub"
+          : "Up to date",
+  });
 }
 
-async function withProgress(status: SelfUpdateStatus, mount: string | null): Promise<SelfUpdateStatus> {
-  const file = readProgressFromDir(mount);
-  const logs = status.updating ? parseUpdaterLogs((await updaterLogs(mount)) ?? "") : null;
+async function withProgress(status: SelfUpdateStatus): Promise<SelfUpdateStatus> {
+  const dir = progressDir();
+  const file = readProgressFromDir(dir);
+  const logs = status.updating ? parseUpdaterLogs(readComposeLogsFromDir(dir) ?? "") : null;
   const progress = mergeProgress(file, logs);
   if (progress && status.updating && progress.step === "done") {
     return { ...status, progress };
@@ -229,11 +204,14 @@ async function withProgress(status: SelfUpdateStatus, mount: string | null): Pro
 }
 
 export async function applySelfUpdate(): Promise<{ ok: boolean; message: string; mode: SelfUpdateMode }> {
-  if (applyInFlight || (await isUpdaterRunning())) {
+  if (applyInFlight || isUpdaterRunning()) {
     return { ok: false, message: "Update already running", mode: "compose" };
   }
   const status = await getSelfUpdateStatus();
   if (!status.enabled) return { ok: false, message: status.message, mode: status.mode };
+  if (status.sidecar === "missing") {
+    return { ok: false, message: status.message, mode: status.mode };
+  }
 
   const opts = options();
   const hostDir = opts.installDirHost ?? opts.installDirMount;
@@ -247,7 +225,7 @@ export async function applySelfUpdate(): Promise<{ ok: boolean; message: string;
     if (!existsSync("/.dockerenv")) {
       return await applyOnHost(mount, opts.repo, opts.branch);
     }
-    return await applyViaDocker(hostDir, opts.repo, opts.branch);
+    return applyViaSignal(hostDir, opts.repo);
   } finally {
     applyInFlight = false;
   }
@@ -282,81 +260,21 @@ async function applyOnHost(installMount: string, repo: string, branch: string) {
   }
 }
 
-async function applyViaDocker(hostDir: string, repo: string, branch: string) {
+function applyViaSignal(hostDir: string, repo: string) {
   const signalDir = resolveUpdateSignalDir();
-  if (isSignalDirReady(signalDir)) {
-    if (isUpdateBusyFromSignal(signalDir)) {
-      return { ok: false, mode: "compose" as const, message: "Update already running" };
-    }
-    try {
-      writeUpdateRequest(signalDir);
-      logger.info({ hostDir, repo, signalDir }, "Proxora update requested via sidecar");
-      return {
-        ok: true,
-        mode: "compose" as const,
-        message: "Updater started. Proxora will rebuild and come back shortly.",
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        mode: "compose" as const,
-        message: error instanceof Error ? error.message : String(error),
-      };
-    }
+  if (!isSignalDirReady(signalDir)) {
+    return {
+      ok: false,
+      mode: "compose" as const,
+      message: "Self-update sidecar is missing. Recreate the stack with docker compose up -d.",
+    };
   }
-
-  if (hasDockerSocket()) {
-    return applyViaLegacyDocker(hostDir, repo, branch);
+  if (isUpdateBusyFromSignal(signalDir)) {
+    return { ok: false, mode: "compose" as const, message: "Update already running" };
   }
-
-  return {
-    ok: false,
-    mode: "compose" as const,
-    message:
-      "Self-update sidecar is missing. Recreate the stack with docker compose up -d so proxora-updater can own docker.sock.",
-  };
-}
-
-/** 1.0.58 and older mounted docker.sock into the app. Keep this path so the first jump to the sidecar works. */
-async function applyViaLegacyDocker(hostDir: string, repo: string, branch: string) {
   try {
-    if (await isDockerUpdaterRunning()) {
-      return { ok: false, mode: "compose" as const, message: "Update already running" };
-    }
-    await execFileAsync("docker", ["rm", "-f", UPDATER_NAME], { timeout: 10_000 }).catch(() => undefined);
-    const rawUrl = `https://raw.githubusercontent.com/${repo}/${branch}/scripts/self-update-apply.sh`;
-    await execFileAsync(
-      "docker",
-      [
-        "run",
-        "-d",
-        "--init",
-        "--name",
-        UPDATER_NAME,
-        "-v",
-        `${hostDir}:${hostDir}`,
-        "-v",
-        "/var/run/docker.sock:/var/run/docker.sock",
-        "-e",
-        `PROXORA_INSTALL_DIR=${hostDir}`,
-        "-e",
-        `PROXORA_REPO=${repo}`,
-        "-e",
-        `PROXORA_BRANCH=${branch}`,
-        "-e",
-        "PROXORA_SKIP_COMPOSE=0",
-        "-w",
-        hostDir,
-        "--label",
-        "proxora.update=self",
-        "docker:27-cli",
-        "sh",
-        "-c",
-        `wget -qO /tmp/proxora-apply.sh ${JSON.stringify(rawUrl)} && exec sh /tmp/proxora-apply.sh`,
-      ],
-      { timeout: 60_000 },
-    );
-    logger.info({ hostDir, repo }, "Proxora self-updater started (legacy docker.sock)");
+    writeUpdateRequest(signalDir);
+    logger.info({ hostDir, repo, signalDir }, "Proxora update requested via sidecar");
     return {
       ok: true,
       mode: "compose" as const,

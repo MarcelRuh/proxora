@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { apiRoute } from "@/server/http/api-route";
 import { json } from "@/server/http/respond";
 import { NotFoundError } from "@/lib/errors";
-import { eventsFromConfig, NOTIFICATION_TOPICS } from "@/lib/notification-topics";
+import { eventsFromConfig, eventsSeenFromConfig, eventsWithNewTopics, NOTIFICATION_TOPICS, configWithEvents } from "@/lib/notification-topics";
 
 const patchSchema = z.object({
   name: z.string().min(1).optional(),
@@ -23,7 +23,7 @@ export const PATCH = apiRoute("notifications.update", async (req, _session, para
   } catch {
     config = {};
   }
-  if (body.events !== undefined) config.events = body.events;
+  config = configWithEvents(config, body.events);
   if (body.url) config.url = body.url;
   const channel = await prisma.notificationChannel.update({
     where: { id: existing.id },
@@ -33,7 +33,7 @@ export const PATCH = apiRoute("notifications.update", async (req, _session, para
       config: encryptSecret(JSON.stringify(config)),
     },
   });
-  let events = eventsFromConfig(config);
+  const events = eventsWithNewTopics(eventsFromConfig(config), eventsSeenFromConfig(config));
   return json({
     channel: {
       id: channel.id,

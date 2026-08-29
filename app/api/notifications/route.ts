@@ -3,7 +3,7 @@ import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { prisma } from "@/lib/db";
 import { apiRoute } from "@/server/http/api-route";
 import { json } from "@/server/http/respond";
-import { eventsFromConfig, NOTIFICATION_TOPICS } from "@/lib/notification-topics";
+import { eventsFromConfig, eventsSeenFromConfig, eventsWithNewTopics, NOTIFICATION_TOPICS, configWithEvents } from "@/lib/notification-topics";
 
 const schema = z.object({
   type: z.enum(["discord", "webhook"]),
@@ -17,7 +17,7 @@ function publicChannel(row: { id: string; type: string; name: string; enabled: b
   let events = null as ReturnType<typeof eventsFromConfig>;
   try {
     const config = JSON.parse(decryptSecret(row.config)) as Record<string, unknown>;
-    events = eventsFromConfig(config);
+    events = eventsWithNewTopics(eventsFromConfig(config), eventsSeenFromConfig(config));
   } catch {
     events = null;
   }
@@ -31,8 +31,7 @@ export const GET = apiRoute("notifications.view", async () => {
 
 export const POST = apiRoute("notifications.create", async (req) => {
   const body = schema.parse(await req.json());
-  const config = { ...body.config };
-  if (body.events !== undefined) config.events = body.events;
+  const config = configWithEvents({ ...body.config }, body.events);
   const channel = await prisma.notificationChannel.create({
     data: {
       type: body.type,
