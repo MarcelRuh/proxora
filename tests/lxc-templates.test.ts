@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  compareTemplateVersion,
+  groupTemplatePackages,
   headlineFromPackage,
   isLxcAppliance,
   mergeTemplateCatalog,
@@ -83,5 +85,30 @@ describe("lxc templates", () => {
     expect(merged[0]?.installed).toBe(true);
     expect(merged[0]?.version).toBe("13.1-2");
     expect(merged[1]?.installed).toBe(false);
+  });
+
+  it("marks debian 13.1-2 as updatable when 13.6-1 is in the catalog", () => {
+    expect(compareTemplateVersion("13.6-1", "13.1-2")).toBeGreaterThan(0);
+    const merged = mergeTemplateCatalog(
+      [
+        {
+          template: "debian-13-standard_13.6-1_amd64.tar.zst",
+          package: "debian-13-standard",
+          version: "13.6-1",
+          section: "system",
+          headline: "Debian 13",
+          type: "lxc",
+          os: "debian",
+          architecture: "amd64",
+        },
+      ],
+      ["local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"],
+    );
+    const grouped = groupTemplatePackages(merged);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]?.updateAvailable).toBe(true);
+    expect(grouped[0]?.installedVersion).toBe("13.1-2");
+    expect(grouped[0]?.latestVersion).toBe("13.6-1");
+    expect(grouped[0]?.installedVolids).toEqual(["local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"]);
   });
 });

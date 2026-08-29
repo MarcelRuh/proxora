@@ -114,8 +114,8 @@ export function parseProxmoxTaskProgress(lines: ProxmoxLogLine[]): { percent: nu
     if (!text) continue;
     detail = text;
     const tagged = /\bprogress\s+(\d+(?:\.\d+)?)\s*%/i.exec(text);
-    const generic = /(?:^|[\s(])(\d{1,3}(?:\.\d+)?)\s*%(?:\s|[),]|$)/.exec(text);
-    const raw = tagged?.[1] ?? generic?.[1];
+    const percents = [...text.matchAll(/(\d{1,3}(?:\.\d+)?)\s*%/g)].map((m) => Number(m[1]));
+    const raw = tagged?.[1] ?? (percents.length ? String(Math.max(...percents.filter((n) => Number.isFinite(n)))) : undefined);
     if (raw) {
       const n = Number(raw);
       if (Number.isFinite(n) && n >= 0 && n <= 100) percent = Math.max(percent ?? 0, n);

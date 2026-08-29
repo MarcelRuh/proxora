@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.53] – 2026-08-29
+
+### Added
+
+- Templates can be updated when a newer catalog version exists, deleted from storage, and show live download/update progress.
+
 ## [1.0.52] – 2026-08-29
 
 ### Fixed

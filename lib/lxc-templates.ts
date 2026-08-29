@@ -9,7 +9,21 @@ export type AplTemplate = {
   architecture: string;
 };
 
-export type CatalogTemplate = AplTemplate & { installed: boolean };
+export type CatalogTemplate = AplTemplate & { installed: boolean; volid?: string };
+
+export type TemplatePackageRow = {
+  key: string;
+  package: string;
+  headline: string;
+  section: string;
+  architecture: string;
+  installedVersion: string;
+  installedTemplate: string;
+  installedVolids: string[];
+  latestVersion: string;
+  latestTemplate: string;
+  updateAvailable: boolean;
+};
 
 const ARCHIVE_RE = /\.(tar\.(gz|xz|zst|bz2)|tgz)$/i;
 
@@ -109,7 +123,77 @@ export function templateFromInstalledVolid(volid: string): CatalogTemplate {
     os: "",
     architecture: parsed.architecture,
     installed: true,
+    volid,
   };
+}
+
+export function compareTemplateVersion(a: string, b: string): number {
+  const pa = String(a)
+    .trim()
+    .split(/[.-]/)
+    .map((n) => Number.parseInt(n, 10) || 0);
+  const pb = String(b)
+    .trim()
+    .split(/[.-]/)
+    .map((n) => Number.parseInt(n, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const da = pa[i] ?? 0;
+    const db = pb[i] ?? 0;
+    if (da !== db) return da - db;
+  }
+  return 0;
+}
+
+export function packageKey(row: { package: string; architecture: string; template: string }): string {
+  const parsed = parseVztmplFilename(row.template);
+  const pkg = (row.package || parsed.package).trim().toLowerCase() || row.template.toLowerCase();
+  const arch = (row.architecture || parsed.architecture).trim().toLowerCase();
+  return `${pkg}|${arch}`;
+}
+
+export function groupTemplatePackages(rows: CatalogTemplate[]): TemplatePackageRow[] {
+  const groups = new Map<string, CatalogTemplate[]>();
+  for (const row of rows) {
+    const key = packageKey(row);
+    const list = groups.get(key) ?? [];
+    list.push(row);
+    groups.set(key, list);
+  }
+  const out: TemplatePackageRow[] = [];
+  for (const [key, list] of groups) {
+    const byVersion = (a: CatalogTemplate, b: CatalogTemplate) =>
+      compareTemplateVersion(b.version, a.version) || b.template.localeCompare(a.template);
+    const installed = list.filter((row) => row.installed).sort(byVersion);
+    const newestInstalled = installed[0];
+    const newestAny = [...list].sort(byVersion)[0];
+    const latestTemplate = newestAny?.template ?? "";
+    const latestVersion = newestAny?.version ?? "";
+    const updateAvailable = Boolean(
+      newestInstalled &&
+        latestTemplate &&
+        latestTemplate !== newestInstalled.template &&
+        compareTemplateVersion(latestVersion, newestInstalled.version) > 0,
+    );
+    out.push({
+      key,
+      package: newestAny?.package || newestInstalled?.package || "",
+      headline: newestAny?.headline || newestInstalled?.headline || latestTemplate,
+      section: newestAny?.section || newestInstalled?.section || "system",
+      architecture: newestAny?.architecture || newestInstalled?.architecture || "",
+      installedVersion: newestInstalled?.version ?? "",
+      installedTemplate: newestInstalled?.template ?? "",
+      installedVolids: installed.map((row) => row.volid).filter((volid): volid is string => Boolean(volid)),
+      latestVersion,
+      latestTemplate,
+      updateAvailable,
+    });
+  }
+  return out.sort((a, b) => {
+    if (a.updateAvailable !== b.updateAvailable) return a.updateAvailable ? -1 : 1;
+    if (Boolean(a.installedVersion) !== Boolean(b.installedVersion)) return a.installedVersion ? -1 : 1;
+    return a.headline.localeCompare(b.headline);
+  });
 }
 
 export function sortAplTemplates(a: AplTemplate, b: AplTemplate): number {
@@ -130,6 +214,7 @@ export function mergeTemplateCatalog(catalog: AplTemplate[], installedVolids: It
     const existing = byFile.get(key);
     if (existing) {
       existing.installed = true;
+      existing.volid = volid;
       continue;
     }
     byFile.set(key, templateFromInstalledVolid(volid));
