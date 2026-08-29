@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -16,6 +17,7 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
 import {
   filterTasks,
+  taskGuestHref,
   taskGuestLabel,
   taskRunState,
   taskTypeLabel,
@@ -199,7 +201,17 @@ export default function TasksPage() {
                         <p className="text-[11px] text-muted-foreground">{row.type}</p>
                       </td>
                       <td>
-                        {taskGuestLabel(row) || "—"}
+                        {(() => {
+                          const href = taskGuestHref(row);
+                          const label = taskGuestLabel(row);
+                          if (!label) return "—";
+                          if (!href) return label;
+                          return (
+                            <Link className="hover:underline" href={href}>
+                              {label}
+                            </Link>
+                          );
+                        })()}
                         {row.guestKind ? (
                           <span className="ml-1 text-[11px] uppercase text-muted-foreground">{row.guestKind}</span>
                         ) : null}

@@ -11,7 +11,9 @@ export type TaskLike = {
   id?: string;
   node?: string;
   user?: string;
+  hostId?: string;
   guestName?: string;
+  guestKind?: "vm" | "lxc";
 };
 
 const TASK_TYPE_LABELS: Record<string, { de: string; en: string }> = {
@@ -111,6 +113,18 @@ export function taskGuestLabel(task: TaskLike): string {
   if (!id) return "";
   if (task.guestName && task.guestName !== id) return `${id} (${task.guestName})`;
   return id;
+}
+
+export function taskGuestHref(task: TaskLike): string | null {
+  const hostId = task.hostId?.trim();
+  const node = task.node?.trim();
+  const vmid = Number(taskGuestId(task));
+  if (!hostId || !node || !Number.isInteger(vmid) || vmid <= 0) return null;
+  const group = taskKindGroup(task.type);
+  const kind = task.guestKind ?? (group === "lxc" || group === "vm" ? group : null);
+  if (!kind) return null;
+  const base = kind === "lxc" ? "containers" : "vms";
+  return `/${base}/${hostId}/${encodeURIComponent(node)}/${vmid}`;
 }
 
 export type TaskFilter = {

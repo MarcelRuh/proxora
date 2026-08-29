@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.58] – 2026-08-29
+
+### Added
+
+- VGA console explains when the VM is stopped, sends the clipboard, and has a labeled Ctrl+Alt+Del.
+- Task guest names link to the VM or container.
+- Snapshot from the VM and container lists.
+
 ## [1.0.57] – 2026-08-29
 
 ### Added

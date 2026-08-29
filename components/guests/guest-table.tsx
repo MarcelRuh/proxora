@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Play, Square, RotateCcw, Terminal } from "lucide-react";
+import { Play, Square, RotateCcw, Terminal, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ export function GuestTable({
       shutdown: useCan("vm.shutdown"),
       reboot: useCan("vm.reboot"),
       console: useCan("vm.console"),
+      snapshot: useCan("vm.snapshot.create"),
       delete: useCan("vm.delete"),
     },
     lxc: {
@@ -43,6 +44,7 @@ export function GuestTable({
       shutdown: useCan("lxc.shutdown"),
       reboot: useCan("lxc.reboot"),
       console: useCan("lxc.console"),
+      snapshot: useCan("lxc.snapshot.create"),
       delete: useCan("lxc.delete"),
     },
   };
@@ -69,14 +71,14 @@ export function GuestTable({
     return kind === "lxc" ? "lxc" : "vm";
   }
 
-  async function guestAction(hid: string, node: string, vmid: number, action: string, row: "vm" | "lxc") {
+  async function guestAction(hid: string, node: string, vmid: number, action: string, row: "vm" | "lxc", extra: Record<string, unknown> = {}) {
     const permPath = row === "vm" ? "vms" : "lxc";
     try {
       await api(`/api/hosts/${hid}/${permPath}/${node}/${vmid}`, {
         method: "POST",
-        body: JSON.stringify({ action, confirm: action === "delete" }),
+        body: JSON.stringify({ action, confirm: action === "delete", ...extra }),
       });
-      toast.success(t("common.taskDone"));
+      toast.success(action === "snapshot" ? t("guest.snapshotCreated") : t("common.taskDone"));
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["all-vms"] }),
         qc.invalidateQueries({ queryKey: ["all-lxc"] }),
@@ -214,6 +216,19 @@ export function GuestTable({
                         {perms.reboot ? (
                           <Button size="icon" variant="ghost" title={t("guest.reboot")} onClick={() => void guestAction(hid, g.node, g.vmid, "reboot", row)}>
                             <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                        {perms.snapshot ? (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title={t("guest.createSnapshot")}
+                            aria-label={t("guest.createSnapshot")}
+                            onClick={() =>
+                              void guestAction(hid, g.node, g.vmid, "snapshot", row, { snapname: `snap-${Date.now()}` })
+                            }
+                          >
+                            <Camera className="h-4 w-4" />
                           </Button>
                         ) : null}
                         {perms.console ? (

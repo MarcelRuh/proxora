@@ -33,6 +33,8 @@ This matches [pve-xtermjs](https://github.com/proxmox/pve-xtermjs).
 3. Backend calls `POST /nodes/{node}/qemu/{vmid}/vncproxy` with `{ websocket: 1 }`.
 4. Backend opens the same `vncwebsocket` path, sends `{user}:{ticket}\n`, waits for `OK`, then pipes **raw RFB** both ways. The `OK` acknowledgement never reaches the browser.
 5. `@novnc/novnc` speaks RFB against Proxora. Tickets stay on the server.
+6. VGA is only opened when the VM is running (or paused). A stopped VM shows a hint instead of a failed WebSocket.
+7. Clipboard: browser paste via `clipboardPasteFrom`; VM copy arrives as a `clipboard` event and is written to the local clipboard. Ctrl+Alt+Del is a labeled button.
 
 LXC and node shells stay on termproxy. QEMU SPICE is not implemented.
 

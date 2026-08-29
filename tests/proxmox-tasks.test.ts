@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   filterTasks,
+  taskGuestHref,
   taskGuestLabel,
   taskKindGroup,
   taskRunState,
@@ -35,6 +36,20 @@ describe("task labels and status", () => {
   it("shows guest name next to the id", () => {
     expect(taskGuestLabel({ id: "100", guestName: "web" })).toBe("100 (web)");
     expect(taskGuestLabel({ id: "100" })).toBe("100");
+  });
+
+  it("links guest tasks to the detail page", () => {
+    expect(taskGuestHref({ hostId: "h1", node: "pve", id: "100", guestKind: "vm", type: "qmstart" })).toBe(
+      "/vms/h1/pve/100",
+    );
+    expect(taskGuestHref({ hostId: "h1", node: "pve", id: "204", type: "vzstart" })).toBe(
+      "/containers/h1/pve/204",
+    );
+    expect(taskGuestHref({ hostId: "h1", node: "pve", id: "100", type: "vzdump" })).toBeNull();
+    expect(taskGuestHref({ hostId: "h1", node: "pve", id: "100", guestKind: "vm", type: "vzdump" })).toBe(
+      "/vms/h1/pve/100",
+    );
+    expect(taskGuestHref({ hostId: "h1", node: "pve", id: "iso/foo.iso", type: "download" })).toBeNull();
   });
 
   it("filters by host, kind, status and query", () => {

@@ -95,7 +95,13 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
       return;
     }
     toast.success(
-      name === "config" ? t("guest.configSaved") : name === "resize" ? t("config.diskResized") : t("common.taskDone"),
+      name === "config"
+        ? t("guest.configSaved")
+        : name === "resize"
+          ? t("config.diskResized")
+          : name === "snapshot"
+            ? t("guest.snapshotCreated")
+            : t("common.taskDone"),
     );
     void refetch();
   }
@@ -280,7 +286,12 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             </div>
           ) : null}
           {kind === "vm" && consoleMode === "vga" ? (
-            <VncConsole hostId={params.hostId} node={params.node} vmid={Number(params.vmid)} />
+            <VncConsole
+              hostId={params.hostId}
+              node={params.node}
+              vmid={Number(params.vmid)}
+              running={running || paused}
+            />
           ) : (
             <WebConsole hostId={params.hostId} node={params.node} kind={kind} vmid={Number(params.vmid)} />
           )}
