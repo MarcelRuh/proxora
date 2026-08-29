@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.65] – 2026-08-29
+
+### Fixed
+
+- Production build typecheck: restore `invalidateGuestNoteCache` import on the VM action route.
+
 ## [1.0.64] – 2026-08-29
 
 ### Added

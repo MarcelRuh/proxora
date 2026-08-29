@@ -15,6 +15,7 @@ import { withHostClient } from "@/server/services/host-service";
 import { waitGuestAction } from "@/server/proxmox/task-wait";
 import { durationLabel } from "@/lib/duration";
 import { notifyGuestTaskFailed } from "@/server/notifications/guest-task-fail";
+import { invalidateGuestNoteCache } from "@/server/services/guest-notes";
 import { isQemuAgentEnabled, vmDiskFromAgent } from "@/server/services/guest-disk";
 
 export const maxDuration = 800;
