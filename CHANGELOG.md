@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.67] – 2026-08-30
+
+### Fixed
+
+- VM VGA console: noVNC now receives the QEMU VNC password after the PVE `OK` handshake, so the session authenticates instead of stalling on “connecting”.
+
 ## [1.0.66] – 2026-08-30
 
 ### Changed

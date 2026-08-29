@@ -1,6 +1,6 @@
 # WebSocket console
 
-The browser never receives Proxmox tickets, tokens or passwords.
+The browser never receives Proxmox API tickets or tokens. VGA consoles get a short-lived 8-character RFB password so noVNC can authenticate to QEMU.
 
 ```
 xterm.js     --ws /ws/console-->  Proxora  --wss-->  Proxmox termproxy
@@ -30,9 +30,9 @@ This matches [pve-xtermjs](https://github.com/proxmox/pve-xtermjs).
 
 1. VM detail opens `VncConsole` (`components/console/vnc-console.tsx`) by default. Serial remains available as a toggle.
 2. Browser connects to `ws(s)://{manager}/ws/vnc?hostId&node&kind=vm&vmid`.
-3. Backend calls `POST /nodes/{node}/qemu/{vmid}/vncproxy` with `{ websocket: 1 }`.
-4. Backend opens the same `vncwebsocket` path, sends `{user}:{ticket}\n`, waits for `OK`, then pipes **raw RFB** both ways. The `OK` acknowledgement never reaches the browser.
-5. `@novnc/novnc` speaks RFB against Proxora. Tickets stay on the server.
+3. Backend calls `POST /nodes/{node}/qemu/{vmid}/vncproxy` with `{ websocket: 1, generate-password: 1 }` (falls back without `generate-password` on older PVE).
+4. Backend opens the same `vncwebsocket` path, sends `{user}:{ticket}\n`, and waits for `OK`.
+5. The browser receives a JSON `vnc-auth` frame with the RFB password, replies `vnc-ready`, then `@novnc/novnc` speaks RFB. The PVE `OK` line never reaches the browser. Without the RFB password, QEMU VNC auth fails and the console stays on “connecting”.
 6. VGA is only opened when the VM is running (or paused). A stopped VM shows a hint instead of a failed WebSocket.
 7. Clipboard: browser paste via `clipboardPasteFrom`; VM copy arrives as a `clipboard` event and is written to the local clipboard. Ctrl+Alt+Del is a labeled button.
 

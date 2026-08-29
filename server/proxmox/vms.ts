@@ -140,10 +140,10 @@ export class VmApi {
     );
   }
 
-  vncproxy(node: string, vmid: number) {
-    return this.http.post<{ port: string; ticket: string; user: string }>(
+  vncproxy(node: string, vmid: number, extra?: Record<string, unknown>) {
+    return this.http.post<{ port: string; ticket: string; user: string; password?: string }>(
       `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/vncproxy`,
-      { websocket: 1 },
+      { websocket: 1, ...extra },
     );
   }
 }

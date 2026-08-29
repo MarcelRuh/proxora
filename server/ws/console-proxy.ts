@@ -9,6 +9,7 @@ import { getSessionFromToken, assertGuestAccess, canAccessHost } from "@/server/
 import { writeAuditLog } from "@/server/services/audit-service";
 import { clientForHost } from "@/server/services/host-service";
 import { consumeProxmoxVncHandshake, wsPayloadToBuffer } from "@/lib/vnc-handshake";
+import { rfbPasswordFromVncProxy } from "@/lib/vnc-password";
 
 function cookieValue(req: IncomingMessage, name: string): string | undefined {
   const header = req.headers.cookie;
@@ -86,7 +87,7 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
     const proxmox = await clientForHost(host);
     const term =
       display === "vga"
-        ? await proxmox.vms.vncproxy(node, Number(vmid))
+        ? await openVmVncProxy(proxmox, node, Number(vmid))
         : kind === "node"
           ? await proxmox.nodes.termproxy(node, cmd === "upgrade" ? { cmd: "upgrade" } : undefined)
           : kind === "vm"
@@ -125,7 +126,7 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
     };
 
     if (display === "vga") {
-      pipeVnc(browser, remote, `${term.user}:${term.ticket}\n`, closeBoth);
+      pipeVnc(browser, remote, `${term.user}:${term.ticket}\n`, rfbPasswordFromVncProxy(term), closeBoth);
     } else {
       pipeTerm(browser, remote, term, cols, rows, closeBoth);
     }
@@ -209,19 +210,45 @@ function pipeTerm(
   browser.on("error", () => closeBoth());
 }
 
+async function openVmVncProxy(
+  proxmox: Awaited<ReturnType<typeof clientForHost>>,
+  node: string,
+  vmid: number,
+) {
+  try {
+    return await proxmox.vms.vncproxy(node, vmid, { "generate-password": 1 });
+  } catch (error) {
+    logger.warn({ err: error instanceof Error ? error.message : error, node, vmid }, "vncproxy generate-password failed, retrying");
+    return proxmox.vms.vncproxy(node, vmid);
+  }
+}
+
 function pipeVnc(
   browser: WebSocket,
   remote: WebSocket,
   ticketLine: string,
+  password: string,
   closeBoth: (code?: number, reason?: string) => void,
 ) {
   let handshake: Buffer = Buffer.alloc(0);
-  let ready = false;
-  const pending: Buffer[] = [];
+  let upstreamReady = false;
+  let clientReady = false;
+  const toRemote: Buffer[] = [];
+  let leftover = Buffer.alloc(0);
 
-  const flushPending = () => {
-    if (!ready || remote.readyState !== WebSocket.OPEN) return;
-    for (const chunk of pending.splice(0)) remote.send(chunk);
+  const handshakeTimer = setTimeout(() => {
+    if (!upstreamReady || !clientReady) closeBoth(1011, "VNC handshake timeout");
+  }, 15_000);
+
+  const flush = () => {
+    if (!upstreamReady || !clientReady) return;
+    clearTimeout(handshakeTimer);
+    if (leftover.length && browser.readyState === WebSocket.OPEN) {
+      browser.send(leftover);
+      leftover = Buffer.alloc(0);
+    }
+    if (remote.readyState !== WebSocket.OPEN) return;
+    for (const chunk of toRemote.splice(0)) remote.send(chunk);
   };
 
   remote.on("open", () => {
@@ -230,7 +257,7 @@ function pipeVnc(
 
   remote.on("message", (data) => {
     const chunk = asBuffer(data);
-    if (!ready) {
+    if (!upstreamReady) {
       const next = consumeProxmoxVncHandshake(handshake, chunk);
       handshake = Buffer.from(next.rest);
       if (!next.done) return;
@@ -239,23 +266,39 @@ function pipeVnc(
         closeBoth(1011, "VNC handshake failed");
         return;
       }
-      ready = true;
-      if (next.rest.length && browser.readyState === WebSocket.OPEN) {
-        browser.send(next.rest);
+      upstreamReady = true;
+      leftover = Buffer.from(next.rest);
+      if (browser.readyState === WebSocket.OPEN) {
+        browser.send(JSON.stringify({ type: "vnc-auth", password }));
       }
-      flushPending();
+      flush();
+      return;
+    }
+    if (!clientReady) {
+      leftover = Buffer.concat([leftover, chunk]);
       return;
     }
     if (browser.readyState === WebSocket.OPEN) browser.send(chunk);
   });
 
   browser.on("message", (data) => {
-    const chunk = asBuffer(data);
-    if (!ready) {
-      pending.push(chunk);
+    if (!clientReady) {
+      const text = typeof data === "string" ? data : asBuffer(data).toString();
+      try {
+        const parsed = JSON.parse(text) as { type?: string };
+        if (parsed.type === "vnc-ready") {
+          clientReady = true;
+          flush();
+          return;
+        }
+      } catch {
+        /* RFB bytes before the client is attached */
+      }
+      toRemote.push(asBuffer(data));
+      flush();
       return;
     }
-    if (remote.readyState === WebSocket.OPEN) remote.send(chunk);
+    if (remote.readyState === WebSocket.OPEN) remote.send(asBuffer(data));
   });
 
   remote.on("close", () => closeBoth());
