@@ -15,13 +15,25 @@ import { CreateIpFields, ipCollision, ipFieldsFromVmid } from "@/components/gues
 import { CreateProgressDialog } from "@/components/guests/create-progress-dialog";
 import { DEFAULT_GUEST_NETWORK, type GuestIpNetwork } from "@/lib/create-ip";
 import type { LxcIpMode } from "@/lib/lxc-net";
+import { bytesToSize } from "@/lib/utils";
 import { isWindowsIso, suggestVirtioIso } from "@/lib/iso-images";
+import { storageIsIscsi, vmDiskStorages, VM_DISK_BUSES, VM_SCSI_CONTROLLERS } from "@/lib/vm-storage";
 import { useI18n } from "@/components/i18n/locale-provider";
+import type { StorageContentItem } from "@/lib/storage-content";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 type Options = {
   nodes: Array<{ node: string }>;
   nextid: number | null;
-  storage: Array<{ storage: string; content?: string }>;
+  storage: Array<{
+    storage: string;
+    type?: string;
+    content?: string;
+    active?: number;
+    enabled?: number;
+    avail?: number;
+    total?: number;
+  }>;
   isos: Array<{ volid?: string }>;
   bridges: Array<{ iface?: string }>;
   networks?: GuestIpNetwork[];
@@ -47,6 +59,9 @@ export default function CreateVmPage() {
     iso2: "",
     diskStorage: "",
     diskSize: "32",
+    diskVolume: "",
+    diskBus: "scsi" as "scsi" | "virtio" | "sata",
+    scsihw: "virtio-scsi-single" as "virtio-scsi-single" | "virtio-scsi",
     cores: 2,
     memory: 2048,
     bridge: "",
@@ -73,10 +88,7 @@ export default function CreateVmPage() {
     }
   }, [hosts, form.hostId]);
 
-  const imageStores = useMemo(
-    () => (options?.storage ?? []).filter((s) => (s.content ?? "").includes("images")),
-    [options],
-  );
+  const imageStores = useMemo(() => vmDiskStorages(options?.storage ?? []), [options]);
   const isos = useMemo(
     () => (options?.isos ?? []).map((i) => String(i.volid ?? "")).filter(Boolean),
     [options],
@@ -87,13 +99,26 @@ export default function CreateVmPage() {
   );
   const networks = options?.networks ?? [];
   const usedIps = options?.usedIps ?? [];
+  const selectedStore = imageStores.find((s) => s.storage === form.diskStorage);
+  const iscsi = selectedStore ? storageIsIscsi(selectedStore) : false;
+  const node = form.node || options?.nodes[0]?.node || "";
+  const { data: lunData } = useQuery({
+    queryKey: ["vm-disk-luns", form.hostId, node, form.diskStorage],
+    enabled: Boolean(form.hostId && node && form.diskStorage && iscsi),
+    queryFn: () =>
+      api<{ items: StorageContentItem[] }>(
+        `/api/hosts/${form.hostId}/storage/content?node=${encodeURIComponent(node)}&storage=${encodeURIComponent(form.diskStorage)}`,
+      ),
+    retry: false,
+  });
+  const luns = lunData?.items ?? [];
 
   useEffect(() => {
     if (!options) return;
     setForm((f) => {
       const node =
         f.node && options.nodes.some((n) => n.node === f.node) ? f.node : (options.nodes[0]?.node ?? "");
-      const stores = (options.storage ?? []).filter((s) => (s.content ?? "").includes("images"));
+      const stores = vmDiskStorages(options.storage ?? []);
       const storageList = stores.length ? stores : (options.storage ?? []);
       const diskStorage =
         f.diskStorage && storageList.some((s) => s.storage === f.diskStorage)
@@ -130,7 +155,10 @@ export default function CreateVmPage() {
           iso: form.iso || undefined,
           iso2: form.iso2 || undefined,
           diskStorage: form.diskStorage,
-          diskSize: String(Number(form.diskSize) || 32),
+          diskSize: form.diskVolume ? undefined : String(Number(form.diskSize) || 32),
+          diskVolume: form.diskVolume || undefined,
+          diskBus: form.diskBus,
+          scsihw: form.scsihw,
           cores: form.cores,
           memory: form.memory,
           bridge: form.bridge,
@@ -139,7 +167,7 @@ export default function CreateVmPage() {
           ssd: true,
           ipv4: form.ipMode === "dhcp" ? "dhcp" : form.cidr,
           gateway: form.ipMode === "static" ? form.gateway : undefined,
-          cloudInit: form.ipMode === "static" && form.cloudInit,
+          cloudInit: form.ipMode === "static" && form.cloudInit && !iscsi,
         }),
       });
     },
@@ -176,6 +204,7 @@ export default function CreateVmPage() {
     (form.vmid > 0 || Boolean(options?.nextid)) &&
     form.name.trim().length > 0 &&
     Boolean(form.diskStorage) &&
+    (iscsi ? Boolean(form.diskVolume) || Number(form.diskSize) > 0 : Number(form.diskSize) > 0) &&
     Boolean(form.bridge) &&
     (form.ipMode === "dhcp" || (form.cidr.trim().length > 0 && form.gateway.trim().length > 0)) &&
     !(form.ipMode === "static" && ipCollision(form.cidr, usedIps));
@@ -191,7 +220,7 @@ export default function CreateVmPage() {
               className={selectClass}
               value={form.hostId}
               onChange={(e) =>
-                setForm({ ...form, hostId: e.target.value, node: "", iso: "", iso2: "", diskStorage: "", bridge: "", vmid: 0 })
+                setForm({ ...form, hostId: e.target.value, node: "", iso: "", iso2: "", diskStorage: "", diskVolume: "", bridge: "", vmid: 0 })
               }
             >
               <option value="">{t("common.chooseHost")}</option>
@@ -286,17 +315,80 @@ export default function CreateVmPage() {
               <p className="mt-1 text-sm text-muted-foreground">{t("create.iso2Hint")}</p>
             ) : null}
           </label>
-          <label className="text-sm">
+          <label className="text-sm md:col-span-2">
             {t("create.storage")}
-            <select className={selectClass} value={form.diskStorage} onChange={(e) => setForm({ ...form, diskStorage: e.target.value })}>
+            <select
+              className={selectClass}
+              value={form.diskStorage}
+              onChange={(e) => setForm({ ...form, diskStorage: e.target.value, diskVolume: "" })}
+            >
               {(imageStores.length ? imageStores : (options?.storage ?? [])).map((s) => (
                 <option key={s.storage} value={s.storage}>
-                  {s.storage}
+                  {[s.storage, s.type, s.avail != null ? `${bytesToSize(s.avail)} ${t("create.storageFree")}` : ""]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </option>
               ))}
             </select>
           </label>
-          <Field label={t("create.disk")} value={form.diskSize} onChange={(diskSize) => setForm({ ...form, diskSize })} />
+          <label className="text-sm">
+            {t("create.scsihw")}
+            <select
+              className={selectClass}
+              value={form.scsihw}
+              onChange={(e) => setForm({ ...form, scsihw: e.target.value as typeof form.scsihw })}
+            >
+              {VM_SCSI_CONTROLLERS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {t(item.labelKey as MessageKey)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            {t("create.diskBus")}
+            <select
+              className={selectClass}
+              value={form.diskBus}
+              onChange={(e) => setForm({ ...form, diskBus: e.target.value as typeof form.diskBus })}
+            >
+              {VM_DISK_BUSES.map((bus) => (
+                <option key={bus} value={bus}>
+                  {t(
+                    bus === "scsi"
+                      ? "create.diskBusScsi"
+                      : bus === "virtio"
+                        ? "create.diskBusVirtio"
+                        : "create.diskBusSata",
+                  )}
+                </option>
+              ))}
+            </select>
+          </label>
+          {iscsi ? (
+            <label className="text-sm md:col-span-2">
+              {t("create.lun")}
+              <select
+                className={selectClass}
+                value={form.diskVolume}
+                onChange={(e) => setForm({ ...form, diskVolume: e.target.value })}
+              >
+                <option value="">{t("common.none")}</option>
+                {luns.map((item) => (
+                  <option key={item.volid} value={item.volid}>
+                    {item.filename || item.volid}
+                    {item.size ? ` · ${bytesToSize(item.size)}` : ""}
+                  </option>
+                ))}
+              </select>
+              {!luns.length ? <p className="mt-1 text-sm text-muted-foreground">{t("create.lunEmpty")}</p> : null}
+            </label>
+          ) : (
+            <Field label={t("create.disk")} value={form.diskSize} onChange={(diskSize) => setForm({ ...form, diskSize })} />
+          )}
+          {!iscsi || form.diskVolume ? null : (
+            <Field label={t("create.disk")} value={form.diskSize} onChange={(diskSize) => setForm({ ...form, diskSize })} />
+          )}
           <Field label={t("create.cores")} value={String(form.cores)} onChange={(v) => setForm({ ...form, cores: Number(v) || 1 })} />
           <Field label={t("create.memory")} value={String(form.memory)} onChange={(v) => setForm({ ...form, memory: Number(v) || 512 })} />
           <label className="text-sm">
@@ -317,7 +409,7 @@ export default function CreateVmPage() {
             hint={form.iso && form.ipMode === "static" && !form.cloudInit ? t("create.isoIpHint") : undefined}
             onChange={(ip) => setForm({ ...form, ...ip })}
           />
-          {form.ipMode === "static" ? (
+          {form.ipMode === "static" && !iscsi ? (
             <label className="flex items-center gap-2 text-sm md:col-span-2">
               <input
                 type="checkbox"

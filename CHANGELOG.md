@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.69] – 2026-08-30
+
+### Added
+
+- VM create: pick any disk storage (LVM, ZFS, iSCSI, …) with type and free space, SCSI controller Single/Multi, and an iSCSI LUN when the target is iSCSI.
+
 ## [1.0.68] – 2026-08-30
 
 ### Added

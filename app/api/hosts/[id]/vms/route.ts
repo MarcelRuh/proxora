@@ -15,6 +15,7 @@ import { durationLabel } from "@/lib/duration";
 import { ipv4Host } from "@/lib/create-ip";
 import { assertGuestIdentityFree } from "@/server/services/guest-ips";
 import { ostypeFromIso, vmCdromDisks } from "@/lib/iso-images";
+import { diskExtras, vmDiskSpec } from "@/lib/vm-storage";
 import type { VmCreateParams } from "@/server/proxmox/vms";
 
 export const maxDuration = 800;
@@ -31,11 +32,12 @@ const createVmSchema = z.object({
   sockets: z.number().int().positive().optional(),
   numa: z.boolean().optional(),
   cpu: z.string().optional(),
-  scsihw: z.string().optional(),
+  scsihw: z.enum(["virtio-scsi-single", "virtio-scsi"]).optional(),
   iso: z.string().optional(),
   iso2: z.string().optional(),
   diskStorage: z.string().min(1),
-  diskSize: z.string().min(1),
+  diskSize: z.string().optional(),
+  diskVolume: z.string().optional(),
   diskBus: z.enum(["scsi", "virtio", "sata", "ide"]).default("scsi"),
   cache: z.string().optional(),
   discard: z.boolean().optional(),
@@ -52,6 +54,9 @@ const createVmSchema = z.object({
   ipv4: z.string().optional(),
   gateway: z.string().optional(),
   cloudInit: z.boolean().optional(),
+}).refine((body) => Boolean(body.diskVolume?.trim()) || Boolean(body.diskSize?.trim()), {
+  message: "Disk-Größe oder Volume fehlt",
+  path: ["diskSize"],
 });
 
 export const GET = apiRoute("vm.view", async (_req, session, params) => {
@@ -65,11 +70,19 @@ export const GET = apiRoute("vm.view", async (_req, session, params) => {
 
 export const POST = apiRoute("vm.create", async (req, session, params) => {
   const body = createVmSchema.parse(await req.json());
-  const extras: string[] = [];
-  if (body.cache) extras.push(`cache=${body.cache}`);
-  if (body.discard) extras.push("discard=on");
-  if (body.ssd) extras.push("ssd=1");
-  const disk = `${body.diskStorage}:${body.diskSize}${extras.length ? `,${extras.join(",")}` : ""}`;
+  const extras = diskExtras({
+    cache: body.cache,
+    discard: body.discard,
+    ssd: body.ssd,
+    diskBus: body.diskBus,
+    scsihw: body.scsihw,
+  });
+  const disk = vmDiskSpec({
+    diskStorage: body.diskStorage,
+    diskSize: body.diskSize,
+    diskVolume: body.diskVolume,
+    extras,
+  });
   const net = [
     `model=${body.netModel}`,
     `bridge=${body.bridge}`,
@@ -96,7 +109,8 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     ostype: body.ostype ?? ostypeFromIso(body.iso ?? "") ?? "l26",
     agent: "1",
   };
-  const applyCloudInit = Boolean(body.cloudInit) && Boolean(body.ipv4) && body.ipv4 !== "dhcp";
+  const applyCloudInit =
+    Boolean(body.cloudInit) && Boolean(body.ipv4) && body.ipv4 !== "dhcp" && !body.diskVolume;
   if (applyCloudInit) {
     const ip = normalizeLxcCidr(body.ipv4!);
     payload.ipconfig0 = body.gateway?.trim() ? `ip=${ip},gw=${body.gateway.trim()}` : `ip=${ip}`;
