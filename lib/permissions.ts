@@ -328,6 +328,7 @@ export function permissionForGuestAction(kind: "vm" | "lxc", action: string): Pe
     case "snapshot-rollback":
       return `${prefix}.snapshot.rollback` as Permission;
     case "config":
+    case "resize":
       return `${prefix}.config` as Permission;
     default:
       return `${prefix}.view` as Permission;

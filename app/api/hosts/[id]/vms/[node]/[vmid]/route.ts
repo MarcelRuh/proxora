@@ -7,7 +7,8 @@ import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { pickGuestName } from "@/server/notifications/guest-name";
 import { hasPermission, permissionForGuestAction } from "@/lib/permissions";
-import { ForbiddenError } from "@/lib/errors";
+import { ForbiddenError, ValidationError } from "@/lib/errors";
+import { isResizeDiskKey } from "@/lib/proxmox-disk";
 import { assertGuestAccess } from "@/server/auth/session-core";
 import { assertGuestIdentityFree } from "@/server/services/guest-ips";
 import { withHostClient } from "@/server/services/host-service";
@@ -34,6 +35,7 @@ const actionSchema = z.object({
     "snapshot-delete",
     "snapshot-rollback",
     "config",
+    "resize",
   ]),
   confirm: z.boolean().optional(),
   newid: z.number().int().positive().optional(),
@@ -42,6 +44,8 @@ const actionSchema = z.object({
   snapname: z.string().optional(),
   description: z.string().optional(),
   config: z.record(z.string(), z.unknown()).optional(),
+  disk: z.string().optional(),
+  size: z.string().optional(),
 });
 
 const ACTION_AUDIT: Record<string, string> = {
@@ -59,6 +63,7 @@ const ACTION_AUDIT: Record<string, string> = {
   "snapshot-delete": AUDIT_ACTIONS.VM_SNAPSHOT_DELETED,
   "snapshot-rollback": AUDIT_ACTIONS.VM_SNAPSHOT_RESTORED,
   config: AUDIT_ACTIONS.VM_CONFIG_UPDATED,
+  resize: AUDIT_ACTIONS.VM_DISK_RESIZED,
 };
 
 function permissionFor(action: string) {
@@ -86,7 +91,6 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
     throw new ForbiddenError();
   }
   if (["delete", "reset"].includes(body.action) && body.confirm !== true) {
-    const { ValidationError } = await import("@/lib/errors");
     throw new ValidationError("Confirmation required");
   }
   const vmid = Number(params.vmid);
@@ -151,6 +155,13 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
         result = await vm.updateConfig(node, vmid, body.config ?? {});
         invalidateGuestNoteCache(client.http.baseUrl, "vm", node, vmid);
         break;
+      case "resize": {
+        const disk = body.disk?.trim() ?? "";
+        const size = body.size?.trim() ?? "";
+        if (!isResizeDiskKey(disk) || !size) throw new ValidationError("Disk und Größe fehlen");
+        result = await vm.resize(node, vmid, disk, size);
+        break;
+      }
       default:
         result = null;
     }

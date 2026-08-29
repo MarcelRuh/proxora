@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.56] – 2026-08-29
+
+### Fixed
+
+- LXC/VM disk size in **Disks** uses the Proxmox resize API, so growing rootfs (e.g. 8 → 16 GiB) actually expands the volume.
+
 ## [1.0.55] – 2026-08-29
 
 ### Added

@@ -5,7 +5,8 @@ describe("audit actions", () => {
   it("covers host, guest and auth events", () => {
     expect(AUDIT_ACTIONS.HOST_ADDED).toBe("HOST_ADDED");
     expect(AUDIT_ACTIONS.VM_STARTED).toBe("VM_STARTED");
-    expect(AUDIT_ACTIONS.LXC_CREATED).toBe("LXC_CREATED");
+    expect(AUDIT_ACTIONS.LXC_DISK_RESIZED).toBe("LXC_DISK_RESIZED");
+    expect(AUDIT_ACTIONS.VM_DISK_RESIZED).toBe("VM_DISK_RESIZED");
     expect(AUDIT_ACTIONS.LXC_TEMPLATE_DOWNLOADED).toBe("LXC_TEMPLATE_DOWNLOADED");
     expect(AUDIT_ACTIONS.LXC_TEMPLATE_DELETED).toBe("LXC_TEMPLATE_DELETED");
     expect(AUDIT_ACTIONS.ISO_DOWNLOADED).toBe("ISO_DOWNLOADED");

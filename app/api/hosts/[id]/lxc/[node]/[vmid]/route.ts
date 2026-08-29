@@ -7,7 +7,8 @@ import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { pickGuestName } from "@/server/notifications/guest-name";
 import { permissionForGuestAction, hasPermission } from "@/lib/permissions";
-import { ForbiddenError } from "@/lib/errors";
+import { ForbiddenError, ValidationError } from "@/lib/errors";
+import { isResizeDiskKey } from "@/lib/proxmox-disk";
 import { assertGuestAccess } from "@/server/auth/session-core";
 import { assertGuestIdentityFree } from "@/server/services/guest-ips";
 import { withHostClient } from "@/server/services/host-service";
@@ -30,6 +31,7 @@ const actionSchema = z.object({
     "snapshot-delete",
     "snapshot-rollback",
     "config",
+    "resize",
   ]),
   confirm: z.boolean().optional(),
   newid: z.number().int().positive().optional(),
@@ -37,6 +39,8 @@ const actionSchema = z.object({
   snapname: z.string().optional(),
   description: z.string().optional(),
   config: z.record(z.string(), z.unknown()).optional(),
+  disk: z.string().optional(),
+  size: z.string().optional(),
 });
 
 const ACTION_AUDIT: Record<string, string> = {
@@ -50,6 +54,7 @@ const ACTION_AUDIT: Record<string, string> = {
   "snapshot-delete": AUDIT_ACTIONS.LXC_SNAPSHOT_DELETED,
   "snapshot-rollback": AUDIT_ACTIONS.LXC_SNAPSHOT_RESTORED,
   config: AUDIT_ACTIONS.LXC_CONFIG_UPDATED,
+  resize: AUDIT_ACTIONS.LXC_DISK_RESIZED,
 };
 
 export const GET = apiRoute("lxc.view", async (_req, session, params) => {
@@ -73,7 +78,6 @@ export const POST = apiRoute("lxc.view", async (req, session, params) => {
     throw new ForbiddenError();
   }
   if (body.action === "delete" && body.confirm !== true) {
-    const { ValidationError } = await import("@/lib/errors");
     throw new ValidationError("Confirmation required");
   }
   const vmid = Number(params.vmid);
@@ -125,6 +129,13 @@ export const POST = apiRoute("lxc.view", async (req, session, params) => {
           result = await client.lxc.updateConfig(node, vmid, body.config ?? {});
           invalidateGuestNoteCache(client.http.baseUrl, "lxc", node, vmid);
           break;
+        case "resize": {
+          const disk = body.disk?.trim() ?? "";
+          const size = body.size?.trim() ?? "";
+          if (!isResizeDiskKey(disk) || !size) throw new ValidationError("Disk und Größe fehlen");
+          result = await client.lxc.resize(node, vmid, disk, size);
+          break;
+        }
         default:
           result = null;
       }

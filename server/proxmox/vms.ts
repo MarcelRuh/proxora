@@ -122,6 +122,10 @@ export class VmApi {
     );
   }
 
+  resize(node: string, vmid: number, disk: string, size: string) {
+    return this.http.put<string>(`/nodes/${encodeURIComponent(node)}/qemu/${vmid}/resize`, { disk, size });
+  }
+
   termproxy(node: string, vmid: number) {
     return this.http.post<{ port: string; ticket: string; user: string }>(
       `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/termproxy`,

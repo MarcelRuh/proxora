@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { buildMpSpec, isBindVolume, nextIndexedKey, parseMpSpec } from "@/lib/proxmox-mp";
+import { canResizeDisk, diskSizeDeltaGiB, formatDiskGiB, parseDiskSpec, setDiskSize } from "@/lib/proxmox-disk";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { Locale } from "@/lib/i18n/messages";
 
@@ -77,6 +78,7 @@ export function GuestConfigForm({
   vmid,
   config,
   onSave,
+  onResize,
   busy,
   readOnly,
 }: {
@@ -84,6 +86,7 @@ export function GuestConfigForm({
   vmid: number;
   config: Record<string, unknown>;
   onSave: (payload: Record<string, unknown>) => Promise<void>;
+  onResize?: (disk: string, size: string) => Promise<void>;
   busy?: boolean;
   readOnly?: boolean;
 }) {
@@ -167,20 +170,42 @@ export function GuestConfigForm({
   async function save() {
     const payload: Record<string, unknown> = {};
     const deleted: string[] = [];
+    const resizes: Array<{ disk: string; size: string }> = [];
     for (const key of Object.keys(original)) {
       if (!(key in form)) deleted.push(key);
     }
     for (const [key, value] of Object.entries(form)) {
       if (original[key] === value) continue;
       if (!(key in original) && value === "") continue;
+      if (isDisk(key) && original[key] && canResizeDisk(key, value)) {
+        const delta = diskSizeDeltaGiB(original[key], value);
+        if (delta != null && delta < -0.001) {
+          toast.error(t("config.diskShrink"));
+          return;
+        }
+        if (delta != null && delta > 0.001) {
+          const nextSize = parseDiskSpec(value).sizeGiB;
+          if (nextSize == null) continue;
+          resizes.push({ disk: key, size: formatDiskGiB(nextSize) });
+          const previousSize = parseDiskSpec(original[key]).sizeGiB;
+          const reverted = previousSize != null ? setDiskSize(value, previousSize) : original[key];
+          if (reverted !== original[key]) payload[key] = coerce(key, reverted);
+          continue;
+        }
+      }
       payload[key] = coerce(key, value);
     }
     if (deleted.length) payload.delete = deleted.join(",");
-    if (Object.keys(payload).length === 0) {
+    if (!resizes.length && Object.keys(payload).length === 0) {
       toast.message(t("config.noChanges"));
       return;
     }
-    await onSave(payload);
+    if (resizes.length && !onResize) {
+      toast.error(t("config.diskResizeUnsupported"));
+      return;
+    }
+    for (const item of resizes) await onResize?.(item.disk, item.size);
+    if (Object.keys(payload).length) await onSave(payload);
   }
 
   const cpuKeys = primary.filter((k) => CPU_KEYS.includes(k));
@@ -218,7 +243,13 @@ export function GuestConfigForm({
         <Section title={t("config.disks")} description={t("config.disksBody")}>
           <div className="space-y-2">
             {disks.map((key) => (
-              <RowField key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} onRemove={() => removeField(key)} />
+              <DiskRow
+                key={key}
+                name={key}
+                value={form[key] ?? ""}
+                onChange={(v) => setField(key, v)}
+                onRemove={key === "rootfs" ? undefined : () => removeField(key)}
+              />
             ))}
           </div>
         </Section>
@@ -364,6 +395,7 @@ function labelFor(key: string, locale: Locale) {
     protection: "Schutz",
     cpulimit: "CPU-Limit",
     cpuunits: "CPU-Units",
+    diskSize: "Größe",
   };
   const en: Record<string, string> = {
     name: "Name",
@@ -389,6 +421,7 @@ function labelFor(key: string, locale: Locale) {
     protection: "Protection",
     cpulimit: "CPU limit",
     cpuunits: "CPU units",
+    diskSize: "Size",
   };
   return (locale === "en" ? en : de)[key] ?? key;
 }
@@ -424,6 +457,50 @@ function Field({
         {hint ? <span className="ml-1 text-xs font-normal text-muted-foreground">{hint}</span> : null}
       </Label>
       <Input value={value} onChange={(e) => onChange(e.target.value)} className={name === "description" ? undefined : "font-mono"} />
+    </div>
+  );
+}
+
+function DiskRow({
+  name,
+  value,
+  onChange,
+  onRemove,
+}: {
+  name: string;
+  value: string;
+  onChange: (v: string) => void;
+  onRemove?: () => void;
+}) {
+  const { t } = useI18n();
+  const spec = parseDiskSpec(value);
+  const resizable = canResizeDisk(name, value);
+  const sizeLabel = spec.sizeGiB == null ? "" : String(Number.isInteger(spec.sizeGiB) ? spec.sizeGiB : spec.sizeGiB);
+  return (
+    <div className="space-y-2 rounded-lg border border-border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-mono text-sm">{name}</span>
+        {onRemove ? (
+          <Button type="button" size="sm" variant="ghost" onClick={onRemove}>
+            {t("settings.remove")}
+          </Button>
+        ) : null}
+      </div>
+      <p className="truncate font-mono text-xs text-muted-foreground">{spec.volume || value}</p>
+      {resizable ? (
+        <Field
+          name="diskSize"
+          value={sizeLabel}
+          onChange={(next) => {
+            const n = Number(next.replace(",", "."));
+            if (!Number.isFinite(n) || n <= 0) return;
+            onChange(setDiskSize(value, n));
+          }}
+          hint="GiB"
+        />
+      ) : (
+        <Input value={value} onChange={(e) => onChange(e.target.value)} className="font-mono text-xs" />
+      )}
     </div>
   );
 }

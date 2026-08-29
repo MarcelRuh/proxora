@@ -12,6 +12,7 @@ export const TASK_TIMEOUT = {
   clone: 600_000,
   migrate: 600_000,
   config: 60_000,
+  resize: 180_000,
 } as const;
 
 export function isUpid(value: unknown): value is string {
@@ -39,6 +40,8 @@ export function timeoutForGuestAction(action: string): number {
     case "snapshot-delete":
     case "snapshot-rollback":
       return TASK_TIMEOUT.snapshot;
+    case "resize":
+      return TASK_TIMEOUT.resize;
     default:
       return TASK_TIMEOUT.config;
   }

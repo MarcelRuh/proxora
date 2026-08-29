@@ -92,7 +92,9 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
       router.push(listPath);
       return;
     }
-    toast.success(name === "config" ? t("guest.configSaved") : t("common.taskDone"));
+    toast.success(
+      name === "config" ? t("guest.configSaved") : name === "resize" ? t("config.diskResized") : t("common.taskDone"),
+    );
     void refetch();
   }
 
@@ -272,6 +274,17 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             setSaving(true);
             try {
               await action("config", { config: payload });
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : t("common.failed"));
+              throw e;
+            } finally {
+              setSaving(false);
+            }
+          }}
+          onResize={async (disk, size) => {
+            setSaving(true);
+            try {
+              await action("resize", { disk, size });
             } catch (e) {
               toast.error(e instanceof Error ? e.message : t("common.failed"));
               throw e;
