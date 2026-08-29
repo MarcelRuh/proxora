@@ -141,6 +141,15 @@ export function LxcTemplatePanel({ hostId }: { hostId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task]);
 
+  useEffect(() => {
+    if (!finished) return;
+    const timer = window.setTimeout(() => {
+      clearJob();
+    }, 800);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finished]);
+
   function clearJob() {
     setBusy(false);
     setJob(null);

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.54] – 2026-08-29
+
+### Changed
+
+- Template download/update dialogs close automatically after success, matching restore.
+
 ## [1.0.53] – 2026-08-29
 
 ### Added
