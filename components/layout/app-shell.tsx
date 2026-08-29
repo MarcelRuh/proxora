@@ -17,6 +17,7 @@ import {
   Settings,
   Shield,
   ArrowUpCircle,
+  Library,
   Users,
   X,
 } from "lucide-react";
@@ -48,6 +49,7 @@ const NAV: Array<{
   { href: "/hosts", labelKey: "nav.hosts", icon: Server, anyOf: ["hosts.view"] },
   { href: "/vms", labelKey: "nav.vms", icon: Boxes, anyOf: ["vm.view"] },
   { href: "/containers", labelKey: "nav.containers", icon: Box, anyOf: ["lxc.view"] },
+  { href: "/templates", labelKey: "nav.templates", icon: Library, anyOf: ["lxc.create"] },
   { href: "/storage", labelKey: "nav.storage", icon: HardDrive, anyOf: ["storage.view", "zfs.view"] },
   { href: "/backups", labelKey: "nav.backups", icon: Archive, anyOf: ["backup.view"] },
   { href: "/tasks", labelKey: "nav.tasks", icon: Activity, anyOf: ["tasks.view"] },

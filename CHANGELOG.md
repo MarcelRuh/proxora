@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.51] – 2026-08-29
+
+### Changed
+
+- LXC template downloads live on a dedicated **Templates** nav page. Creating a container only selects already downloaded templates.
+
 ## [1.0.50] – 2026-08-29
 
 ### Added
