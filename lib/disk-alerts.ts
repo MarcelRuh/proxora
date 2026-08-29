@@ -83,20 +83,41 @@ const SKIP_MOUNT = /^\/(proc|sys|dev|run|snap|boot\/efi)(\/|$)/;
 /** Ignore EFI/config leftovers that sit at 100% while the guest disk still shows 0. */
 export const MIN_GUEST_FS_BYTES = 512 * 1024 * 1024;
 
-function fsUsage(entry: GuestFsEntry): { used: number; total: number } | null {
+function numBytes(value: unknown): number | null {
+  if (value == null) return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function parseGuestFsInfo(payload: unknown): GuestFsEntry[] {
+  if (Array.isArray(payload)) return payload as GuestFsEntry[];
+  if (payload && typeof payload === "object") {
+    const result = (payload as { result?: unknown }).result;
+    if (Array.isArray(result)) return result as GuestFsEntry[];
+    if (result && typeof result === "object" && Array.isArray((result as { result?: unknown }).result)) {
+      return (result as { result: GuestFsEntry[] }).result;
+    }
+  }
+  return [];
+}
+
+export type GuestFsUsage = { used: number; total: number };
+
+function fsUsage(entry: GuestFsEntry): GuestFsUsage | null {
   const candidates = [
-    { used: entry["used-bytes"], total: entry["total-bytes"] },
-    ...(entry.disk ?? []).map((disk) => ({ used: disk["used-bytes"], total: disk["total-bytes"] })),
+    { used: numBytes(entry["used-bytes"]), total: numBytes(entry["total-bytes"]) },
+    ...(entry.disk ?? []).map((disk) => ({ used: numBytes(disk["used-bytes"]), total: numBytes(disk["total-bytes"]) })),
   ];
   for (const candidate of candidates) {
+    if (candidate.used == null || candidate.total == null) continue;
     if (diskUsagePercent(candidate.used, candidate.total) == null) continue;
-    if ((candidate.total ?? 0) < MIN_GUEST_FS_BYTES) continue;
-    return { used: candidate.used as number, total: candidate.total as number };
+    if (candidate.total < MIN_GUEST_FS_BYTES) continue;
+    return { used: candidate.used, total: candidate.total };
   }
   return null;
 }
 
-export function guestFilesystemPercent(entries: GuestFsEntry[] | undefined | null): number | null {
+export function guestFilesystemUsage(entries: GuestFsEntry[] | undefined | null): GuestFsUsage | null {
   if (!entries?.length) return null;
   const usable = entries.flatMap((entry) => {
     const mount = entry.mountpoint ?? "";
@@ -109,11 +130,16 @@ export function guestFilesystemPercent(entries: GuestFsEntry[] | undefined | nul
   });
   if (!usable.length) return null;
   const root = usable.find((entry) => entry.mount === "/");
-  if (root) return diskUsagePercent(root.used, root.total);
+  if (root) return { used: root.used, total: root.total };
   const unixRoot = entries.some((entry) => entry.mountpoint === "/");
   if (unixRoot) return null;
   const biggest = usable.reduce((best, entry) => (entry.total > best.total ? entry : best));
-  return diskUsagePercent(biggest.used, biggest.total);
+  return { used: biggest.used, total: biggest.total };
+}
+
+export function guestFilesystemPercent(entries: GuestFsEntry[] | undefined | null): number | null {
+  const usage = guestFilesystemUsage(entries);
+  return usage ? diskUsagePercent(usage.used, usage.total) : null;
 }
 
 /** Cluster disk=0 means "unknown", not empty — do not treat as 0% or 100%. */

@@ -28,6 +28,8 @@ type GuestPayload = {
   status: Record<string, unknown>;
   config: Record<string, unknown>;
   snapshots: Array<Record<string, unknown>>;
+  agentDisk?: { used: number; total: number } | null;
+  agentEnabled?: boolean;
 };
 
 function num(value: unknown): number {
@@ -249,7 +251,17 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Resource label={t("dashboard.cpu")} value={cpuPercent} detail={t("dashboard.cores", { n: cores || "—" }) + ` · ${Math.round(cpuPercent)}%`} />
         <Resource label={t("dashboard.ram")} value={percentage(mem, maxmem)} detail={`${bytesToSize(mem)} / ${bytesToSize(maxmem)}`} />
-        <Resource label={t("dashboard.disk")} value={percentage(disk, maxdisk)} detail={guestSizeDetail(disk, maxdisk)} />
+        <Resource
+          label={t("dashboard.disk")}
+          value={percentage(disk, maxdisk)}
+          detail={
+            kind === "vm" && !maxdisk
+              ? data?.agentEnabled
+                ? t("guest.diskAgentSilent")
+                : t("guest.diskAgentOff")
+              : guestSizeDetail(disk, maxdisk)
+          }
+        />
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-muted-foreground">{t("guest.network")}</CardTitle>

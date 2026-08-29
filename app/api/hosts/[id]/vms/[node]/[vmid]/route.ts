@@ -15,7 +15,7 @@ import { withHostClient } from "@/server/services/host-service";
 import { waitGuestAction } from "@/server/proxmox/task-wait";
 import { durationLabel } from "@/lib/duration";
 import { notifyGuestTaskFailed } from "@/server/notifications/guest-task-fail";
-import { invalidateGuestNoteCache } from "@/server/services/guest-notes";
+import { isQemuAgentEnabled, vmDiskFromAgent } from "@/server/services/guest-disk";
 
 export const maxDuration = 800;
 
@@ -79,7 +79,12 @@ export const GET = apiRoute("vm.view", async (_req, session, params) => {
       client.vms.config(params.node, vmid),
       client.vms.snapshots(params.node, vmid).catch(() => []),
     ]);
-    return { status, config, snapshots };
+    const agentDisk = await vmDiskFromAgent(client, params.node, vmid).catch(() => null);
+    if (agentDisk) {
+      status.disk = agentDisk.used;
+      status.maxdisk = agentDisk.total;
+    }
+    return { status, config, snapshots, agentDisk, agentEnabled: isQemuAgentEnabled(config) };
   });
   return json(data);
 });

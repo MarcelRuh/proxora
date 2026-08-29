@@ -1,14 +1,14 @@
 #!/bin/sh
 # Shared apply script (host CLI + in-app updater container).
-# Env: PROXORA_INSTALL_DIR, PROXORA_REPO, PROXORA_BRANCH
+# Env: PROXORA_INSTALL_DIR, PROXORA_REPO, PROXORA_BRANCH, PROXORA_RELEASE_TAG
 # PROXORA_SKIP_COMPOSE=1 → sync files only
 set -eu
 
 INSTALL_DIR="${PROXORA_INSTALL_DIR:-/opt/proxora}"
 REPO="${PROXORA_REPO:-MarcelRuh/proxora}"
 BRANCH="${PROXORA_BRANCH:-main}"
+RELEASE_TAG="${PROXORA_RELEASE_TAG:-}"
 SKIP_COMPOSE="${PROXORA_SKIP_COMPOSE:-0}"
-TARBALL_URL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
 CLONE_URL="https://github.com/${REPO}.git"
 PROGRESS_FILE="${INSTALL_DIR}/.proxora-update-progress"
 LOCK_DIR="${INSTALL_DIR}/.proxora-update.lock"
@@ -73,6 +73,22 @@ watch_compose_log() {
 echo "==> Proxora self-update"
 echo " dir=${INSTALL_DIR} repo=${REPO} branch=${BRANCH} skip_compose=${SKIP_COMPOSE}"
 write_progress 4 start "Update started"
+
+if [ -z "$RELEASE_TAG" ] && [ -n "$SIGNAL_DIR" ] && [ -f "${SIGNAL_DIR}/target" ]; then
+  RELEASE_TAG="$(tr -d '[:space:]' < "${SIGNAL_DIR}/target")"
+fi
+if [ -z "$RELEASE_TAG" ]; then
+  RELEASE_TAG="$(wget -qO- --header='User-Agent: proxora-self-update' \
+    "https://api.github.com/repos/${REPO}/releases/latest" \
+    | tr ',' '\n' | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1 || true)"
+fi
+if [ -z "$RELEASE_TAG" ]; then
+  echo "ERROR: could not resolve latest GitHub release" >&2
+  write_progress 0 error "Latest GitHub release not found"
+  exit 1
+fi
+TARBALL_URL="https://github.com/${REPO}/archive/refs/tags/${RELEASE_TAG}.tar.gz"
+echo " release=${RELEASE_TAG}"
 
 if [ ! -f "${INSTALL_DIR}/docker-compose.yml" ]; then
   echo "ERROR: docker-compose.yml missing in ${INSTALL_DIR}" >&2
@@ -150,18 +166,14 @@ ensure_git() {
 
 resolve_sha() {
   if command -v git >/dev/null 2>&1; then
-    SHA="$(git ls-remote "$CLONE_URL" "refs/heads/${BRANCH}" | awk '{print $1}' | head -1 || true)"
+    SHA="$(git ls-remote "$CLONE_URL" "refs/tags/${RELEASE_TAG}" | awk '{print $1}' | head -1 || true)"
     if [ -n "${SHA:-}" ]; then echo "$SHA"; return 0; fi
   fi
   SHA="$(wget -qO- --header='User-Agent: git/2.43.0' \
     "https://github.com/${REPO}.git/info/refs?service=git-upload-pack" \
-    | tr -d '\000' | grep -oE "[0-9a-f]{40}[[:space:]]+refs/heads/${BRANCH}" | awk '{print $1}' | head -1 || true)"
+    | tr -d '\000' | grep -oE "[0-9a-f]{40}[[:space:]]+refs/tags/${RELEASE_TAG}" | awk '{print $1}' | head -1 || true)"
   if [ -n "${SHA:-}" ]; then echo "$SHA"; return 0; fi
-  SHA="$(wget -qO- --header='User-Agent: proxora-self-update' \
-    "https://github.com/${REPO}/commits/${BRANCH}.atom" \
-    | sed -n 's/.*Grit::Commit\/\([a-f0-9]\{40\}\).*/\1/p' | head -1 || true)"
-  if [ -n "${SHA:-}" ]; then echo "$SHA"; return 0; fi
-  echo "ERROR: could not resolve remote commit SHA" >&2
+  echo "ERROR: could not resolve release ${RELEASE_TAG}" >&2
   exit 1
 }
 
@@ -169,16 +181,14 @@ sync_via_git() {
   git config --global --add safe.directory "$INSTALL_DIR" >/dev/null 2>&1 || true
   git -C "$INSTALL_DIR" remote get-url origin >/dev/null 2>&1 || git -C "$INSTALL_DIR" remote add origin "$CLONE_URL" >/dev/null 2>&1 || true
   git -C "$INSTALL_DIR" remote set-url origin "$CLONE_URL" >/dev/null 2>&1 || true
-  git -C "$INSTALL_DIR" fetch --force --depth 1 origin "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
-  REMOTE="$(git -C "$INSTALL_DIR" rev-parse "origin/${BRANCH}" 2>/dev/null || git -C "$INSTALL_DIR" rev-parse FETCH_HEAD)"
+  git -C "$INSTALL_DIR" fetch --force --depth 1 origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+  REMOTE="$(git -C "$INSTALL_DIR" rev-parse "${RELEASE_TAG}" 2>/dev/null || git -C "$INSTALL_DIR" rev-parse FETCH_HEAD)"
   if [ -z "${REMOTE:-}" ]; then
     echo "ERROR: fetch did not return a revision" >&2
     return 1
   fi
   echo "==> Local changes that will be overwritten (except .env / data / progress files):"
   git -C "$INSTALL_DIR" status --porcelain --untracked-files=no | grep -vE '^\s*\.env$|^\s*\.proxora-' || true
-  # Appliance install: match GitHub exactly. ff-only fails on dirty/diverged trees
-  # left by earlier tarball overlays and local commits.
   git -C "$INSTALL_DIR" reset --hard "$REMOTE"
   git -C "$INSTALL_DIR" clean -fd \
     -e .env \
@@ -188,7 +198,7 @@ sync_via_git() {
     -e .proxora-update-progress \
     -e .proxora-update-compose.log \
     -e .proxora-update.lock
-  echo " git reset to $REMOTE"
+  echo " git reset to $REMOTE ($RELEASE_TAG)"
 }
 
 sync_via_tarball() {

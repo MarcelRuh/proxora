@@ -32,6 +32,8 @@ describe("notification topic filters", () => {
 
   it("adds topics that did not exist when the channel was saved", () => {
     expect(eventsWithNewTopics(["host.updates"], LEGACY_EVENTS_SEEN)).toContain("disk.full");
+    expect(eventsWithNewTopics(["host.updates"], LEGACY_EVENTS_SEEN)).toContain("zfs.degraded");
+    expect(channelAllowsTopic(["host.updates"], "zfs.degraded")).toBe(true);
   });
 });
 
@@ -94,6 +96,17 @@ describe("discord embeds", () => {
         message: "local-lvm",
       }).embeds[0].fields?.find((f) => f.name === "Ereignis")?.value,
     ).toBe("Disk fast voll");
+  });
+
+  it("labels zfs.degraded", () => {
+    expect(
+      buildDiscordWebhookPayload({
+        topic: "zfs.degraded",
+        level: "warning",
+        title: "ZFS tank DEGRADED",
+        message: "tank",
+      }).embeds[0].fields?.find((f) => f.name === "Ereignis")?.value,
+    ).toBe("ZFS-Pool beeinträchtigt");
   });
 
   it("appends wait=true without dropping the token", () => {

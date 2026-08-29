@@ -11,12 +11,25 @@ export const NOTIFICATION_TOPICS = [
   "backup.restored",
   "task.failed",
   "disk.full",
+  "zfs.degraded",
 ] as const;
 
 export type NotificationTopic = (typeof NOTIFICATION_TOPICS)[number];
 
-/** Topics that existed before `disk.full`. Channels without `eventsSeen` are treated as saved then. */
-export const LEGACY_EVENTS_SEEN: NotificationTopic[] = NOTIFICATION_TOPICS.filter((topic) => topic !== "disk.full");
+/** Topics that existed before auto-merge of newly introduced events. */
+export const LEGACY_EVENTS_SEEN: NotificationTopic[] = [
+  "host.online",
+  "host.offline",
+  "host.updates",
+  "vm.created",
+  "lxc.created",
+  "vm.deleted",
+  "lxc.deleted",
+  "backup.started",
+  "backup.failed",
+  "backup.restored",
+  "task.failed",
+];
 
 export function isNotificationTopic(value: unknown): value is NotificationTopic {
   return typeof value === "string" && (NOTIFICATION_TOPICS as readonly string[]).includes(value);

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { summarizeZfsPool } from "@/server/proxmox/zfs-health";
+import { applyZfsWatchState, zfsPoolKey } from "@/lib/zfs-alerts";
+import { isQemuAgentEnabled } from "@/server/services/guest-disk";
 
 describe("ZFS pool health", () => {
   it("marks every disk green on a healthy mirror", () => {
@@ -45,5 +47,24 @@ describe("ZFS pool health", () => {
     expect(summary.allHealthy).toBe(false);
     expect(summary.problemDisks).toBe(1);
     expect(summary.devices.find((d) => d.name === "sdb")?.healthy).toBe(false);
+  });
+});
+
+describe("ZFS watch hysteresis", () => {
+  it("notifies once until the pool is healthy again", () => {
+    expect(applyZfsWatchState(false, true)).toEqual({ notify: false, notified: false });
+    expect(applyZfsWatchState(false, false)).toEqual({ notify: true, notified: true });
+    expect(applyZfsWatchState(true, false)).toEqual({ notify: false, notified: true });
+    expect(applyZfsWatchState(true, true)).toEqual({ notify: false, notified: false });
+    expect(zfsPoolKey("h1", "pve", "tank")).toBe("zfs:h1:pve:tank");
+  });
+});
+
+describe("qemu agent flag", () => {
+  it("treats enabled=1 as on", () => {
+    expect(isQemuAgentEnabled({ agent: 1 })).toBe(true);
+    expect(isQemuAgentEnabled({ agent: "enabled=1,fstrim_cloned_disks=1" })).toBe(true);
+    expect(isQemuAgentEnabled({ agent: 0 })).toBe(false);
+    expect(isQemuAgentEnabled({})).toBe(false);
   });
 });

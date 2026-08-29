@@ -26,6 +26,7 @@ export type SelfUpdateStatus = {
   installDir: string | null;
   repo: string | null;
   branch: string | null;
+  targetTag?: string | null;
   updating: boolean;
   progress: { percent: number; step: string; detail: string | null } | null;
   changelog: string | null;
@@ -156,7 +157,7 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
               <dl className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
                 <dt>{t("proxora.repo")}</dt>
                 <dd>
-                  {status.repo}@{status.branch}
+                  {status.repo}@{status.targetTag ?? status.branch}
                 </dd>
                 <dt>{t("proxora.installDir")}</dt>
                 <dd>{status.installDir ?? "—"}</dd>

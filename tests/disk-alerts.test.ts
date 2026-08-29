@@ -5,6 +5,8 @@ import {
   guestClusterDiskPercent,
   guestDiskKey,
   guestFilesystemPercent,
+  guestFilesystemUsage,
+  parseGuestFsInfo,
   isStorageMonitored,
   parseDiskAlertSettings,
   storageDiskKey,
@@ -47,6 +49,13 @@ describe("disk usage alerts", () => {
       ]),
     ).toBe(80);
     expect(guestFilesystemPercent([])).toBeNull();
+    expect(
+      guestFilesystemUsage(
+        parseGuestFsInfo({
+          result: [{ mountpoint: "/", type: "ext4", "used-bytes": String(GiB), "total-bytes": String(2 * GiB) }],
+        }),
+      ),
+    ).toEqual({ used: GiB, total: 2 * GiB });
   });
 
   it("does not treat unreadable VM disks as full", () => {

@@ -9,10 +9,10 @@ import {
   guestDiskKey,
   guestFilesystemPercent,
   guestClusterDiskPercent,
+  parseGuestFsInfo,
   isStorageMonitored,
   storageDiskKey,
   type DiskSample,
-  type GuestFsEntry,
 } from "@/lib/disk-alerts";
 import { loadDiskAlertSettings, loadDiskWatchState, saveDiskWatchState } from "@/server/services/disk-settings";
 
@@ -22,14 +22,6 @@ export const DISK_WATCH_STARTUP_DELAY_MS = 45_000;
 let scheduled = false;
 let running = false;
 let timer: ReturnType<typeof setTimeout> | null = null;
-
-function agentEntries(payload: unknown): GuestFsEntry[] {
-  if (Array.isArray(payload)) return payload as GuestFsEntry[];
-  if (payload && typeof payload === "object" && Array.isArray((payload as { result?: unknown }).result)) {
-    return (payload as { result: GuestFsEntry[] }).result;
-  }
-  return [];
-}
 
 async function remember(samples: DiskSample[], alertPercent: number, clearPercent: number): Promise<number> {
   const state = await loadDiskWatchState();
@@ -102,7 +94,7 @@ export async function scanDiskUsage(): Promise<number> {
       for (const guest of guests.vms) {
         if (guest.template || !guest.vmid || guest.status !== "running" || !guest.node) continue;
         const fs = await client.vms.agentFsInfo(guest.node, guest.vmid).catch(() => null);
-        const percent = guestFilesystemPercent(agentEntries(fs));
+        const percent = guestFilesystemPercent(parseGuestFsInfo(fs));
         if (percent == null) continue;
         const sample: DiskSample = {
           key: guestDiskKey(host.id, "vm", guest.vmid),

@@ -152,9 +152,30 @@ export function JobDialog({
             {t("backup.allGuests")}
           </label>
           {form.all ? null : (
-            <div className="space-y-1">
-              <Label>{t("backup.selectedGuests")}</Label>
-              <Input value={form.vmid} onChange={(e) => setForm({ ...form, vmid: e.target.value })} placeholder="100,101" />
+            <div className="max-h-48 space-y-1 overflow-y-auto rounded-[4px] border border-border p-2">
+              {overview.guests.length === 0 ? (
+                <Input value={form.vmid} onChange={(e) => setForm({ ...form, vmid: e.target.value })} placeholder="100,101" />
+              ) : (
+                overview.guests.map((guest) => {
+                  const id = String(guest.vmid);
+                  const selected = form.vmid.split(",").map((s) => s.trim()).filter(Boolean).includes(id);
+                  return (
+                    <label key={`${guest.kind}-${guest.vmid}`} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={(e) => {
+                          const current = form.vmid.split(",").map((s) => s.trim()).filter(Boolean);
+                          const next = e.target.checked ? [...current, id] : current.filter((v) => v !== id);
+                          setForm({ ...form, vmid: [...new Set(next)].join(",") });
+                        }}
+                      />
+                      {guest.vmid} {guest.name}
+                      <span className="text-[10px] uppercase text-muted-foreground">{guest.kind}</span>
+                    </label>
+                  );
+                })
+              )}
             </div>
           )}
           <div className="space-y-1">

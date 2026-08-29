@@ -7,6 +7,7 @@ import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { filterGuestsForUser } from "@/server/auth/session-core";
 import { attachGuestNotes } from "@/server/services/guest-notes";
+import { fillVmDisksFromAgent } from "@/server/services/guest-disk";
 import { completeGuestCreate } from "@/server/services/guest-start";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { normalizeLxcCidr } from "@/lib/lxc-net";
@@ -54,7 +55,7 @@ const createVmSchema = z.object({
 export const GET = apiRoute("vm.view", async (_req, session, params) => {
   const vms = await withHostClient(params.id, session.user, async (client) => {
     const listed = filterGuestsForUser(session.user, params.id, "vm", await client.listVms());
-    await attachGuestNotes(client, listed, []);
+    await Promise.all([attachGuestNotes(client, listed, []), fillVmDisksFromAgent(client, listed)]);
     return listed;
   });
   return json({ vms });
@@ -91,6 +92,7 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     machine: body.machine,
     net0: net,
     ostype: body.ostype ?? "l26",
+    agent: "1",
   };
   const applyCloudInit = Boolean(body.cloudInit) && Boolean(body.ipv4) && body.ipv4 !== "dhcp";
   if (applyCloudInit) {

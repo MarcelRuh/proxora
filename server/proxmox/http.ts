@@ -69,8 +69,8 @@ export class ProxmoxHttpClient {
     });
   }
 
-  async get<T>(path: string, query?: Query): Promise<T> {
-    return this.request<T>("GET", path, { query });
+  async get<T>(path: string, query?: Query, timeoutMs?: number): Promise<T> {
+    return this.request<T>("GET", path, { query, timeoutMs });
   }
 
   async post<T>(path: string, body?: Record<string, unknown>, query?: Query): Promise<T> {
@@ -137,7 +137,7 @@ export class ProxmoxHttpClient {
   private async request<T>(
     method: string,
     path: string,
-    options: { query?: Query; body?: Record<string, unknown> } = {},
+    options: { query?: Query; body?: Record<string, unknown>; timeoutMs?: number } = {},
   ): Promise<T> {
     const url = `${this.baseUrl}/api2/json${path}${toSearch(options.query)}`;
     const headers: Record<string, string> = {
@@ -150,7 +150,7 @@ export class ProxmoxHttpClient {
       headers["Content-Type"] = "application/x-www-form-urlencoded";
     }
 
-    const response = await this.rawFetch(url, { method, headers, body });
+    const response = await this.rawFetch(url, { method, headers, body }, options.timeoutMs);
     const text = await response.text();
     let parsed: { data?: T; errors?: unknown; message?: string } = {};
     if (text) {
@@ -175,8 +175,8 @@ export class ProxmoxHttpClient {
     return (parsed.data as T) ?? (undefined as T);
   }
 
-  private async rawFetch(url: string, init: UndiciRequestInit) {
-    const timeout = this.config.timeoutMs ?? 20_000;
+  private async rawFetch(url: string, init: UndiciRequestInit, timeoutMs?: number) {
+    const timeout = timeoutMs ?? this.config.timeoutMs ?? 20_000;
     try {
       return await undiciFetch(url, {
         ...init,

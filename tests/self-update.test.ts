@@ -10,7 +10,7 @@ import {
   writeUpdateRequest,
 } from "@/lib/self-update-signal";
 import { compareSemver, isSelfUpdateAvailable, newerVersion, selfUpdateTargetVersion } from "@/lib/version";
-import { extractNewerChangelog } from "@/server/services/github-revision";
+import { extractNewerChangelog, parseGithubRelease } from "@/server/services/github-revision";
 import { mergeProgress, parseProgressFile, parseUpdaterLogs } from "@/server/services/self-update-progress";
 
 describe("semver", () => {
@@ -53,6 +53,18 @@ describe("changelog extract", () => {
     const out = extractNewerChangelog(md, "1.0.0");
     expect(out).toContain("1.1.0");
     expect(out).not.toContain("Initial");
+  });
+});
+
+describe("github release parse", () => {
+  it("reads tag_name as semver", () => {
+    expect(parseGithubRelease({ tag_name: "v1.0.64", html_url: "https://example" })).toEqual({
+      tag: "v1.0.64",
+      version: "1.0.64",
+      sha: null,
+      htmlUrl: "https://example",
+    });
+    expect(parseGithubRelease({ tag_name: "nightly" })).toBeNull();
   });
 });
 

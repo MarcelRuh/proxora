@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.64] – 2026-08-29
+
+### Added
+
+- ZFS pool health alerts (inbox / Discord) when a pool or disk is degraded.
+- Backup jobs pick guests from a checkbox list.
+
+### Changed
+
+- Self-update tracks GitHub **releases**, not `main`.
+- VM disk usage in lists and detail comes from qemu-guest-agent `get-fsinfo` (cluster `disk=0` is ignored). New VMs get `agent: 1`.
+
 ## [1.0.63] – 2026-08-29
 
 ### Fixed

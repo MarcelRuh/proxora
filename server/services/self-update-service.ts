@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { logger } from "@/lib/logger";
@@ -19,6 +19,7 @@ import {
 import {
   fetchGithubChangelog,
   fetchGithubCommitSha,
+  fetchGithubLatestRelease,
   fetchGithubPackageVersion,
 } from "@/server/services/github-revision";
 import {
@@ -50,6 +51,7 @@ export interface SelfUpdateStatus {
   installDir: string | null;
   repo: string | null;
   branch: string | null;
+  targetTag: string | null;
   updating: boolean;
   progress: SelfUpdateProgress | null;
   changelog: string | null;
@@ -134,6 +136,7 @@ export async function getSelfUpdateStatus(): Promise<SelfUpdateStatus> {
     installDir: opts.installDirHost ?? mount,
     repo: opts.repo,
     branch: opts.branch,
+    targetTag: null,
     updating,
     progress: null,
     changelog: null,
@@ -144,17 +147,31 @@ export async function getSelfUpdateStatus(): Promise<SelfUpdateStatus> {
 
   let remoteRevision: string | null = null;
   let shaError: string | null = null;
+  let remoteVersion: string | null = null;
+  let targetTag: string | null = null;
   try {
-    remoteRevision = await fetchGithubCommitSha(opts.repo, opts.branch);
+    const release = await fetchGithubLatestRelease(opts.repo);
+    if (release) {
+      targetTag = release.tag;
+      remoteVersion = release.version;
+      remoteRevision = release.sha;
+    }
   } catch (error) {
     shaError = error instanceof Error ? error.message : String(error);
   }
-
-  let remoteVersion: string | null = null;
-  try {
-    remoteVersion = await fetchGithubPackageVersion(opts.repo, remoteRevision ?? opts.branch);
-  } catch {
-    remoteVersion = null;
+  if (!remoteRevision) {
+    try {
+      remoteRevision = await fetchGithubCommitSha(opts.repo, targetTag ?? opts.branch);
+    } catch (error) {
+      shaError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  if (!remoteVersion) {
+    try {
+      remoteVersion = await fetchGithubPackageVersion(opts.repo, remoteRevision ?? targetTag ?? opts.branch);
+    } catch {
+      remoteVersion = null;
+    }
   }
 
   const targetVersion = selfUpdateTargetVersion(APP_VERSION, remoteVersion, sourceVersion);
@@ -167,7 +184,7 @@ export async function getSelfUpdateStatus(): Promise<SelfUpdateStatus> {
   let changelog: string | null = null;
   if (updateAvailable) {
     try {
-      changelog = await fetchGithubChangelog(opts.repo, remoteRevision ?? opts.branch, APP_VERSION);
+      changelog = await fetchGithubChangelog(opts.repo, targetTag ?? remoteRevision ?? opts.branch, APP_VERSION);
     } catch {
       changelog = null;
     }
@@ -177,6 +194,7 @@ export async function getSelfUpdateStatus(): Promise<SelfUpdateStatus> {
     ...base,
     remoteVersion,
     remoteRevision,
+    targetTag,
     updateAvailable,
     targetVersion,
     changelog,
@@ -223,15 +241,15 @@ export async function applySelfUpdate(): Promise<{ ok: boolean; message: string;
   applyInFlight = true;
   try {
     if (!existsSync("/.dockerenv")) {
-      return await applyOnHost(mount, opts.repo, opts.branch);
+      return await applyOnHost(mount, opts.repo, opts.branch, status.targetTag);
     }
-    return applyViaSignal(hostDir, opts.repo);
+    return applyViaSignal(hostDir, opts.repo, status.targetTag);
   } finally {
     applyInFlight = false;
   }
 }
 
-async function applyOnHost(installMount: string, repo: string, branch: string) {
+async function applyOnHost(installMount: string, repo: string, branch: string, tag: string | null) {
   const scriptPath = path.join(installMount, "scripts", "self-update-apply.sh");
   if (!existsSync(scriptPath)) {
     return { ok: false, message: "self-update-apply.sh missing", mode: "compose" as const };
@@ -243,6 +261,7 @@ async function applyOnHost(installMount: string, repo: string, branch: string) {
         PROXORA_INSTALL_DIR: installMount,
         PROXORA_REPO: repo,
         PROXORA_BRANCH: branch,
+        PROXORA_RELEASE_TAG: tag ?? "",
         PROXORA_SKIP_COMPOSE: existsSync("/.dockerenv") ? "0" : "1",
       },
       timeout: APPLY_TIMEOUT_MS,
@@ -260,7 +279,7 @@ async function applyOnHost(installMount: string, repo: string, branch: string) {
   }
 }
 
-function applyViaSignal(hostDir: string, repo: string) {
+function applyViaSignal(hostDir: string, repo: string, tag: string | null) {
   const signalDir = resolveUpdateSignalDir();
   if (!isSignalDirReady(signalDir)) {
     return {
@@ -274,7 +293,10 @@ function applyViaSignal(hostDir: string, repo: string) {
   }
   try {
     writeUpdateRequest(signalDir);
-    logger.info({ hostDir, repo, signalDir }, "Proxora update requested via sidecar");
+    if (tag) {
+      writeFileSync(path.join(signalDir, "target"), `${tag}\n`);
+    }
+    logger.info({ hostDir, repo, tag, signalDir }, "Proxora update requested via sidecar");
     return {
       ok: true,
       mode: "compose" as const,

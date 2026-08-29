@@ -129,6 +129,8 @@ export class VmApi {
   agentFsInfo(node: string, vmid: number) {
     return this.http.get<{ result?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>>(
       `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/agent/get-fsinfo`,
+      undefined,
+      5_000,
     );
   }
 

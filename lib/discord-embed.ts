@@ -36,6 +36,7 @@ const TOPIC_LABELS: Record<NotificationTopic | "test", string> = {
   "backup.restored": "Backup eingespielt",
   "task.failed": "Task fehlgeschlagen",
   "disk.full": "Disk fast voll",
+  "zfs.degraded": "ZFS-Pool beeinträchtigt",
   test: "Test",
 };
 

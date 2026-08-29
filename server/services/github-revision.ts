@@ -92,4 +92,26 @@ export function extractNewerChangelog(markdown: string, currentVersion: string):
   return notes.join("\n\n").trim();
 }
 
-export { APP_VERSION };
+export type GithubRelease = {
+  tag: string;
+  version: string;
+  sha: string | null;
+  htmlUrl: string | null;
+};
+
+export function parseGithubRelease(json: unknown): GithubRelease | null {
+  if (!json || typeof json !== "object") return null;
+  const raw = json as { tag_name?: unknown; target_commitish?: unknown; html_url?: unknown };
+  const tag = String(raw.tag_name ?? "").trim();
+  if (!tag) return null;
+  const version = tag.replace(/^v/i, "");
+  if (!/^\d+\.\d+\.\d+/.test(version)) return null;
+  const sha = typeof raw.target_commitish === "string" && /^[a-f0-9]{40}$/i.test(raw.target_commitish) ? raw.target_commitish : null;
+  return { tag, version, sha, htmlUrl: typeof raw.html_url === "string" ? raw.html_url : null };
+}
+
+export async function fetchGithubLatestRelease(repo: string): Promise<GithubRelease | null> {
+  const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, { headers: githubHeaders() });
+  if (!res.ok) return null;
+  return parseGithubRelease(await res.json());
+}
