@@ -147,14 +147,27 @@ describe("ProxmoxClient", () => {
 
   it("creates an LXC container", async () => {
     vi.mocked(undiciFetch).mockResolvedValueOnce(jsonResponse("UPID:pve:lxc") as never);
-    await client.lxc.create("pve", {
+    const upid = await client.lxc.create("pve", {
       vmid: 201,
       ostemplate: "local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst",
       hostname: "web",
       rootfs: "local-lvm:8",
     });
+    expect(upid).toBe("UPID:pve:lxc");
     const [url, init] = vi.mocked(undiciFetch).mock.calls[0] ?? [];
     expect(String(url)).toContain("/nodes/pve/lxc");
+    expect((init as { method?: string })?.method).toBe("POST");
+  });
+
+  it("downloads an LXC template from the appliance catalog", async () => {
+    vi.mocked(undiciFetch).mockResolvedValueOnce(jsonResponse("UPID:pve:download") as never);
+    const upid = await client.nodes.downloadAppliance("pve", "local", "debian-12-standard_12.7-1_amd64.tar.zst");
+    expect(upid).toBe("UPID:pve:download");
+    const [url, init] = vi.mocked(undiciFetch).mock.calls[0] ?? [];
+    expect(String(url)).toContain("/nodes/pve/aplinfo");
+    expect((init as { method?: string })?.method).toBe("POST");
+    expect(String((init as { body?: string })?.body)).toContain("storage=local");
+    expect(String((init as { body?: string })?.body)).toContain("template=debian-12-standard_12.7-1_amd64.tar.zst");
   });
 
   it("refreshes the APT package list, not a nonexistent /apt/upgrade path", async () => {

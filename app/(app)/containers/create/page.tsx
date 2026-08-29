@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import { CreateIpFields, ipCollision, ipFieldsFromVmid } from "@/components/gues
 import { DEFAULT_GUEST_NETWORK, type GuestIpNetwork } from "@/lib/create-ip";
 import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { DownloadLxcTemplateDialog } from "@/components/templates/download-lxc-dialog";
 
 type Options = {
   nodes: Array<{ node: string }>;
@@ -31,6 +32,7 @@ const selectClass =
 export default function CreateLxcPage() {
   const { t } = useI18n();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { data: hosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
@@ -53,6 +55,7 @@ export default function CreateLxcPage() {
     gateway: "",
     startAfter: true,
   });
+  const [downloadOpen, setDownloadOpen] = useState(false);
 
   const { data: options } = useQuery({
     queryKey: ["options", form.hostId],
@@ -96,7 +99,10 @@ export default function CreateLxcPage() {
       const bridgeList = (options.bridges ?? []).map((b) => String(b.iface ?? "")).filter(Boolean);
       const bridge = f.bridge && bridgeList.includes(f.bridge) ? f.bridge : (bridgeList[0] ?? "vmbr0");
       const vols = (options.templates ?? []).map((t) => String(t.volid ?? "")).filter(Boolean);
-      const ostemplate = f.ostemplate && vols.includes(f.ostemplate) ? f.ostemplate : "";
+      const ostemplate =
+        f.ostemplate && (vols.includes(f.ostemplate) || /:vztmpl\//.test(f.ostemplate))
+          ? f.ostemplate
+          : "";
       const vmid = f.vmid > 0 ? f.vmid : (options.nextid ?? 0);
       const netList = options.networks?.length ? options.networks : undefined;
       const network =
@@ -206,22 +212,32 @@ export default function CreateLxcPage() {
             value={form.password}
             onChange={(password) => setForm({ ...form, password })}
           />
-          <label className="text-sm md:col-span-2">
-            {t("create.template")}
-            <select
-              className={selectClass}
-              value={form.ostemplate}
-              onChange={(e) => setForm({ ...form, ostemplate: e.target.value })}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end md:col-span-2">
+            <label className="min-w-0 flex-1 text-sm">
+              {t("create.template")}
+              <select
+                className={selectClass}
+                value={form.ostemplate}
+                onChange={(e) => setForm({ ...form, ostemplate: e.target.value })}
+                disabled={!form.hostId}
+              >
+                <option value="">{templates.length ? t("common.chooseTemplate") : t("common.noTemplate")}</option>
+                {templates.map((volid) => (
+                  <option key={volid} value={volid}>
+                    {volid.split("/").pop() ?? volid}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              type="button"
+              variant="outline"
               disabled={!form.hostId}
+              onClick={() => setDownloadOpen(true)}
             >
-              <option value="">{templates.length ? t("common.chooseTemplate") : t("common.noTemplate")}</option>
-              {templates.map((volid) => (
-                <option key={volid} value={volid}>
-                  {volid.split("/").pop() ?? volid}
-                </option>
-              ))}
-            </select>
-          </label>
+              {t("tmpl.download")}
+            </Button>
+          </div>
           <label className="text-sm">
             {t("create.storage")}
             <select
@@ -277,6 +293,18 @@ export default function CreateLxcPage() {
           </div>
         </CardContent>
       </Card>
+      {form.hostId ? (
+        <DownloadLxcTemplateDialog
+          hostId={form.hostId}
+          node={form.node}
+          open={downloadOpen}
+          onOpenChange={setDownloadOpen}
+          onDownloaded={(volid) => {
+            setForm((f) => ({ ...f, ostemplate: volid }));
+            void queryClient.invalidateQueries({ queryKey: ["options", form.hostId] });
+          }}
+        />
+      ) : null}
     </div>
   );
 }

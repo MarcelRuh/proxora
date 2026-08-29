@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.50] – 2026-08-29
+
+### Added
+
+- Download LXC templates from the Proxmox catalog (create container form and Storage page), with live task progress.
+
 ## [1.0.49] – 2026-08-29
 
 ### Changed

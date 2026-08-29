@@ -54,4 +54,12 @@ export class NodeApi {
   nextId() {
     return this.http.get<number>("/cluster/nextid");
   }
+
+  aplinfo(node: string) {
+    return this.http.get<Array<Record<string, unknown>>>(`/nodes/${encodeURIComponent(node)}/aplinfo`);
+  }
+
+  downloadAppliance(node: string, storage: string, template: string) {
+    return this.http.post<string>(`/nodes/${encodeURIComponent(node)}/aplinfo`, { storage, template });
+  }
 }
