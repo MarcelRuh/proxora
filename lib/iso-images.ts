@@ -83,6 +83,15 @@ export function ostypeFromIso(volid: string): string | undefined {
   return "win11";
 }
 
+export function isWindowsOstype(ostype: string | undefined): boolean {
+  return Boolean(ostype?.toLowerCase().startsWith("win"));
+}
+
+export function windowsVmFirmware(ostype: string): { bios: "ovmf"; machine: "q35" } | null {
+  if (!isWindowsOstype(ostype)) return null;
+  return { bios: "ovmf", machine: "q35" };
+}
+
 export function vmCdromDisks(iso?: string, iso2?: string): Record<string, string> {
   const first = iso?.trim() ?? "";
   const second = iso2?.trim() ?? "";

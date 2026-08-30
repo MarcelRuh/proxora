@@ -240,19 +240,30 @@ function pipeVnc(
     if (!upstreamReady || !clientReady) closeBoth(1011, "VNC handshake timeout");
   }, 15_000);
 
+  const sendRfb = (target: WebSocket, chunk: Buffer) => {
+    if (target.readyState === WebSocket.OPEN) target.send(chunk, { binary: true });
+  };
+
   const flush = () => {
     if (!upstreamReady || !clientReady) return;
     clearTimeout(handshakeTimer);
-    if (leftover.length && browser.readyState === WebSocket.OPEN) {
-      browser.send(leftover);
+    if (leftover.length) {
+      sendRfb(browser, leftover);
       leftover = Buffer.alloc(0);
     }
     if (remote.readyState !== WebSocket.OPEN) return;
-    for (const chunk of toRemote.splice(0)) remote.send(chunk);
+    for (const chunk of toRemote.splice(0)) sendRfb(remote, chunk);
   };
 
+  // Modern PVE authenticates via vncticket in the URL and starts RFB immediately.
+  // Sending `{user}:{ticket}` then is forwarded into QEMU and the socket dies (1006).
+  // Older PVE still waits for that line and replies `OK` first — send it only if RFB never arrives.
+  let ticketTimer: ReturnType<typeof setTimeout> | undefined;
   remote.on("open", () => {
-    remote.send(Buffer.from(ticketLine));
+    ticketTimer = setTimeout(() => {
+      if (upstreamReady || handshake.length || remote.readyState !== WebSocket.OPEN) return;
+      remote.send(Buffer.from(ticketLine));
+    }, 400);
   });
 
   remote.on("message", (data) => {
@@ -261,6 +272,7 @@ function pipeVnc(
       const next = consumeProxmoxVncHandshake(handshake, chunk);
       handshake = Buffer.from(next.rest);
       if (!next.done) return;
+      if (ticketTimer) clearTimeout(ticketTimer);
       if ("error" in next && next.error) {
         logger.warn({ err: next.error }, "VNC handshake failed");
         closeBoth(1011, "VNC handshake failed");
@@ -278,7 +290,7 @@ function pipeVnc(
       leftover = Buffer.concat([leftover, chunk]);
       return;
     }
-    if (browser.readyState === WebSocket.OPEN) browser.send(chunk);
+    sendRfb(browser, chunk);
   });
 
   browser.on("message", (data) => {
@@ -298,7 +310,7 @@ function pipeVnc(
       flush();
       return;
     }
-    if (remote.readyState === WebSocket.OPEN) remote.send(asBuffer(data));
+    sendRfb(remote, asBuffer(data));
   });
 
   remote.on("close", () => closeBoth());

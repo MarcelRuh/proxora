@@ -12,7 +12,7 @@ import { completeGuestCreate } from "@/server/services/guest-start";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { durationLabel } from "@/lib/duration";
 import { assertGuestIdentityFree } from "@/server/services/guest-ips";
-import { ostypeFromIso, vmCdromDisks } from "@/lib/iso-images";
+import { ostypeFromIso, vmCdromDisks, windowsVmFirmware } from "@/lib/iso-images";
 import { diskExtras, vmDiskSpec } from "@/lib/vm-storage";
 import type { VmCreateParams } from "@/server/proxmox/vms";
 
@@ -87,6 +87,13 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     .filter(Boolean)
     .join(",");
 
+  const ostype = body.ostype ?? ostypeFromIso(body.iso ?? "") ?? "l26";
+  const firmware = windowsVmFirmware(ostype);
+  const bios = body.bios ?? firmware?.bios;
+  const machine = body.machine ?? firmware?.machine;
+  const efi = body.efi ?? Boolean(firmware);
+  const tpm = body.tpm ?? Boolean(firmware);
+
   const payload: Record<string, unknown> = {
     vmid: body.vmid,
     name: body.name,
@@ -98,10 +105,10 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     numa: body.numa ? 1 : 0,
     cpu: body.cpu,
     scsihw: body.scsihw ?? "virtio-scsi-single",
-    bios: body.bios,
-    machine: body.machine,
+    bios,
+    machine,
     net0: net,
-    ostype: body.ostype ?? ostypeFromIso(body.iso ?? "") ?? "l26",
+    ostype,
     agent: "1",
   };
   if (body.diskBus === "virtio") payload.virtio0 = disk;
@@ -109,8 +116,8 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
   else if (body.diskBus === "ide") payload.ide0 = disk;
   else payload.scsi0 = disk;
   Object.assign(payload, vmCdromDisks(body.iso, body.iso2));
-  if (body.efi) payload.efidisk0 = `${body.diskStorage}:1,efitype=4m,pre-enrolled-keys=1`;
-  if (body.tpm) payload.tpmstate0 = `${body.diskStorage}:1,version=v2.0`;
+  if (efi) payload.efidisk0 = `${body.diskStorage}:1,efitype=4m,pre-enrolled-keys=1`;
+  if (tpm) payload.tpmstate0 = `${body.diskStorage}:1,version=v2.0`;
 
   const t0 = Date.now();
   let hostName = "";

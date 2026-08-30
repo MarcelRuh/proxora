@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.72] – 2026-08-30
+
+### Fixed
+
+- VM VGA console (noVNC): do not inject the PVE ticket into a live RFB stream. Modern PVE starts VNC immediately; the extra ticket line closed the socket (Windows guests included).
+- Windows VM create now enables OVMF (q35), EFI, and TPM 2.0 so Win11 can actually boot.
+
 ## [1.0.71] – 2026-08-30
 
 ### Added
