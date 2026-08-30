@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.73] – 2026-08-30
+
+### Fixed
+
+- Self-update no longer stays pinned to an old GitHub tag. A leftover `target` file (e.g. v1.0.71) made every “Jetzt aktualisieren” rebuild the same release.
+
 ## [1.0.72] – 2026-08-30
 
 ### Fixed

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,7 +7,9 @@ import {
   resolveUpdateSignalDir,
   UPDATE_LOCK_FILE,
   UPDATE_REQUEST_FILE,
+  UPDATE_TARGET_FILE,
   writeUpdateRequest,
+  writeUpdateTarget,
 } from "@/lib/self-update-signal";
 import { compareSemver, isSelfUpdateAvailable, newerVersion, selfUpdateTargetVersion } from "@/lib/version";
 import { extractNewerChangelog, parseGithubRelease } from "@/server/services/github-revision";
@@ -100,6 +102,17 @@ describe("update signal files", () => {
     expect(isUpdateBusyFromSignal(dir)).toBe(true);
     writeFileSync(path.join(dir, UPDATE_LOCK_FILE), "");
     expect(isUpdateBusyFromSignal(dir)).toBe(true);
+  });
+
+  it("writes the target tag before a request and can clear a leftover pin", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "proxora-signal-"));
+    dirs.push(dir);
+    writeUpdateTarget(dir, "v1.0.71");
+    expect(readFileSync(path.join(dir, UPDATE_TARGET_FILE), "utf8")).toBe("v1.0.71\n");
+    writeUpdateTarget(dir, "v1.0.73");
+    expect(readFileSync(path.join(dir, UPDATE_TARGET_FILE), "utf8")).toBe("v1.0.73\n");
+    writeUpdateTarget(dir, null);
+    expect(existsSync(path.join(dir, UPDATE_TARGET_FILE))).toBe(false);
   });
 
   it("reads PROXORA_UPDATE_SIGNAL_DIR", () => {

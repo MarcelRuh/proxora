@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { logger } from "@/lib/logger";
@@ -8,6 +8,7 @@ import {
   isUpdateBusyFromSignal,
   resolveUpdateSignalDir,
   writeUpdateRequest,
+  writeUpdateTarget,
 } from "@/lib/self-update-signal";
 import {
   APP_VERSION,
@@ -292,10 +293,8 @@ function applyViaSignal(hostDir: string, repo: string, tag: string | null) {
     return { ok: false, mode: "compose" as const, message: "Update already running" };
   }
   try {
+    writeUpdateTarget(signalDir, tag);
     writeUpdateRequest(signalDir);
-    if (tag) {
-      writeFileSync(path.join(signalDir, "target"), `${tag}\n`);
-    }
     logger.info({ hostDir, repo, tag, signalDir }, "Proxora update requested via sidecar");
     return {
       ok: true,

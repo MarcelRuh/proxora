@@ -45,6 +45,10 @@ start_updater() {
     echo "ERROR: missing $APPLY" >&2
     return 1
   fi
+  TAG=""
+  if [ -f "${SIGNAL_DIR}/target" ]; then
+    TAG="$(tr -d '[:space:]' < "${SIGNAL_DIR}/target")"
+  fi
   docker rm -f "$UPDATER_NAME" >/dev/null 2>&1 || true
   docker run -d --init --name "$UPDATER_NAME" \
     -v /var/run/docker.sock:/var/run/docker.sock \
@@ -54,6 +58,7 @@ start_updater() {
     -e "PROXORA_INSTALL_DIR=${INSTALL_DIR}" \
     -e "PROXORA_REPO=${REPO}" \
     -e "PROXORA_BRANCH=${BRANCH}" \
+    -e "PROXORA_RELEASE_TAG=${TAG}" \
     -e "PROXORA_SKIP_COMPOSE=0" \
     -e "PROXORA_UPDATE_SIGNAL_DIR=/update-signal" \
     -w "$INSTALL_DIR" \

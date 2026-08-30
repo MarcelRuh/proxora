@@ -74,13 +74,16 @@ echo "==> Proxora self-update"
 echo " dir=${INSTALL_DIR} repo=${REPO} branch=${BRANCH} skip_compose=${SKIP_COMPOSE}"
 write_progress 4 start "Update started"
 
+# Always prefer GitHub latest. A leftover target file from a previous run
+# (e.g. v1.0.71) must not pin the updater to an old release.
+GITHUB_TAG="$(wget -qO- --header='User-Agent: proxora-self-update' \
+  "https://api.github.com/repos/${REPO}/releases/latest" \
+  | tr ',' '\n' | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1 || true)"
+if [ -n "$GITHUB_TAG" ]; then
+  RELEASE_TAG="$GITHUB_TAG"
+fi
 if [ -z "$RELEASE_TAG" ] && [ -n "$SIGNAL_DIR" ] && [ -f "${SIGNAL_DIR}/target" ]; then
   RELEASE_TAG="$(tr -d '[:space:]' < "${SIGNAL_DIR}/target")"
-fi
-if [ -z "$RELEASE_TAG" ]; then
-  RELEASE_TAG="$(wget -qO- --header='User-Agent: proxora-self-update' \
-    "https://api.github.com/repos/${REPO}/releases/latest" \
-    | tr ',' '\n' | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1 || true)"
 fi
 if [ -z "$RELEASE_TAG" ]; then
   echo "ERROR: could not resolve latest GitHub release" >&2
