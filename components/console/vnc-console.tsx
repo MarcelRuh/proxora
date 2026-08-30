@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ClipboardCopy, Maximize2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { disableQemuExtendedKeys, grabRfbKeyboard } from "@/lib/vnc-input";
 
 type Props = {
   hostId: string;
@@ -32,17 +33,23 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
   const shellRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<RfbInstance | null>(null);
+  const grabbedRef = useRef(false);
   const [status, setStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
   const [detail, setDetail] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
   const [grabbed, setGrabbed] = useState(false);
+
+  function setInputGrabbed(next: boolean) {
+    grabbedRef.current = next;
+    setGrabbed(next);
+  }
 
   useEffect(() => {
     if (!running) {
       rfbRef.current = null;
       setStatus("disconnected");
       setDetail(null);
-      setGrabbed(false);
+      setInputGrabbed(false);
       return;
     }
     const target = containerRef.current;
@@ -50,9 +57,10 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
     let cancelled = false;
     let socket: WebSocket | null = null;
     let attached = false;
+    let releaseKeyboard: (() => void) | undefined;
     setStatus("connecting");
     setDetail(null);
-    setGrabbed(false);
+    setInputGrabbed(false);
 
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     const wsBase = process.env.NEXT_PUBLIC_WS_URL || `${proto}://${window.location.host}`;
@@ -69,9 +77,14 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
       applyScale(rfbRef.current);
     };
 
-    const onPointerDown = () => {
-      focusRfb(target, rfbRef.current);
-      setGrabbed(true);
+    const onPointerDown = (event: PointerEvent) => {
+      const shell = shellRef.current;
+      if (shell && event.target instanceof Node && shell.contains(event.target)) {
+        focusRfb(target, rfbRef.current);
+        setInputGrabbed(true);
+      } else {
+        setInputGrabbed(false);
+      }
     };
 
     void import("@novnc/novnc/lib/rfb.js").then(({ default: RFB }) => {
@@ -84,7 +97,7 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
         if (cancelled) return;
         setStatus("error");
         setDetail(message);
-        setGrabbed(false);
+        setInputGrabbed(false);
       };
 
       ws.addEventListener("close", (event) => {
@@ -118,19 +131,25 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
         rfb.viewOnly = false;
         rfb.showDotCursor = true;
         rfb.qualityLevel = 6;
+        disableQemuExtendedKeys(rfb);
         rfb.addEventListener("connect", () => {
           attached = true;
           setStatus("connected");
+          releaseKeyboard?.();
+          releaseKeyboard = grabRfbKeyboard(
+            rfb,
+            () => !cancelled && rfbRef.current === rfb && grabbedRef.current,
+          );
           requestAnimationFrame(() => {
             applyScale(rfb);
             focusRfb(containerRef.current, rfb);
-            setGrabbed(true);
+            setInputGrabbed(true);
           });
         });
         rfb.addEventListener("disconnect", () => {
           if (!cancelled) {
             setStatus("disconnected");
-            setGrabbed(false);
+            setInputGrabbed(false);
           }
         });
         rfb.addEventListener("securityfailure", () => fail(t("guest.consoleError")));
@@ -151,13 +170,14 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
       ws.addEventListener("message", onAuth);
     });
 
-    target.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("fullscreenchange", onLayout);
     window.addEventListener("resize", onLayout);
 
     return () => {
       cancelled = true;
-      target.removeEventListener("pointerdown", onPointerDown, true);
+      releaseKeyboard?.();
+      document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("fullscreenchange", onLayout);
       window.removeEventListener("resize", onLayout);
       try {

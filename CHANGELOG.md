@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.80] – 2026-08-30
+
+### Fixed
+
+- VGA keyboard: send standard RFB KeyEvents (PVE does not use QEMU’s extended key encoding, so those frames were ignored). Keys are captured on the window while the console is grabbed, not only when the canvas has focus.
+
 ## [1.0.79] – 2026-08-30
 
 ### Fixed
