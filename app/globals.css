@@ -931,7 +931,9 @@ select optgroup {
 [data-ui="harbor"] .app-main {
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--card) 55%, transparent);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 @media (max-width: 1023px) {

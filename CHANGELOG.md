@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.1.2] – 2026-08-30
+
+### Fixed
+
+- Harbor skin lets the main pane scroll again.
+
 ## [1.1.1] – 2026-08-30
 
 ### Changed
