@@ -11,10 +11,7 @@ import { Input, Label } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
-import { CreateIpFields, ipCollision, ipFieldsFromVmid } from "@/components/guests/create-ip-fields";
 import { CreateProgressDialog } from "@/components/guests/create-progress-dialog";
-import { DEFAULT_GUEST_NETWORK, type GuestIpNetwork } from "@/lib/create-ip";
-import type { LxcIpMode } from "@/lib/lxc-net";
 import { bytesToSize } from "@/lib/utils";
 import { isWindowsIso, suggestVirtioIso } from "@/lib/iso-images";
 import { storageIsIscsi, vmDiskStorages, VM_DISK_BUSES, VM_SCSI_CONTROLLERS } from "@/lib/vm-storage";
@@ -36,8 +33,6 @@ type Options = {
   }>;
   isos: Array<{ volid?: string }>;
   bridges: Array<{ iface?: string }>;
-  networks?: GuestIpNetwork[];
-  usedIps?: string[];
 };
 
 const selectClass =
@@ -65,12 +60,7 @@ export default function CreateVmPage() {
     cores: 2,
     memory: 2048,
     bridge: "",
-    ipMode: "static" as LxcIpMode,
-    network: DEFAULT_GUEST_NETWORK,
-    cidr: "",
-    gateway: "",
     startAfter: true,
-    cloudInit: true,
   });
   const [progress, setProgress] = useState<"idle" | "running" | "done" | "error">("idle");
   const [progressError, setProgressError] = useState<string | null>(null);
@@ -97,8 +87,6 @@ export default function CreateVmPage() {
     () => (options?.bridges ?? []).map((b) => String(b.iface ?? "")).filter(Boolean),
     [options],
   );
-  const networks = options?.networks ?? [];
-  const usedIps = options?.usedIps ?? [];
   const selectedStore = imageStores.find((s) => s.storage === form.diskStorage);
   const iscsi = selectedStore ? storageIsIscsi(selectedStore) : false;
   const node = form.node || options?.nodes[0]?.node || "";
@@ -130,15 +118,7 @@ export default function CreateVmPage() {
       const isoList = (options.isos ?? []).map((i) => String(i.volid ?? "")).filter(Boolean);
       const iso = f.iso && isoList.includes(f.iso) ? f.iso : "";
       const iso2 = f.iso2 && isoList.includes(f.iso2) && f.iso2 !== iso ? f.iso2 : "";
-      const netList = options.networks?.length ? options.networks : undefined;
-      const network =
-        f.network && netList?.some((n) => n.id === f.network) ? f.network : (netList?.[0]?.id ?? f.network ?? DEFAULT_GUEST_NETWORK);
-      const ip =
-        f.ipMode === "static" && !f.cidr.trim()
-          ? ipFieldsFromVmid(network, vmid, netList)
-          : {};
-      const cloudInit = iso ? false : f.cloudInit;
-      return { ...f, node, diskStorage, bridge, vmid, iso, iso2, network, cloudInit, ...ip };
+      return { ...f, node, diskStorage, bridge, vmid, iso, iso2 };
     });
   }, [options]);
 
@@ -165,9 +145,6 @@ export default function CreateVmPage() {
           startAfter: form.startAfter,
           discard: true,
           ssd: true,
-          ipv4: form.ipMode === "dhcp" ? "dhcp" : form.cidr,
-          gateway: form.ipMode === "static" ? form.gateway : undefined,
-          cloudInit: form.ipMode === "static" && form.cloudInit && !iscsi,
         }),
       });
     },
@@ -205,9 +182,7 @@ export default function CreateVmPage() {
     form.name.trim().length > 0 &&
     Boolean(form.diskStorage) &&
     (iscsi ? Boolean(form.diskVolume) || Number(form.diskSize) > 0 : Number(form.diskSize) > 0) &&
-    Boolean(form.bridge) &&
-    (form.ipMode === "dhcp" || (form.cidr.trim().length > 0 && form.gateway.trim().length > 0)) &&
-    !(form.ipMode === "static" && ipCollision(form.cidr, usedIps));
+    Boolean(form.bridge);
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -246,14 +221,7 @@ export default function CreateVmPage() {
           <Field
             label={t("create.id")}
             value={form.vmid ? String(form.vmid) : ""}
-            onChange={(v) => {
-              const vmid = Number(v) || 0;
-              setForm({
-                ...form,
-                vmid,
-                ...(form.ipMode === "static" ? ipFieldsFromVmid(form.network, vmid, networks) : {}),
-              });
-            }}
+            onChange={(v) => setForm({ ...form, vmid: Number(v) || 0 })}
           />
           <Field label={t("create.name")} value={form.name} onChange={(name) => setForm({ ...form, name })} />
           <label className="text-sm md:col-span-2">
@@ -271,12 +239,7 @@ export default function CreateVmPage() {
                     : form.iso2 === iso
                       ? ""
                       : form.iso2;
-                setForm({
-                  ...form,
-                  iso,
-                  iso2,
-                  cloudInit: iso ? false : true,
-                });
+                setForm({ ...form, iso, iso2 });
               }}
             >
               <option value="">{t("common.none")}</option>
@@ -401,24 +364,6 @@ export default function CreateVmPage() {
               ))}
             </select>
           </label>
-          <CreateIpFields
-            value={{ ipMode: form.ipMode, network: form.network, cidr: form.cidr, gateway: form.gateway }}
-            vmid={form.vmid}
-            networks={networks}
-            usedIps={usedIps}
-            hint={form.iso && form.ipMode === "static" && !form.cloudInit ? t("create.isoIpHint") : undefined}
-            onChange={(ip) => setForm({ ...form, ...ip })}
-          />
-          {form.ipMode === "static" && !iscsi ? (
-            <label className="flex items-center gap-2 text-sm md:col-span-2">
-              <input
-                type="checkbox"
-                checked={form.cloudInit}
-                onChange={(e) => setForm({ ...form, cloudInit: e.target.checked })}
-              />
-              {t("create.cloudInit")}
-            </label>
-          ) : null}
           <label className="flex items-center gap-2 text-sm md:col-span-2">
             <input
               type="checkbox"

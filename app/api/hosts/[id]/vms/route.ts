@@ -10,9 +10,7 @@ import { attachGuestNotes } from "@/server/services/guest-notes";
 import { fillVmDisksFromAgent } from "@/server/services/guest-disk";
 import { completeGuestCreate } from "@/server/services/guest-start";
 import { notifyTopic } from "@/server/notifications/dispatch";
-import { normalizeLxcCidr } from "@/lib/lxc-net";
 import { durationLabel } from "@/lib/duration";
-import { ipv4Host } from "@/lib/create-ip";
 import { assertGuestIdentityFree } from "@/server/services/guest-ips";
 import { ostypeFromIso, vmCdromDisks } from "@/lib/iso-images";
 import { diskExtras, vmDiskSpec } from "@/lib/vm-storage";
@@ -51,9 +49,6 @@ const createVmSchema = z.object({
   efi: z.boolean().optional(),
   tpm: z.boolean().optional(),
   startAfter: z.boolean().optional(),
-  ipv4: z.string().optional(),
-  gateway: z.string().optional(),
-  cloudInit: z.boolean().optional(),
 }).refine((body) => Boolean(body.diskVolume?.trim()) || Boolean(body.diskSize?.trim()), {
   message: "Disk-Größe oder Volume fehlt",
   path: ["diskSize"],
@@ -109,13 +104,6 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     ostype: body.ostype ?? ostypeFromIso(body.iso ?? "") ?? "l26",
     agent: "1",
   };
-  const applyCloudInit =
-    Boolean(body.cloudInit) && Boolean(body.ipv4) && body.ipv4 !== "dhcp" && !body.diskVolume;
-  if (applyCloudInit) {
-    const ip = normalizeLxcCidr(body.ipv4!);
-    payload.ipconfig0 = body.gateway?.trim() ? `ip=${ip},gw=${body.gateway.trim()}` : `ip=${ip}`;
-    payload.scsi1 = `${body.diskStorage}:cloudinit`;
-  }
   if (body.diskBus === "virtio") payload.virtio0 = disk;
   else if (body.diskBus === "sata") payload.sata0 = disk;
   else if (body.diskBus === "ide") payload.ide0 = disk;
@@ -124,7 +112,6 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
   if (body.efi) payload.efidisk0 = `${body.diskStorage}:1,efitype=4m,pre-enrolled-keys=1`;
   if (body.tpm) payload.tpmstate0 = `${body.diskStorage}:1,version=v2.0`;
 
-  const staticIp = applyCloudInit ? ipv4Host(body.ipv4 ?? "") : null;
   const t0 = Date.now();
   let hostName = "";
   let started = false;
@@ -133,7 +120,7 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
   try {
     const result = await withHostClient(params.id, session.user, async (client, host) => {
       hostName = host.name;
-      await assertGuestIdentityFree(body.vmid, staticIp);
+      await assertGuestIdentityFree(body.vmid);
       const createUpid = await client.vms.create(body.node, payload as VmCreateParams);
       const done = await completeGuestCreate(client, "vm", body.node, body.vmid, createUpid, Boolean(body.startAfter));
       return { createUpid, ...done };

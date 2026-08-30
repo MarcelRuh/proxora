@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.70] – 2026-08-30
+
+### Removed
+
+- VM create no longer asks for static IP, DHCP, or Cloud-Init. ISO installs ignore those settings; LXC create is unchanged.
+
 ## [1.0.69] – 2026-08-30
 
 ### Added
