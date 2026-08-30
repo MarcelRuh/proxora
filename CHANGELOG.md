@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.83] – 2026-08-30
+
+### Added
+
+- VGA clipboard: Ctrl+V / the clipboard button types host clipboard into the guest (QEMU VGA does not sync the Windows clipboard).
+- VM OS type is a dropdown. Switching to Windows applies the Windows hardware profile (host CPU, OVMF, …); save to write it. This does not reinstall the guest.
+
 ## [1.0.82] – 2026-08-30
 
 ### Added

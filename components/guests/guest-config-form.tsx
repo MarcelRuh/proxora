@@ -11,6 +11,7 @@ import { canResizeDisk, diskSizeDeltaGiB, formatDiskGiB, parseDiskSpec, setDiskS
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { Locale } from "@/lib/i18n/messages";
 import { applyWindowsGuestHardware } from "@/lib/windows-guest";
+import { isWindowsOstype } from "@/lib/iso-images";
 
 const SKIP = new Set(["digest"]);
 
@@ -294,9 +295,39 @@ export function GuestConfigForm({
 
       <Section title={t("config.general")} description={kind === "lxc" ? t("config.generalLxc") : t("config.generalVm")}>
         <div className="grid gap-3 sm:grid-cols-2">
-          {metaKeys.map((key) => (
-            <Field key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} hint={hintFor(key, locale)} />
-          ))}
+          {metaKeys.map((key) =>
+            key === "ostype" && kind === "vm" ? (
+              <SelectField
+                key={key}
+                name="ostype"
+                value={form.ostype ?? ""}
+                hint={t("config.ostypeHint")}
+                onChange={(v) => {
+                  setForm((current) => {
+                    const next = { ...current };
+                    if (v) next.ostype = v;
+                    else delete next.ostype;
+                    if (isWindowsOstype(v) && !isWindowsOstype(current.ostype)) {
+                      toast.message(t("config.windowsProfileApplied"));
+                      return applyWindowsGuestHardware(next);
+                    }
+                    return next;
+                  });
+                }}
+                options={[
+                  { value: "win11", label: t("config.ostypeWin11") },
+                  { value: "win10", label: t("config.ostypeWin10") },
+                  { value: "win8", label: t("config.ostypeWin8") },
+                  { value: "win7", label: t("config.ostypeWin7") },
+                  { value: "l26", label: t("config.ostypeLinux") },
+                  { value: "l24", label: t("config.ostypeLinux24") },
+                  { value: "other", label: t("config.ostypeOther") },
+                ]}
+              />
+            ) : (
+              <Field key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} hint={hintFor(key, locale)} />
+            ),
+          )}
           {flags.map((key) => (
             <label key={key} className="flex h-9 items-center gap-2 text-sm">
               <input
@@ -545,17 +576,22 @@ function SelectField({
   value,
   onChange,
   options,
+  hint,
 }: {
   name: string;
   value: string;
   onChange: (v: string) => void;
   options: Array<{ value: string; label: string }>;
+  hint?: string;
 }) {
   const { locale } = useI18n();
   const opts = value && !options.some((o) => o.value === value) ? [{ value, label: value }, ...options] : options;
   return (
     <div className="space-y-1">
-      <Label>{labelFor(name, locale)}</Label>
+      <Label>
+        {labelFor(name, locale)}
+        {hint ? <span className="ml-1 text-xs font-normal text-muted-foreground">{hint}</span> : null}
+      </Label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}

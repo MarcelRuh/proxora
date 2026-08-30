@@ -15,6 +15,68 @@ export function isBrowserChromeKey(e: { key: string; ctrlKey: boolean; metaKey: 
   return ["r", "w", "t", "n", "l"].includes(e.key.toLowerCase());
 }
 
+/** Host clipboard paste into the VGA guest (Ctrl/Cmd+V). */
+export function isClipboardPasteKey(e: {
+  key: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey?: boolean;
+  shiftKey?: boolean;
+}): boolean {
+  if (e.altKey || e.shiftKey) return false;
+  if (!(e.ctrlKey || e.metaKey)) return false;
+  return e.key.toLowerCase() === "v";
+}
+
+export const CLIPBOARD_PASTE_MAX = 8192;
+
+const MODIFIER_UP: Array<[number, string]> = [
+  [0xffe3, "ControlLeft"],
+  [0xffe4, "ControlRight"],
+  [0xffe1, "ShiftLeft"],
+  [0xffe2, "ShiftRight"],
+  [0xffe9, "AltLeft"],
+  [0xfe03, "AltRight"],
+];
+
+/** Type clipboard text as RFB keys. VGA/QEMU does not sync the Windows clipboard. */
+export function clipboardCharsToKeysyms(text: string, max = CLIPBOARD_PASTE_MAX): {
+  keysyms: number[];
+  truncated: boolean;
+} {
+  const chars = [...text];
+  const truncated = chars.length > max;
+  const keysyms: number[] = [];
+  for (const ch of chars.slice(0, max)) {
+    if (ch === "\r") continue;
+    if (ch === "\n") {
+      keysyms.push(0xff0d);
+      continue;
+    }
+    if (ch === "\t") {
+      keysyms.push(0xff09);
+      continue;
+    }
+    const cp = ch.codePointAt(0);
+    if (cp === undefined) continue;
+    keysyms.push(cp < 0x100 ? cp : 0x01000000 + cp);
+  }
+  return { keysyms, truncated };
+}
+
+export function sendClipboardAsKeys(
+  sendKey: (keysym: number, code: string | null, down: boolean) => void,
+  text: string,
+): { truncated: boolean } {
+  for (const [keysym, code] of MODIFIER_UP) sendKey(keysym, code, false);
+  const { keysyms, truncated } = clipboardCharsToKeysyms(text);
+  for (const keysym of keysyms) {
+    sendKey(keysym, null, true);
+    sendKey(keysym, null, false);
+  }
+  return { truncated };
+}
+
 export function shouldCaptureConsoleKey(
   e: { key: string; ctrlKey: boolean; metaKey: boolean; target: EventTarget | null },
   active: boolean,
@@ -98,6 +160,7 @@ export function grabRfbKeyboard(
   rfb: object,
   isActive: () => boolean,
   send: (e: KeyboardEvent, down: boolean) => void,
+  onHostPaste?: (text: string) => void,
 ): () => void {
   const keyboard = (rfb as { _keyboard?: RfbKeyboard })._keyboard;
   try {
@@ -108,6 +171,11 @@ export function grabRfbKeyboard(
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (!shouldCaptureConsoleKey(e, isActive())) return;
+    if (isClipboardPasteKey(e)) {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
@@ -115,17 +183,33 @@ export function grabRfbKeyboard(
   };
   const onKeyUp = (e: KeyboardEvent) => {
     if (!shouldCaptureConsoleKey(e, isActive())) return;
+    if (isClipboardPasteKey(e)) {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
     send(e, false);
   };
+  const onPaste = (e: ClipboardEvent) => {
+    if (!isActive()) return;
+    if (isDomTextField(e.target)) return;
+    const text = e.clipboardData?.getData("text") ?? "";
+    if (!text) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onHostPaste?.(text);
+  };
 
   window.addEventListener("keydown", onKeyDown, true);
   window.addEventListener("keyup", onKeyUp, true);
+  window.addEventListener("paste", onPaste, true);
 
   return () => {
     window.removeEventListener("keydown", onKeyDown, true);
     window.removeEventListener("keyup", onKeyUp, true);
+    window.removeEventListener("paste", onPaste, true);
   };
 }

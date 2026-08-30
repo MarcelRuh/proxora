@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ClipboardCopy, Maximize2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n/locale-provider";
-import { disableQemuExtendedKeys, grabRfbKeyboard, rfbKeysymFromKeyboardEvent } from "@/lib/vnc-input";
+import { disableQemuExtendedKeys, grabRfbKeyboard, rfbKeysymFromKeyboardEvent, sendClipboardAsKeys } from "@/lib/vnc-input";
 
 type Props = {
   hostId: string;
@@ -127,6 +127,15 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
               if (!keysym) return;
               rfb.sendKey(keysym, keyEvent.code || null, down);
             },
+            (text) => {
+              const { truncated } = sendClipboardAsKeys(
+                (keysym, code, down) => rfb.sendKey(keysym, code, down),
+                text,
+              );
+              toast.success(
+                truncated ? tRef.current("guest.consoleClipboardTruncated") : tRef.current("guest.consoleClipboardSent"),
+              );
+            },
           );
           requestAnimationFrame(() => {
             applyScale(rfb);
@@ -177,18 +186,27 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
     };
   }, [hostId, node, vmid, nonce, running]);
 
-  async function pasteClipboard() {
+  async function pasteIntoGuest(rfb: RfbInstance) {
     try {
       const text = await navigator.clipboard.readText();
       if (!text) {
         toast.error(t("guest.consoleClipboardEmpty"));
         return;
       }
-      rfbRef.current?.clipboardPasteFrom(text);
-      toast.success(t("guest.consoleClipboardSent"));
+      const { truncated } = sendClipboardAsKeys(
+        (keysym, code, down) => rfb.sendKey(keysym, code, down),
+        text,
+      );
+      toast.success(truncated ? t("guest.consoleClipboardTruncated") : t("guest.consoleClipboardSent"));
     } catch {
       toast.error(t("guest.consoleClipboardDenied"));
     }
+  }
+
+  async function pasteClipboard() {
+    const rfb = rfbRef.current;
+    if (!rfb) return;
+    await pasteIntoGuest(rfb);
   }
 
   async function toggleFullscreen() {
