@@ -184,10 +184,14 @@ const RELEASE_CACHE_MS = 60_000;
 let releaseCache: { at: number; repo: string; value: GithubRelease | null } | null = null;
 
 async function fetchGithubLatestReleaseUncached(repo: string): Promise<GithubRelease | null> {
-  const fromHtml = await fetchGithubLatestReleaseFromHtml(repo);
-  if (fromHtml) return fromHtml;
-  const fromGit = await fetchGithubLatestReleaseFromGit(repo);
-  if (fromGit) return fromGit;
+  const [fromHtml, fromGit] = await Promise.all([
+    fetchGithubLatestReleaseFromHtml(repo),
+    fetchGithubLatestReleaseFromGit(repo),
+  ]);
+  const candidates = [fromHtml, fromGit].filter((r): r is GithubRelease => Boolean(r));
+  const newestTag = pickLatestSemverTag(candidates.map((r) => r.tag));
+  const newest = candidates.find((r) => r.tag === newestTag) ?? null;
+  if (newest) return newest;
   const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, { headers: githubHeaders() });
   if (!res.ok) return null;
   return parseGithubRelease(await res.json());

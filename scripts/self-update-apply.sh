@@ -130,19 +130,22 @@ github_api_latest_tag() {
   fi 2>/dev/null | tr ',' '\n' | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1
 }
 
-# Prefer github.com/releases/latest (no REST rate limit). A leftover target
-# file must not pin the updater to an old release when GitHub is reachable.
+# Highest semver among github.com + git tags. HTML /releases/latest can lag;
+# api.github.com can 403. Leftover target is last-resort only.
 resolve_release_tag() {
-  tag="$(github_html_latest_tag || true)"
-  if valid_release_tag "$tag"; then echo "$tag"; return 0; fi
-  tag="$(github_git_latest_tag || true)"
-  if valid_release_tag "$tag"; then echo "$tag"; return 0; fi
-  tag="$(github_api_latest_tag || true)"
-  if valid_release_tag "$tag"; then echo "$tag"; return 0; fi
+  best="$(
+    printf '%s\n' \
+      "$(github_html_latest_tag || true)" \
+      "$(github_git_latest_tag || true)" \
+      | pick_latest_semver
+  )"
+  if valid_release_tag "$best"; then echo "$best"; return 0; fi
+  best="$(github_api_latest_tag || true)"
+  if valid_release_tag "$best"; then echo "$best"; return 0; fi
   if valid_release_tag "$RELEASE_TAG"; then echo "$RELEASE_TAG"; return 0; fi
   if [ -n "$SIGNAL_DIR" ] && [ -f "${SIGNAL_DIR}/target" ]; then
-    tag="$(tr -d '[:space:]' < "${SIGNAL_DIR}/target")"
-    if valid_release_tag "$tag"; then echo "$tag"; return 0; fi
+    best="$(tr -d '[:space:]' < "${SIGNAL_DIR}/target")"
+    if valid_release_tag "$best"; then echo "$best"; return 0; fi
   fi
   return 1
 }

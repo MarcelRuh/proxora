@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.75] – 2026-08-30
+
+### Fixed
+
+- Self-update picks the highest git tag across GitHub sources. `github.com/releases/latest` can stay on the previous tag for a while after publish; that must not roll an update back.
+
 ## [1.0.74] – 2026-08-30
 
 ### Fixed
