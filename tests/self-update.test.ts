@@ -12,7 +12,12 @@ import {
   writeUpdateTarget,
 } from "@/lib/self-update-signal";
 import { compareSemver, isSelfUpdateAvailable, newerVersion, selfUpdateTargetVersion } from "@/lib/version";
-import { extractNewerChangelog, parseGithubRelease } from "@/server/services/github-revision";
+import {
+  extractNewerChangelog,
+  parseGithubRelease,
+  parseReleaseTagFromUrl,
+  pickLatestSemverTag,
+} from "@/server/services/github-revision";
 import { mergeProgress, parseProgressFile, parseUpdaterLogs } from "@/server/services/self-update-progress";
 
 describe("semver", () => {
@@ -67,6 +72,17 @@ describe("github release parse", () => {
       htmlUrl: "https://example",
     });
     expect(parseGithubRelease({ tag_name: "nightly" })).toBeNull();
+  });
+
+  it("reads the latest tag from a GitHub release URL", () => {
+    expect(parseReleaseTagFromUrl("https://github.com/MarcelRuh/proxora/releases/tag/v1.0.73")).toBe("v1.0.73");
+    expect(parseReleaseTagFromUrl("/MarcelRuh/proxora/releases/tag/1.0.74")).toBe("v1.0.74");
+    expect(parseReleaseTagFromUrl("https://github.com/MarcelRuh/proxora/releases")).toBeNull();
+  });
+
+  it("picks the highest semver tag, not lexicographic order", () => {
+    expect(pickLatestSemverTag(["v1.0.9", "v1.0.73", "v1.0.8", "nightly"])).toBe("v1.0.73");
+    expect(pickLatestSemverTag([])).toBeNull();
   });
 });
 

@@ -110,8 +110,94 @@ export function parseGithubRelease(json: unknown): GithubRelease | null {
   return { tag, version, sha, htmlUrl: typeof raw.html_url === "string" ? raw.html_url : null };
 }
 
-export async function fetchGithubLatestRelease(repo: string): Promise<GithubRelease | null> {
+export function parseReleaseTagFromUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const match = url.match(/\/releases\/tag\/(v?\d+\.\d+\.\d+)/i);
+  if (!match?.[1]) return null;
+  const raw = match[1];
+  return raw.startsWith("v") || raw.startsWith("V") ? raw : `v${raw}`;
+}
+
+export function pickLatestSemverTag(tags: string[]): string | null {
+  let best: string | null = null;
+  let bestMaj = -1;
+  let bestMin = -1;
+  let bestPat = -1;
+  for (const raw of tags) {
+    const trimmed = raw.trim();
+    const version = trimmed.replace(/^v/i, "");
+    if (!/^\d+\.\d+\.\d+$/.test(version)) continue;
+    const [maj, min, pat] = version.split(".").map((n) => Number.parseInt(n, 10) || 0);
+    if (maj > bestMaj || (maj === bestMaj && min > bestMin) || (maj === bestMaj && min === bestMin && pat > bestPat)) {
+      bestMaj = maj;
+      bestMin = min;
+      bestPat = pat;
+      best = trimmed.startsWith("v") || trimmed.startsWith("V") ? trimmed : `v${version}`;
+    }
+  }
+  return best;
+}
+
+async function fetchGithubLatestReleaseFromHtml(repo: string): Promise<GithubRelease | null> {
+  try {
+    const res = await fetch(`https://github.com/${repo}/releases/latest`, {
+      headers: { "User-Agent": "proxora-self-update" },
+      redirect: "follow",
+    });
+    if (!res.ok) return null;
+    const tag = parseReleaseTagFromUrl(res.url);
+    if (!tag) return null;
+    return {
+      tag,
+      version: tag.replace(/^v/i, ""),
+      sha: null,
+      htmlUrl: res.url,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchGithubLatestReleaseFromGit(repo: string): Promise<GithubRelease | null> {
+  try {
+    const { stdout } = await execFileAsync("git", ["ls-remote", "--tags", "--refs", `https://github.com/${repo}.git`], {
+      timeout: 15_000,
+    });
+    const tags = stdout
+      .split("\n")
+      .map((line) => line.replace(/^.*refs\/tags\//, "").trim())
+      .filter(Boolean);
+    const tag = pickLatestSemverTag(tags);
+    if (!tag) return null;
+    return {
+      tag,
+      version: tag.replace(/^v/i, ""),
+      sha: null,
+      htmlUrl: `https://github.com/${repo}/releases/tag/${tag}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+const RELEASE_CACHE_MS = 60_000;
+let releaseCache: { at: number; repo: string; value: GithubRelease | null } | null = null;
+
+async function fetchGithubLatestReleaseUncached(repo: string): Promise<GithubRelease | null> {
+  const fromHtml = await fetchGithubLatestReleaseFromHtml(repo);
+  if (fromHtml) return fromHtml;
+  const fromGit = await fetchGithubLatestReleaseFromGit(repo);
+  if (fromGit) return fromGit;
   const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, { headers: githubHeaders() });
   if (!res.ok) return null;
   return parseGithubRelease(await res.json());
+}
+
+export async function fetchGithubLatestRelease(repo: string): Promise<GithubRelease | null> {
+  if (releaseCache && releaseCache.repo === repo && Date.now() - releaseCache.at < RELEASE_CACHE_MS) {
+    return releaseCache.value;
+  }
+  const value = await fetchGithubLatestReleaseUncached(repo);
+  releaseCache = { at: Date.now(), repo, value };
+  return value;
 }

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.74] – 2026-08-30
+
+### Fixed
+
+- Self-update no longer fails with “Latest GitHub release not found” when `api.github.com` is rate-limited (403). The updater resolves the latest tag via `github.com/releases/latest` and git tags instead of the REST API.
+
 ## [1.0.73] – 2026-08-30
 
 ### Fixed

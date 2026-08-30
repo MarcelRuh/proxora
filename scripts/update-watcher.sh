@@ -61,6 +61,8 @@ start_updater() {
     -e "PROXORA_RELEASE_TAG=${TAG}" \
     -e "PROXORA_SKIP_COMPOSE=0" \
     -e "PROXORA_UPDATE_SIGNAL_DIR=/update-signal" \
+    -e "GITHUB_TOKEN=${GITHUB_TOKEN:-}" \
+    -e "GH_TOKEN=${GH_TOKEN:-}" \
     -w "$INSTALL_DIR" \
     --label proxora.update=self \
     "$UPDATER_IMAGE" sh "$APPLY"

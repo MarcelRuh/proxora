@@ -70,20 +70,97 @@ watch_compose_log() {
   done
 }
 
+need() {
+  command -v "$1" >/dev/null 2>&1 || { echo "ERROR: missing command: $1" >&2; exit 1; }
+}
+
+valid_release_tag() {
+  echo "$1" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$'
+}
+
+pick_latest_semver() {
+  awk '
+    /^v?[0-9]+\.[0-9]+\.[0-9]+$/ {
+      t = $0
+      v = t
+      sub(/^v/, "", v)
+      n = split(v, a, ".")
+      if (n < 3) next
+      maj = a[1] + 0; min = a[2] + 0; pat = a[3] + 0
+      if (best == "" || maj > bm || (maj == bm && min > bn) || (maj == bm && min == bn && pat > bp)) {
+        bm = maj; bn = min; bp = pat; best = t
+      }
+    }
+    END { if (best != "") print best }
+  '
+}
+
+github_html_latest_tag() {
+  wget -qS --spider -T 20 -U "proxora-self-update" \
+    "https://github.com/${REPO}/releases/latest" 2>&1 \
+    | tr -d '\r' \
+    | sed -n 's/.*\/releases\/tag\/\([^[:space:]]*\).*/\1/p' \
+    | head -1
+}
+
+github_git_latest_tag() {
+  tags=""
+  if command -v git >/dev/null 2>&1; then
+    tags="$(git ls-remote --tags --refs "$CLONE_URL" 2>/dev/null | awk '{print $2}' | sed 's|refs/tags/||' || true)"
+  fi
+  if [ -z "$tags" ]; then
+    tags="$(wget -qO- -T 20 --header='User-Agent: git/2.43.0' \
+      "https://github.com/${REPO}.git/info/refs?service=git-upload-pack" 2>/dev/null \
+      | tr -d '\000' | grep -oE 'refs/tags/v?[0-9]+\.[0-9]+\.[0-9]+' | sed 's|refs/tags/||' || true)"
+  fi
+  printf '%s\n' "$tags" | pick_latest_semver
+}
+
+github_api_latest_tag() {
+  tok="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+  if [ -n "$tok" ]; then
+    wget -qO- -T 20 \
+      --header='User-Agent: proxora-self-update' \
+      --header='Accept: application/vnd.github+json' \
+      --header="Authorization: Bearer ${tok}" \
+      "https://api.github.com/repos/${REPO}/releases/latest"
+  else
+    wget -qO- -T 20 --header='User-Agent: proxora-self-update' \
+      "https://api.github.com/repos/${REPO}/releases/latest"
+  fi 2>/dev/null | tr ',' '\n' | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1
+}
+
+# Prefer github.com/releases/latest (no REST rate limit). A leftover target
+# file must not pin the updater to an old release when GitHub is reachable.
+resolve_release_tag() {
+  tag="$(github_html_latest_tag || true)"
+  if valid_release_tag "$tag"; then echo "$tag"; return 0; fi
+  tag="$(github_git_latest_tag || true)"
+  if valid_release_tag "$tag"; then echo "$tag"; return 0; fi
+  tag="$(github_api_latest_tag || true)"
+  if valid_release_tag "$tag"; then echo "$tag"; return 0; fi
+  if valid_release_tag "$RELEASE_TAG"; then echo "$RELEASE_TAG"; return 0; fi
+  if [ -n "$SIGNAL_DIR" ] && [ -f "${SIGNAL_DIR}/target" ]; then
+    tag="$(tr -d '[:space:]' < "${SIGNAL_DIR}/target")"
+    if valid_release_tag "$tag"; then echo "$tag"; return 0; fi
+  fi
+  return 1
+}
+
 echo "==> Proxora self-update"
 echo " dir=${INSTALL_DIR} repo=${REPO} branch=${BRANCH} skip_compose=${SKIP_COMPOSE}"
 write_progress 4 start "Update started"
 
-# Always prefer GitHub latest. A leftover target file from a previous run
-# (e.g. v1.0.71) must not pin the updater to an old release.
-GITHUB_TAG="$(wget -qO- --header='User-Agent: proxora-self-update' \
-  "https://api.github.com/repos/${REPO}/releases/latest" \
-  | tr ',' '\n' | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1 || true)"
-if [ -n "$GITHUB_TAG" ]; then
-  RELEASE_TAG="$GITHUB_TAG"
+need wget
+need tar
+if [ "$SKIP_COMPOSE" != "1" ]; then
+  need docker
+  docker compose version >/dev/null 2>&1 || { echo "ERROR: docker compose plugin required" >&2; exit 1; }
 fi
-if [ -z "$RELEASE_TAG" ] && [ -n "$SIGNAL_DIR" ] && [ -f "${SIGNAL_DIR}/target" ]; then
-  RELEASE_TAG="$(tr -d '[:space:]' < "${SIGNAL_DIR}/target")"
+
+RESOLVED="$(resolve_release_tag || true)"
+if [ -n "$RESOLVED" ]; then
+  RELEASE_TAG="$RESOLVED"
 fi
 if [ -z "$RELEASE_TAG" ]; then
   echo "ERROR: could not resolve latest GitHub release" >&2
@@ -96,16 +173,6 @@ echo " release=${RELEASE_TAG}"
 if [ ! -f "${INSTALL_DIR}/docker-compose.yml" ]; then
   echo "ERROR: docker-compose.yml missing in ${INSTALL_DIR}" >&2
   exit 1
-fi
-
-need() {
-  command -v "$1" >/dev/null 2>&1 || { echo "ERROR: missing command: $1" >&2; exit 1; }
-}
-need wget
-need tar
-if [ "$SKIP_COMPOSE" != "1" ]; then
-  need docker
-  docker compose version >/dev/null 2>&1 || { echo "ERROR: docker compose plugin required" >&2; exit 1; }
 fi
 
 disk_avail_kb() {
