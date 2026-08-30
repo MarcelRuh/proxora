@@ -15,8 +15,15 @@ type Props = {
 
 type RfbInstance = InstanceType<typeof import("@novnc/novnc/lib/rfb.js").default>;
 
+function refreshRfbLayout(rfb: RfbInstance | null) {
+  if (!rfb) return;
+  rfb.scaleViewport = true;
+  rfb.focus();
+}
+
 export function VncConsole({ hostId, node, vmid, running }: Props) {
   const { t } = useI18n();
+  const shellRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<RfbInstance | null>(null);
   const [status, setStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
@@ -47,6 +54,11 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
       vmid: String(vmid),
     });
     const url = `${wsBase}/ws/vnc?${params.toString()}`;
+
+    const syncLayout = () => {
+      if (cancelled) return;
+      refreshRfbLayout(rfbRef.current);
+    };
 
     void import("@novnc/novnc/lib/rfb.js").then(({ default: RFB }) => {
       if (cancelled || !containerRef.current) return;
@@ -93,7 +105,9 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
         rfb.addEventListener("connect", () => {
           attached = true;
           setStatus("connected");
-          rfb.focus();
+          requestAnimationFrame(() => {
+            requestAnimationFrame(syncLayout);
+          });
         });
         rfb.addEventListener("disconnect", () => {
           if (!cancelled) setStatus("disconnected");
@@ -116,8 +130,16 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
       ws.addEventListener("message", onAuth);
     });
 
+    const ro = new ResizeObserver(() => syncLayout());
+    ro.observe(target);
+    document.addEventListener("fullscreenchange", syncLayout);
+    window.addEventListener("resize", syncLayout);
+
     return () => {
       cancelled = true;
+      ro.disconnect();
+      document.removeEventListener("fullscreenchange", syncLayout);
+      window.removeEventListener("resize", syncLayout);
       try {
         rfbRef.current?.disconnect();
       } catch {
@@ -147,6 +169,18 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
     }
   }
 
+  async function toggleFullscreen() {
+    const shell = shellRef.current;
+    if (!shell) return;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await shell.requestFullscreen();
+    } catch {
+      /* browser blocked fullscreen */
+    }
+    window.setTimeout(() => refreshRfbLayout(rfbRef.current), 80);
+  }
+
   const statusLabel =
     status === "connected"
       ? t("guest.consoleConnected")
@@ -157,8 +191,11 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
           : t("guest.consoleDisconnected");
 
   return (
-    <div className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-[#020617]">
-      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2 text-xs text-slate-300">
+    <div
+      ref={shellRef}
+      className="vnc-shell flex h-[min(70vh,720px)] min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-[#020617]"
+    >
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2 text-xs text-slate-300">
         <span
           className={
             !running || status === "error"
@@ -193,11 +230,7 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
           <Button size="icon" variant="ghost" disabled={!running} onClick={() => setNonce((n) => n + 1)}>
             <RefreshCw className="h-3 w-3" />
           </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => containerRef.current?.parentElement?.requestFullscreen()}
-          >
+          <Button size="icon" variant="ghost" disabled={!running} onClick={() => void toggleFullscreen()}>
             <Maximize2 className="h-3 w-3" />
           </Button>
         </div>
@@ -205,11 +238,11 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
       {running ? (
         <div
           ref={containerRef}
-          className="vnc-console-screen min-h-[480px] flex-1 overflow-hidden touch-none select-none"
-          onMouseEnter={() => rfbRef.current?.focus()}
+          className="vnc-console-screen min-h-0 flex-1 touch-none select-none"
+          onMouseDown={() => rfbRef.current?.focus()}
         />
       ) : (
-        <div className="flex min-h-[420px] flex-1 items-center justify-center px-6 text-center text-sm text-slate-400">
+        <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-sm text-slate-400">
           {t("guest.consoleVmStoppedHint")}
         </div>
       )}

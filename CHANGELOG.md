@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.78] – 2026-08-30
+
+### Fixed
+
+- VGA console shows the picture without going fullscreen. The noVNC surface now has a real height (percentage height was 0), and mouse mapping is refreshed after layout and fullscreen so clicks work.
+
 ## [1.0.77] – 2026-08-30
 
 ### Fixed
