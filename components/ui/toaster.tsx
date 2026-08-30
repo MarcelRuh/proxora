@@ -1,11 +1,13 @@
 "use client";
 
 import { Toaster } from "sonner";
+import { useUiTheme } from "@/components/theme/ui-theme-provider";
 
 export function AppToaster() {
+  const { uiTheme } = useUiTheme();
   return (
     <Toaster
-      theme="dark"
+      theme={uiTheme === "atelier" ? "light" : "dark"}
       richColors
       position="top-right"
       toastOptions={{

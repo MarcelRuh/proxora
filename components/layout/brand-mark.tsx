@@ -8,14 +8,14 @@ export function BrandMark({ className = "h-10 w-10" }: { className?: string }) {
     <svg viewBox="0 0 40 40" className={className} aria-hidden>
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#ff006e" />
-          <stop offset="55%" stopColor="#8338ec" />
-          <stop offset="100%" stopColor="#00b4d8" />
+          <stop offset="0%" stopColor="var(--proxora-pink)" />
+          <stop offset="55%" stopColor="var(--proxora-purple)" />
+          <stop offset="100%" stopColor="var(--proxora-blue)" />
         </linearGradient>
       </defs>
       <polygon
         points="20,2 37,11.5 37,28.5 20,38 3,28.5 3,11.5"
-        fill="rgba(255,0,110,0.12)"
+        fill="color-mix(in srgb, var(--proxora-pink) 12%, transparent)"
         stroke={`url(#${id})`}
         strokeWidth="1.6"
       />

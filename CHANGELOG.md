@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.1.1] – 2026-08-30
+
+### Changed
+
+- Operator, Atelier, Brutal, and Harbor now have their own palettes (phosphor, paper, hazard yellow, navy/teal). Standard is unchanged.
+- Theme picker shows a live mini-preview of each skin instead of a dropdown.
+
 ## [1.1.0] – 2026-08-30
 
 ### Added
