@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.85] – 2026-08-30
+
+### Changed
+
+- VM/LXC lists reuse the dashboard cache (one Proxora request instead of one per host).
+- Guest detail polls only live status (`?light=1`); config/snapshots stay put so unsaved edits are not reset.
+- Clone, backup, and restore load their heavy APIs when the dialog opens, not on every guest page.
+- Command search waits 250ms after typing before hitting Proxmox.
+
 ## [1.0.84] – 2026-08-30
 
 ### Changed

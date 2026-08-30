@@ -47,3 +47,37 @@ export type SessionUser = {
   allowedHostIds: string[] | null;
   allowedGuests: Array<{ hostId: string; kind: "vm" | "lxc"; vmid: number }> | null;
 };
+
+export type DashboardHost = {
+  id: string;
+  name: string;
+  connectionState: string;
+  proxmoxVersion: string | null;
+  cpu?: number;
+  cpuCores?: number;
+  memUsed?: number;
+  memTotal?: number;
+  diskUsed?: number;
+  diskTotal?: number;
+  uptime?: number;
+  lastError?: string | null;
+  nodeCount?: number;
+  onlineNodes?: number;
+};
+
+export type Dashboard = {
+  hosts: {
+    total: number;
+    online: number;
+    offline: number;
+    warning: number;
+    items: DashboardHost[];
+  };
+  virtualization: { vms: number; lxc: number; running: number; stopped: number; paused: number };
+  resources: { cpu: number; memUsed: number; memTotal: number; diskUsed: number; diskTotal: number };
+  guests: {
+    vms: Array<Omit<Guest, "kind">>;
+    containers: Array<Omit<Guest, "kind">>;
+  };
+};
+

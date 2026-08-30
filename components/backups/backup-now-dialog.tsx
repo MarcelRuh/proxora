@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -8,30 +9,35 @@ import { ProxmoxTaskProgress } from "@/components/backups/task-progress";
 import { useBackupTask } from "@/components/backups/use-backup-task";
 import { api } from "@/lib/api";
 import { useI18n } from "@/components/i18n/locale-provider";
-import { SELECT_CLASS } from "@/components/backups/types";
+import { SELECT_CLASS, type BackupOverview } from "@/components/backups/types";
 
 export function BackupNowDialog({
   hostId,
   node,
   vmid,
   kind,
-  storages,
   onDone,
 }: {
   hostId: string;
   node: string;
   vmid: number;
   kind: "vm" | "lxc";
-  storages: string[];
   onDone?: () => void;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const [storage, setStorage] = useState(storages[0] ?? "");
+  const [storage, setStorage] = useState("");
   const [mode, setMode] = useState("snapshot");
   const [busy, setBusy] = useState(false);
   const [upid, setUpid] = useState<string | null>(null);
   const toastedRef = useRef(false);
+  const { data: backups } = useQuery({
+    queryKey: ["backups", hostId],
+    queryFn: () => api<BackupOverview>(`/api/hosts/${hostId}/backups`),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const storages = backups?.backupStorages ?? [];
 
   useEffect(() => {
     if (storages[0] && !storage) setStorage(storages[0]);

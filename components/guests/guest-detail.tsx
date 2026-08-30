@@ -63,7 +63,6 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const params = useParams<{ hostId: string; node: string; vmid: string }>();
   const search = useSearchParams();
   const listPath = kind === "vm" ? "/vms" : "/containers";
-  const listQueryKey = kind === "vm" ? ["all-vms"] : ["all-lxc"];
   const kindLabel = kind === "vm" ? "VM" : "LXC";
   const [snap, setSnap] = useState("");
   const [saving, setSaving] = useState(false);
@@ -73,28 +72,30 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const { data, refetch, isLoading } = useQuery({
     queryKey: ["guest", kind, params.hostId, params.node, params.vmid],
     queryFn: () => api<GuestPayload>(path),
+  });
+  const { data: live } = useQuery({
+    queryKey: ["guest-live", kind, params.hostId, params.node, params.vmid],
+    queryFn: () => api<Pick<GuestPayload, "status" | "agentDisk">>(`${path}?light=1`),
     refetchInterval: 12_000,
+    enabled: Boolean(data),
   });
   const { data: hosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
   });
-  const { data: options } = useQuery({
-    queryKey: ["options", params.hostId],
-    queryFn: () => api<{ nextid: number | null }>(`/api/hosts/${params.hostId}/options`),
-  });
+  const [restoreFile, setRestoreFile] = useState<BackupFile | null>(null);
   const { data: backups } = useQuery({
     queryKey: ["backups", params.hostId],
     queryFn: () => api<BackupOverview>(`/api/hosts/${params.hostId}/backups`),
+    enabled: Boolean(restoreFile),
     staleTime: 60_000,
   });
-  const [restoreFile, setRestoreFile] = useState<BackupFile | null>(null);
 
   async function action(name: string, extra: Record<string, unknown> = {}) {
     await api(path, { method: "POST", body: JSON.stringify({ action: name, ...extra }) });
     if (name === "delete") {
       toast.success(t("guest.deleted", { kind: kindLabel, id: params.vmid }));
-      await qc.invalidateQueries({ queryKey: listQueryKey });
+      await qc.invalidateQueries({ queryKey: ["dashboard"] });
       router.push(listPath);
       return;
     }
@@ -108,9 +109,11 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             : t("common.taskDone"),
     );
     void refetch();
+    void qc.invalidateQueries({ queryKey: ["guest-live", kind, params.hostId, params.node, params.vmid] });
+    void qc.invalidateQueries({ queryKey: ["dashboard"] });
   }
 
-  const status = data?.status ?? {};
+  const status = live?.status ?? data?.status ?? {};
   const config = data?.config ?? {};
   const runState = String(status.status ?? "unknown");
   const running = runState === "running";
@@ -131,8 +134,6 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const maxdisk = num(status.maxdisk);
   const netin = num(status.netin);
   const netout = num(status.netout);
-  const guestFiles = (backups?.files ?? []).filter((f) => f.vmid === Number(params.vmid));
-  const latestBackup = guestFiles[0] ?? null;
 
   return (
     <div className="space-y-4">
@@ -209,9 +210,9 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
         {can.clone ? (
           <CloneDialog
             kind={kind}
+            hostId={params.hostId}
             vmid={Number(params.vmid)}
             name={name}
-            nextid={options?.nextid}
             path={path}
             onDone={() => void refetch()}
           />
@@ -222,12 +223,35 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             node={params.node}
             vmid={Number(params.vmid)}
             kind={kind}
-            storages={backups?.backupStorages ?? []}
             onDone={() => void qc.invalidateQueries({ queryKey: ["backups"] })}
           />
         ) : null}
-        {latestBackup && can.restore ? (
-          <Button variant="outline" onClick={() => setRestoreFile(latestBackup)}>
+        {can.restore ? (
+          <Button
+            variant="outline"
+            onClick={() => {
+              const latest = (backups?.files ?? []).find((f) => f.vmid === Number(params.vmid));
+              if (latest) {
+                setRestoreFile(latest);
+                return;
+              }
+              void qc
+                .fetchQuery({
+                  queryKey: ["backups", params.hostId],
+                  queryFn: () => api<BackupOverview>(`/api/hosts/${params.hostId}/backups`),
+                  staleTime: 60_000,
+                })
+                .then((overview) => {
+                  const file = (overview.files ?? []).find((f) => f.vmid === Number(params.vmid));
+                  if (!file) {
+                    toast.error(t("backup.noFiles"));
+                    return;
+                  }
+                  setRestoreFile(file);
+                })
+                .catch((err: unknown) => toast.error(err instanceof Error ? err.message : t("common.failed")));
+            }}
+          >
             {t("backup.restore")}
           </Button>
         ) : null}

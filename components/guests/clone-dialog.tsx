@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,28 +11,34 @@ import { useI18n } from "@/components/i18n/locale-provider";
 
 export function CloneDialog({
   kind,
+  hostId,
   vmid,
   name,
-  nextid,
   path,
   onDone,
 }: {
   kind: "vm" | "lxc";
+  hostId: string;
   vmid: number;
   name: string;
-  nextid?: number | null;
   path: string;
   onDone: () => void;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [newid, setNewid] = useState(String(nextid ?? vmid + 1));
+  const [newid, setNewid] = useState(String(vmid + 1));
   const [cloneName, setCloneName] = useState(`${name}-clone`);
+  const { data: options } = useQuery({
+    queryKey: ["options", hostId],
+    queryFn: () => api<{ nextid: number | null }>(`/api/hosts/${hostId}/options`),
+    enabled: open,
+    staleTime: 30_000,
+  });
 
   useEffect(() => {
-    if (nextid) setNewid(String(nextid));
-  }, [nextid]);
+    if (options?.nextid) setNewid(String(options.nextid));
+  }, [options?.nextid]);
 
   useEffect(() => {
     setCloneName(`${name}-clone`);

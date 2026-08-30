@@ -57,10 +57,15 @@ const ACTION_AUDIT: Record<string, string> = {
   resize: AUDIT_ACTIONS.LXC_DISK_RESIZED,
 };
 
-export const GET = apiRoute("lxc.view", async (_req, session, params) => {
+export const GET = apiRoute("lxc.view", async (req, session, params) => {
   const vmid = Number(params.vmid);
   assertGuestAccess(session.user, params.id, "lxc", vmid);
+  const light = new URL(req.url).searchParams.get("light") === "1";
   const data = await withHostClient(params.id, session.user, async (client) => {
+    if (light) {
+      const status = await client.lxc.status(params.node, vmid);
+      return { status };
+    }
     const [status, config, snapshots] = await Promise.all([
       client.lxc.status(params.node, vmid),
       client.lxc.config(params.node, vmid),

@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
@@ -19,11 +19,16 @@ type SearchResponse = {
 export function CommandSearch({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { t } = useI18n();
   const [q, setQ] = useState("");
+  const [debounced, setDebounced] = useState("");
   const router = useRouter();
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(q.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [q]);
   const { data } = useQuery({
-    queryKey: ["search", q],
-    queryFn: () => api<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}`),
-    enabled: open && q.length > 0,
+    queryKey: ["search", debounced],
+    queryFn: () => api<SearchResponse>(`/api/search?q=${encodeURIComponent(debounced)}`),
+    enabled: open && debounced.length > 0,
   });
 
   const groups: Array<{ labelKey: MessageKey; items: SearchResponse[keyof SearchResponse] }> = [

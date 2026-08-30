@@ -1,60 +1,22 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ProgressBar, Skeleton } from "@/components/ui/misc";
 import { HostStateBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
 import { uniqueNonEmpty } from "@/lib/cluster-metrics";
 import { bytesToSize, formatPercent, formatUptime, percentage } from "@/lib/utils";
 import { useAptSummary } from "@/components/layout/apt-update-alert";
+import { useDashboard } from "@/components/dashboard/use-dashboard";
 import { GuestTable } from "@/components/guests/guest-table";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { Guest } from "@/lib/types";
 
-type DashboardHost = {
-  id: string;
-  name: string;
-  connectionState: string;
-  proxmoxVersion: string | null;
-  cpu?: number;
-  cpuCores?: number;
-  memUsed?: number;
-  memTotal?: number;
-  diskUsed?: number;
-  diskTotal?: number;
-  uptime?: number;
-  lastError?: string | null;
-  nodeCount?: number;
-  onlineNodes?: number;
-};
-
-type Dashboard = {
-  hosts: {
-    total: number;
-    online: number;
-    offline: number;
-    warning: number;
-    items: DashboardHost[];
-  };
-  virtualization: { vms: number; lxc: number; running: number; stopped: number; paused: number };
-  resources: { cpu: number; memUsed: number; memTotal: number; diskUsed: number; diskTotal: number };
-  guests: {
-    vms: Array<Omit<Guest, "kind">>;
-    containers: Array<Omit<Guest, "kind">>;
-  };
-};
-
 export default function DashboardPage() {
   const { t } = useI18n();
-  const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => api<Dashboard>("/api/dashboard"),
-    refetchInterval: 30_000,
-  });
+  const { data, isLoading, error, refetch, isFetching } = useDashboard();
   const apt = useAptSummary();
 
   if (isLoading) {

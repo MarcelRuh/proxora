@@ -71,10 +71,21 @@ function permissionFor(action: string) {
   return permissionForGuestAction("vm", action);
 }
 
-export const GET = apiRoute("vm.view", async (_req, session, params) => {
+export const GET = apiRoute("vm.view", async (req, session, params) => {
   const vmid = Number(params.vmid);
   assertGuestAccess(session.user, params.id, "vm", vmid);
+  const light = new URL(req.url).searchParams.get("light") === "1";
   const data = await withHostClient(params.id, session.user, async (client) => {
+    if (light) {
+      const status = await client.vms.status(params.node, vmid);
+      const running = String(status.status ?? "") === "running";
+      const agentDisk = running ? await vmDiskFromAgent(client, params.node, vmid).catch(() => null) : null;
+      if (agentDisk) {
+        status.disk = agentDisk.used;
+        status.maxdisk = agentDisk.total;
+      }
+      return { status, agentDisk };
+    }
     const [status, config, snapshots] = await Promise.all([
       client.vms.status(params.node, vmid),
       client.vms.config(params.node, vmid),
