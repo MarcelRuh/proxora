@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.76] – 2026-08-30
+
+### Fixed
+
+- VM serial console: add `serial0: socket` (on create and when opening Serial). Without it PVE only returns “unable to find a serial interface”.
+- VM VGA: do not send the PVE ticket into QEMU RFB when `generate-password` already authenticated the session. Headless VMs (`vga=none`) get a clear error instead of a dead noVNC session.
+
 ## [1.0.75] – 2026-08-30
 
 ### Fixed

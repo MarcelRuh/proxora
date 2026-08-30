@@ -110,6 +110,7 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     net0: net,
     ostype,
     agent: "1",
+    serial0: "socket",
   };
   if (body.diskBus === "virtio") payload.virtio0 = disk;
   else if (body.diskBus === "sata") payload.sata0 = disk;

@@ -67,14 +67,15 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
 
       const onAuth = (event: MessageEvent) => {
         if (typeof event.data !== "string") return;
-        let msg: { type?: string; password?: string; status?: string; message?: string };
+        let msg: { type?: string; password?: string; status?: string; message?: string; code?: string };
         try {
           msg = JSON.parse(event.data) as typeof msg;
         } catch {
           return;
         }
         if (msg.type === "status" && msg.status === "error") {
-          fail(msg.message || t("guest.consoleError"));
+          if (msg.code === "no-vga") fail(t("guest.consoleNoVga"));
+          else fail(msg.message || t("guest.consoleError"));
           return;
         }
         if (msg.type !== "vnc-auth") return;

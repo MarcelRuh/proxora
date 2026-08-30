@@ -3,7 +3,7 @@
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +23,7 @@ import { bytesToSize, formatUptime, guestCpuPercent, guestSizeDetail, percentage
 import type { PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
+import { vmHasGraphics } from "@/lib/guest-console";
 
 type GuestPayload = {
   status: Record<string, unknown>;
@@ -114,6 +115,10 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const running = runState === "running";
   const paused = runState === "paused";
   const stopped = !running && !paused;
+  const hasGraphics = kind !== "vm" || vmHasGraphics(config.vga);
+  useEffect(() => {
+    if (kind === "vm" && data?.config && !hasGraphics) setConsoleMode("serial");
+  }, [kind, data?.config, hasGraphics]);
   const name = String(config.name ?? config.hostname ?? status.name ?? params.vmid);
   const hostName = hosts?.hosts.find((h) => h.id === params.hostId)?.name ?? params.hostId;
   const cores = num(status.cpus) || num(config.cores) * Math.max(1, num(config.sockets) || 1) || num(config.cores);

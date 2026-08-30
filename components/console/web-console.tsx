@@ -5,6 +5,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { Button } from "@/components/ui/button";
 import { Maximize2, Minus, Plus, RefreshCw } from "lucide-react";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 type Props = {
   hostId: string;
@@ -15,10 +16,12 @@ type Props = {
 };
 
 export function WebConsole({ hostId, node, kind, vmid, cmd }: Props) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const [status, setStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
+  const [detail, setDetail] = useState<string | null>(null);
   const [fontSize, setFontSize] = useState(14);
   const [nonce, setNonce] = useState(0);
 
@@ -54,16 +57,32 @@ export function WebConsole({ hostId, node, kind, vmid, cmd }: Props) {
     const ws = new WebSocket(`${wsBase}/ws/console?${params.toString()}`);
     wsRef.current = ws;
     setStatus("connecting");
+    setDetail(null);
 
-    ws.onopen = () => setStatus("connected");
-    ws.onclose = () => setStatus("disconnected");
+    ws.onopen = () => setStatus("connecting");
+    ws.onclose = () => {
+      setStatus((s) => (s === "error" ? s : "disconnected"));
+    };
     ws.onerror = () => setStatus("error");
     ws.onmessage = (event) => {
       if (typeof event.data === "string" && event.data.startsWith("{")) {
         try {
-          const parsed = JSON.parse(event.data) as { type?: string; status?: string };
+          const parsed = JSON.parse(event.data) as {
+            type?: string;
+            status?: string;
+            message?: string;
+            code?: string;
+          };
           if (parsed.type === "status" && parsed.status) {
-            setStatus(parsed.status === "connected" ? "connected" : "error");
+            if (parsed.status === "connected") {
+              setStatus("connected");
+              setDetail(null);
+            } else {
+              setStatus("error");
+              setDetail(
+                parsed.code === "no-serial" ? t("guest.consoleSerialMissing") : parsed.message || t("guest.consoleError"),
+              );
+            }
             return;
           }
         } catch {
@@ -105,21 +124,31 @@ export function WebConsole({ hostId, node, kind, vmid, cmd }: Props) {
       ws.close();
       term.dispose();
     };
-  }, [hostId, node, kind, vmid, cmd, fontSize, nonce]);
+  }, [hostId, node, kind, vmid, cmd, fontSize, nonce, t]);
+
+  const statusLabel =
+    status === "connected"
+      ? t("guest.consoleConnected")
+      : status === "error"
+        ? t("guest.consoleError")
+        : status === "connecting"
+          ? t("guest.consoleConnecting")
+          : t("guest.consoleDisconnected");
 
   return (
     <div className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-[#020617]">
-      <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2 text-xs text-slate-300">
+      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2 text-xs text-slate-300">
         <span
           className={
             status === "connected" ? "text-emerald-400" : status === "error" ? "text-red-400" : "text-amber-400"
           }
         >
-          ● {status}
+          ● {statusLabel}
         </span>
-          <span className="text-slate-500">
-            {cmd === "upgrade" ? "UPGRADE" : kind.toUpperCase()} {vmid ?? node} @ {node}
-          </span>
+        <span className="text-slate-500">
+          {cmd === "upgrade" ? "UPGRADE" : kind.toUpperCase()} {vmid ?? node} @ {node}
+        </span>
+        {detail && status === "error" ? <span className="text-red-400">{detail}</span> : null}
         <div className="ml-auto flex items-center gap-1">
           <Button size="icon" variant="ghost" onClick={() => setFontSize((s) => Math.max(10, s - 1))}>
             <Minus className="h-3 w-3" />

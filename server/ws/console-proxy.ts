@@ -10,6 +10,7 @@ import { writeAuditLog } from "@/server/services/audit-service";
 import { clientForHost } from "@/server/services/host-service";
 import { consumeProxmoxVncHandshake, wsPayloadToBuffer } from "@/lib/vnc-handshake";
 import { rfbPasswordFromVncProxy } from "@/lib/vnc-password";
+import { isTermproxySerialError, vmHasGraphics, vmHasSerialSocket } from "@/lib/guest-console";
 
 function cookieValue(req: IncomingMessage, name: string): string | undefined {
   const header = req.headers.cookie;
@@ -85,6 +86,22 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
     }
 
     const proxmox = await clientForHost(host);
+    if (kind === "vm" && vmid) {
+      try {
+        const cfg = await proxmox.vms.config(node, Number(vmid));
+        if (display === "vga" && !vmHasGraphics(cfg.vga)) {
+          sendBrowserError(browser, "This VM has no display (vga=none). Use serial or set VGA in the config.", "no-vga");
+          browser.close(4400, "VM has no VGA");
+          return;
+        }
+        if (display === "serial") {
+          await ensureVmSerialSocket(proxmox, node, Number(vmid), cfg.serial0);
+        }
+      } catch (error) {
+        logger.warn({ err: error instanceof Error ? error.message : error }, "VM console config check failed");
+      }
+    }
+
     const term =
       display === "vga"
         ? await openVmVncProxy(proxmox, node, Number(vmid))
@@ -126,7 +143,10 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
     };
 
     if (display === "vga") {
-      pipeVnc(browser, remote, `${term.user}:${term.ticket}\n`, rfbPasswordFromVncProxy(term), closeBoth);
+      const password = rfbPasswordFromVncProxy(term);
+      // PVE 9 starts RFB immediately when generate-password produced a VNC password.
+      // Sending `{user}:{ticket}` into that stream kills QEMU (1006).
+      pipeVnc(browser, remote, password ? null : `${term.user}:${term.ticket}\n`, password, closeBoth);
     } else {
       pipeTerm(browser, remote, term, cols, rows, closeBoth);
     }
@@ -151,6 +171,26 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
   }
 }
 
+function sendBrowserError(browser: WebSocket, message: string, code?: string) {
+  if (browser.readyState === WebSocket.OPEN) {
+    try {
+      browser.send(JSON.stringify({ type: "status", status: "error", message, code }));
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+async function ensureVmSerialSocket(
+  proxmox: Awaited<ReturnType<typeof clientForHost>>,
+  node: string,
+  vmid: number,
+  serial0: unknown,
+) {
+  if (vmHasSerialSocket(serial0)) return;
+  await proxmox.vms.updateConfig(node, vmid, { serial0: "socket" });
+}
+
 function pipeTerm(
   browser: WebSocket,
   remote: WebSocket,
@@ -160,18 +200,38 @@ function pipeTerm(
   closeBoth: (code?: number, reason?: string) => void,
 ) {
   remote.on("open", () => {
-    remote.send(Buffer.from(`${term.user}:${term.ticket}\n`));
-    if (browser.readyState === WebSocket.OPEN) {
-      browser.send(JSON.stringify({ type: "status", status: "connected" }));
-    }
-    setTimeout(() => {
-      if (remote.readyState === WebSocket.OPEN) {
-        remote.send(Buffer.from(`1:${cols}:${rows}:`));
-      }
-    }, 250);
+    remote.send(`${term.user}:${term.ticket}\n`);
   });
 
+  let handshake = true;
+  let handshakeBuf = Buffer.alloc(0);
   remote.on("message", (data) => {
+    const chunk = asBuffer(data);
+    if (handshake) {
+      handshakeBuf = Buffer.concat([handshakeBuf, chunk]);
+      const text = handshakeBuf.toString("latin1");
+      if (!text.startsWith("OK") && handshakeBuf.length < 2) return;
+      handshake = false;
+      if (browser.readyState === WebSocket.OPEN) {
+        browser.send(JSON.stringify({ type: "status", status: "connected" }));
+      }
+      const rest = text.replace(/^OK\r?\n?/, "");
+      if (isTermproxySerialError(text)) {
+        sendBrowserError(browser, "unable to find a serial interface", "no-serial");
+        closeBoth(1011, "No serial interface");
+        return;
+      }
+      if (rest && browser.readyState === WebSocket.OPEN) browser.send(Buffer.from(rest, "latin1"));
+      if (remote.readyState === WebSocket.OPEN) {
+        remote.send(`1:${cols}:${rows}:`);
+      }
+      return;
+    }
+    if (isTermproxySerialError(chunk.toString("latin1"))) {
+      sendBrowserError(browser, "unable to find a serial interface", "no-serial");
+      closeBoth(1011, "No serial interface");
+      return;
+    }
     if (browser.readyState === WebSocket.OPEN) browser.send(data);
   });
 
@@ -186,18 +246,18 @@ function pipeTerm(
         data?: string;
       };
       if (parsed.type === "resize" && parsed.cols && parsed.rows) {
-        remote.send(Buffer.from(`1:${parsed.cols}:${parsed.rows}:`));
+        remote.send(`1:${parsed.cols}:${parsed.rows}:`);
         return;
       }
       if (parsed.type === "input" && parsed.data !== undefined) {
-        remote.send(Buffer.from(`0:${Buffer.byteLength(parsed.data)}:${parsed.data}`));
+        remote.send(`0:${Buffer.byteLength(parsed.data)}:${parsed.data}`);
         return;
       }
       if (parsed.type === "ping") {
-        remote.send(Buffer.from("2"));
+        remote.send("2");
       }
     } catch {
-      remote.send(Buffer.from(`0:${Buffer.byteLength(text)}:${text}`));
+      remote.send(`0:${Buffer.byteLength(text)}:${text}`);
     }
   });
 
@@ -226,7 +286,7 @@ async function openVmVncProxy(
 function pipeVnc(
   browser: WebSocket,
   remote: WebSocket,
-  ticketLine: string,
+  ticketLine: string | null,
   password: string,
   closeBoth: (code?: number, reason?: string) => void,
 ) {
@@ -255,15 +315,15 @@ function pipeVnc(
     for (const chunk of toRemote.splice(0)) sendRfb(remote, chunk);
   };
 
-  // Modern PVE authenticates via vncticket in the URL and starts RFB immediately.
-  // Sending `{user}:{ticket}` then is forwarded into QEMU and the socket dies (1006).
-  // Older PVE still waits for that line and replies `OK` first — send it only if RFB never arrives.
+  // Modern PVE (generate-password) already authenticated the WS via vncticket
+  // and starts RFB immediately. Only older PVE waits for `{user}:{ticket}` first.
   let ticketTimer: ReturnType<typeof setTimeout> | undefined;
   remote.on("open", () => {
+    if (!ticketLine) return;
     ticketTimer = setTimeout(() => {
       if (upstreamReady || handshake.length || remote.readyState !== WebSocket.OPEN) return;
-      remote.send(Buffer.from(ticketLine));
-    }, 400);
+      remote.send(ticketLine);
+    }, 800);
   });
 
   remote.on("message", (data) => {

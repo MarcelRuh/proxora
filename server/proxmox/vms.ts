@@ -24,6 +24,7 @@ export interface VmCreateParams {
   tpmstate0?: string;
   onboot?: number;
   agent?: string;
+  serial0?: string;
   [key: string]: unknown;
 }
 
