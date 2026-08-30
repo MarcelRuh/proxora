@@ -24,7 +24,7 @@ export default function HostsPage() {
   const { data } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
-    refetchInterval: 20_000,
+    refetchInterval: 30_000,
   });
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<PublicHost | null>(null);

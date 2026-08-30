@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, memo } from "react";
 import { Play, Square, RotateCcw, Terminal, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -19,7 +19,7 @@ import type { Guest } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
 
-export function GuestTable({
+export const GuestTable = memo(function GuestTable({
   kind,
   items,
   hostId,
@@ -262,7 +262,7 @@ export function GuestTable({
       </div>
     </div>
   );
-}
+});
 
 function SortHeader({
   label,

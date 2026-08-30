@@ -67,7 +67,7 @@ export default function TasksPage() {
       );
       return rows.flat().sort((a, b) => b.starttime - a.starttime);
     },
-    refetchInterval: 5_000,
+    refetchInterval: 10_000,
   });
 
   const [hostId, setHostId] = useState("all");

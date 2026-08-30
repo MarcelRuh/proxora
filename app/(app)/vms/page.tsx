@@ -33,7 +33,7 @@ export default function VmsPage() {
       );
       return lists.flat();
     },
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
 
   return (

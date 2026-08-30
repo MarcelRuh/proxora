@@ -35,7 +35,7 @@ export default function UpdatesPage() {
       api<{
         jobs: Array<{ id: string; status: string; host?: { name: string } | null; error?: string | null }>;
       }>("/api/updates"),
-    refetchInterval: 5_000,
+    refetchInterval: 15_000,
   });
   const { data: details, isFetching } = useQuery({
     queryKey: ["update-details", hosts?.hosts.map((h) => h.id)],

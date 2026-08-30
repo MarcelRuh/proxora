@@ -6,8 +6,6 @@ import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { filterGuestsForUser } from "@/server/auth/session-core";
-import { attachGuestNotes } from "@/server/services/guest-notes";
-import { fillVmDisksFromAgent } from "@/server/services/guest-disk";
 import { completeGuestCreate } from "@/server/services/guest-start";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { durationLabel } from "@/lib/duration";
@@ -57,9 +55,7 @@ const createVmSchema = z.object({
 
 export const GET = apiRoute("vm.view", async (_req, session, params) => {
   const vms = await withHostClient(params.id, session.user, async (client) => {
-    const listed = filterGuestsForUser(session.user, params.id, "vm", await client.listVms());
-    await Promise.all([attachGuestNotes(client, listed, []), fillVmDisksFromAgent(client, listed)]);
-    return listed;
+    return filterGuestsForUser(session.user, params.id, "vm", await client.listVms());
   });
   return json({ vms });
 });

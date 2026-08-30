@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.84] – 2026-08-30
+
+### Changed
+
+- Lists and dashboard load from cluster resources only (no per-guest config/agent round-trips). Used-disk from QEMU agent stays on the VM detail page.
+- Polling is slower on overview screens (dashboard/VMs/LXC 30s, host 20s, guest detail 12s) and does not refetch in background tabs.
+- Host status uses cluster node resources instead of one status call per node.
+- Dashboard clock is isolated so the guest table does not re-render every second.
+
 ## [1.0.83] – 2026-08-30
 
 ### Added

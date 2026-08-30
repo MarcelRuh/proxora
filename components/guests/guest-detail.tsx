@@ -73,7 +73,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const { data, refetch, isLoading } = useQuery({
     queryKey: ["guest", kind, params.hostId, params.node, params.vmid],
     queryFn: () => api<GuestPayload>(path),
-    refetchInterval: 5_000,
+    refetchInterval: 12_000,
   });
   const { data: hosts } = useQuery({
     queryKey: ["hosts"],
@@ -86,6 +86,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const { data: backups } = useQuery({
     queryKey: ["backups", params.hostId],
     queryFn: () => api<BackupOverview>(`/api/hosts/${params.hostId}/backups`),
+    staleTime: 60_000,
   });
   const [restoreFile, setRestoreFile] = useState<BackupFile | null>(null);
 

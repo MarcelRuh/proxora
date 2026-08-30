@@ -80,7 +80,8 @@ export const GET = apiRoute("vm.view", async (_req, session, params) => {
       client.vms.config(params.node, vmid),
       client.vms.snapshots(params.node, vmid).catch(() => []),
     ]);
-    const agentDisk = await vmDiskFromAgent(client, params.node, vmid).catch(() => null);
+    const running = String(status.status ?? "") === "running";
+    const agentDisk = running ? await vmDiskFromAgent(client, params.node, vmid).catch(() => null) : null;
     if (agentDisk) {
       status.disk = agentDisk.used;
       status.maxdisk = agentDisk.total;

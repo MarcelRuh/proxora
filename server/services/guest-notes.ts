@@ -2,7 +2,7 @@ import { plainGuestNote } from "@/lib/guest-notes";
 import type { ProxmoxClient } from "@/server/proxmox/client";
 import type { GuestListItem } from "@/server/proxmox/types";
 
-const TTL_MS = 120_000;
+const TTL_MS = 10 * 60_000;
 const cache = new Map<string, { value: string; at: number }>();
 
 function cacheKey(baseUrl: string, kind: "vm" | "lxc", node: string, vmid: number) {
@@ -27,8 +27,11 @@ export async function attachGuestNotes(
   const now = Date.now();
   const toFetch: typeof jobs = [];
   for (const job of jobs) {
+    const existing = plainGuestNote(job.guest.description);
     const hit = cache.get(cacheKey(baseUrl, job.kind, job.guest.node, job.guest.vmid));
-    if (hit && now - hit.at < TTL_MS) {
+    if (existing) {
+      cache.set(cacheKey(baseUrl, job.kind, job.guest.node, job.guest.vmid), { value: existing, at: now });
+    } else if (hit && now - hit.at < TTL_MS) {
       if (hit.value) job.guest.description = hit.value;
     } else {
       toFetch.push(job);

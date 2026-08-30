@@ -44,7 +44,7 @@ export default function HostDetailPage() {
   const { data, error, refetch, isLoading } = useQuery({
     queryKey: ["host", params.id],
     queryFn: () => api<Status>(`/api/hosts/${params.id}/status`),
-    refetchInterval: 8_000,
+    refetchInterval: 20_000,
   });
   const { data: meta } = useQuery({
     queryKey: ["host-meta", params.id],

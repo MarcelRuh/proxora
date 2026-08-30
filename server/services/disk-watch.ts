@@ -2,14 +2,13 @@ import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { clientForHost } from "@/server/services/host-service";
+import { vmDiskFromAgent } from "@/server/services/guest-disk";
 import {
   applyDiskWatchState,
   diskSampleHref,
   diskUsagePercent,
   guestDiskKey,
-  guestFilesystemPercent,
   guestClusterDiskPercent,
-  parseGuestFsInfo,
   isStorageMonitored,
   storageDiskKey,
   type DiskSample,
@@ -91,25 +90,33 @@ export async function scanDiskUsage(): Promise<number> {
         }),
       );
 
-      for (const guest of guests.vms) {
-        if (guest.template || !guest.vmid || guest.status !== "running" || !guest.node) continue;
-        const fs = await client.vms.agentFsInfo(guest.node, guest.vmid).catch(() => null);
-        const percent = guestFilesystemPercent(parseGuestFsInfo(fs));
-        if (percent == null) continue;
-        const sample: DiskSample = {
-          key: guestDiskKey(host.id, "vm", guest.vmid),
-          kind: "guest",
-          guestKind: "vm",
-          name: guest.name || `VM ${guest.vmid}`,
-          percent,
-          hostId: host.id,
-          hostName: host.name,
-          node: guest.node,
-          id: String(guest.vmid),
-        };
-        sample.href = diskSampleHref(sample);
-        samples.push(sample);
-      }
+      const runningVms = guests.vms.filter((guest) => !guest.template && guest.vmid && guest.status === "running" && guest.node);
+      let i = 0;
+      await Promise.all(
+        Array.from({ length: Math.min(4, runningVms.length) }, async () => {
+          while (i < runningVms.length) {
+            const guest = runningVms[i++];
+            if (!guest?.node || !guest.vmid) break;
+            const usage = await vmDiskFromAgent(client, guest.node, guest.vmid).catch(() => null);
+            if (!usage) continue;
+            const percent = diskUsagePercent(usage.used, usage.total);
+            if (percent == null) continue;
+            const sample: DiskSample = {
+              key: guestDiskKey(host.id, "vm", guest.vmid),
+              kind: "guest",
+              guestKind: "vm",
+              name: guest.name || `VM ${guest.vmid}`,
+              percent,
+              hostId: host.id,
+              hostName: host.name,
+              node: guest.node,
+              id: String(guest.vmid),
+            };
+            sample.href = diskSampleHref(sample);
+            samples.push(sample);
+          }
+        }),
+      );
       for (const guest of guests.containers) {
         if (guest.template || !guest.vmid) continue;
         const percent = guestClusterDiskPercent(guest.disk, guest.maxdisk);

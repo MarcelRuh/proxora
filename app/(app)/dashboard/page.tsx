@@ -49,18 +49,13 @@ type Dashboard = {
 };
 
 export default function DashboardPage() {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => api<Dashboard>("/api/dashboard"),
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
   });
   const apt = useAptSummary();
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   if (isLoading) {
     return (
@@ -104,10 +99,7 @@ export default function DashboardPage() {
           <h1 className="proxora-title mt-1 text-4xl md:text-5xl">{t("dashboard.title")}</h1>
         </div>
         <div className="flex items-center gap-3 text-xs uppercase tracking-wider">
-          <span className="flex items-center gap-2 text-success">
-            <span className="proxora-pulse inline-block h-2 w-2 rounded-full bg-success" />
-            {t("common.live", { time: now.toLocaleTimeString(locale === "en" ? "en-US" : "de-DE") })}
-          </span>
+            <LiveClock />
           <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={isFetching}>
             {t("common.refresh")}
           </Button>
@@ -306,5 +298,20 @@ function Metric({ label, value, detail }: { label: string; value: number; detail
       </div>
       <ProgressBar value={value} />
     </div>
+  );
+}
+
+function LiveClock() {
+  const { t, locale } = useI18n();
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <span className="flex items-center gap-2 text-success">
+      <span className="proxora-pulse inline-block h-2 w-2 rounded-full bg-success" />
+      {t("common.live", { time: now.toLocaleTimeString(locale === "en" ? "en-US" : "de-DE") })}
+    </span>
   );
 }
