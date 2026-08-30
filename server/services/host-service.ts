@@ -7,6 +7,7 @@ import { logger } from "@/lib/logger";
 import type { SessionUser } from "@/server/auth/session-core";
 import { canAccessHost } from "@/server/auth/session-core";
 import { createProxmoxClient } from "@/server/proxmox/client";
+import { hostClientCache } from "@/server/proxmox/client-cache";
 import type { ConnectionTestResult, ProxmoxConnectionConfig } from "@/server/proxmox/types";
 import { normalizeProxmoxUsername } from "@/server/proxmox/username";
 import { notifyTopic } from "@/server/notifications/dispatch";
@@ -38,7 +39,7 @@ function normalizeUrl(url: string): string {
   return `https://${trimmed}:8006`;
 }
 
-export function toPublicHost(host: Host) {
+export function toPublicHost(host: Omit<Host, "encryptedSecret">) {
   return {
     id: host.id,
     name: host.name,
@@ -67,7 +68,10 @@ export function filterHostsForUser<T extends { id: string }>(user: SessionUser, 
 }
 
 export async function listHosts(user: SessionUser) {
-  const hosts = await prisma.host.findMany({ orderBy: { name: "asc" } });
+  const hosts = await prisma.host.findMany({
+    orderBy: { name: "asc" },
+    omit: { encryptedSecret: true },
+  });
   return filterHostsForUser(user, hosts).map(toPublicHost);
 }
 
@@ -78,7 +82,10 @@ export async function getHostOrThrow(id: string, user?: SessionUser) {
   return host;
 }
 
-export function clientConfigFromHost(host: Host, secret: string): ProxmoxConnectionConfig {
+export function clientConfigFromHost(
+  host: Pick<Host, "url" | "authType" | "username" | "tokenId" | "allowInsecureTls">,
+  secret: string,
+): ProxmoxConnectionConfig {
   return {
     url: host.url,
     authType: host.authType,
@@ -90,8 +97,10 @@ export function clientConfigFromHost(host: Host, secret: string): ProxmoxConnect
 }
 
 export async function clientForHost(host: Host) {
-  const secret = decryptSecret(host.encryptedSecret);
-  return createProxmoxClient(clientConfigFromHost(host, secret));
+  return hostClientCache.get(host, (row) => {
+    const secret = decryptSecret(row.encryptedSecret);
+    return createProxmoxClient(clientConfigFromHost(row, secret));
+  });
 }
 
 export async function testRawConnection(
@@ -105,7 +114,11 @@ export async function testRawConnection(
     secret: input.secret,
     allowInsecureTls: input.allowInsecureTls,
   });
-  return client.testConnection();
+  try {
+    return await client.testConnection();
+  } finally {
+    client.dispose();
+  }
 }
 
 async function applyTestResult(hostId: string, result: ConnectionTestResult) {
@@ -214,11 +227,13 @@ export async function updateHost(id: string, input: z.infer<typeof hostUpdateSch
   if (input.notes !== undefined) data.notes = input.notes;
   if (input.secret) data.encryptedSecret = encryptSecret(input.secret);
   const updated = await prisma.host.update({ where: { id: host.id }, data });
+  hostClientCache.invalidate(host.id);
   return updated;
 }
 
 export async function deleteHost(id: string, user: SessionUser) {
   const host = await getHostOrThrow(id, user);
+  hostClientCache.invalidate(host.id);
   await prisma.host.delete({ where: { id: host.id } });
 }
 

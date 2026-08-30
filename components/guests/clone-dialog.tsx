@@ -29,16 +29,16 @@ export function CloneDialog({
   const [busy, setBusy] = useState(false);
   const [newid, setNewid] = useState(String(vmid + 1));
   const [cloneName, setCloneName] = useState(`${name}-clone`);
-  const { data: options } = useQuery({
-    queryKey: ["options", hostId],
-    queryFn: () => api<{ nextid: number | null }>(`/api/hosts/${hostId}/options`),
+  const { data } = useQuery({
+    queryKey: ["nextid", hostId],
+    queryFn: () => api<{ nextid: number | null }>(`/api/hosts/${hostId}/nextid`),
     enabled: open,
     staleTime: 30_000,
   });
 
   useEffect(() => {
-    if (options?.nextid) setNewid(String(options.nextid));
-  }, [options?.nextid]);
+    if (data?.nextid) setNewid(String(data.nextid));
+  }, [data?.nextid]);
 
   useEffect(() => {
     setCloneName(`${name}-clone`);

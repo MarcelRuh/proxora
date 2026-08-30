@@ -41,6 +41,10 @@ export class ProxmoxClient {
     this.backup = new BackupApi(this.http);
   }
 
+  dispose() {
+    this.http.close();
+  }
+
   version() {
     return this.http.get<ProxmoxVersion>("/version");
   }

@@ -79,11 +79,7 @@ export const GuestTable = memo(function GuestTable({
         body: JSON.stringify({ action, confirm: action === "delete", ...extra }),
       });
       toast.success(action === "snapshot" ? t("guest.snapshotCreated") : t("common.taskDone"));
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ["all-vms"] }),
-        qc.invalidateQueries({ queryKey: ["all-lxc"] }),
-        qc.invalidateQueries({ queryKey: ["dashboard"] }),
-      ]);
+      await qc.invalidateQueries({ queryKey: ["dashboard"] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.failed"));
       throw err;

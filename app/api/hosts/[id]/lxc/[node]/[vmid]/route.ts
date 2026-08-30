@@ -15,7 +15,6 @@ import { withHostClient } from "@/server/services/host-service";
 import { waitGuestAction } from "@/server/proxmox/task-wait";
 import { durationLabel } from "@/lib/duration";
 import { notifyGuestTaskFailed } from "@/server/notifications/guest-task-fail";
-import { invalidateGuestNoteCache } from "@/server/services/guest-notes";
 
 export const maxDuration = 800;
 
@@ -132,7 +131,6 @@ export const POST = apiRoute("lxc.view", async (req, session, params) => {
           break;
         case "config":
           result = await client.lxc.updateConfig(node, vmid, body.config ?? {});
-          invalidateGuestNoteCache(client.http.baseUrl, "lxc", node, vmid);
           break;
         case "resize": {
           const disk = body.disk?.trim() ?? "";

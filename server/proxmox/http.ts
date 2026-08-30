@@ -65,8 +65,14 @@ export class ProxmoxHttpClient {
       connect: {
         rejectUnauthorized: !config.allowInsecureTls,
       },
-      keepAliveTimeout: 10_000,
+      keepAliveTimeout: 30_000,
+      connections: 8,
     });
+  }
+
+  close() {
+    const destroy = this.agent.destroy?.bind(this.agent);
+    if (destroy) void destroy();
   }
 
   async get<T>(path: string, query?: Query, timeoutMs?: number): Promise<T> {

@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.86] – 2026-08-30
+
+### Changed
+
+- Proxmox HTTP clients are reused per host (keep-alive + ticket cache) and closed when the host is updated or deleted.
+- Clone dialog loads only the next free VMID, not the full ISO/storage/IP options payload.
+
+### Added
+
+- App-wide error and loading pages for route failures and navigation.
+
+### Removed
+
+- Unused ISO-9660 builder and guest-note cache left over from list N+1 fetches.
+
 ## [1.0.85] – 2026-08-30
 
 ### Changed

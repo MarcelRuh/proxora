@@ -15,7 +15,6 @@ import { withHostClient } from "@/server/services/host-service";
 import { waitGuestAction } from "@/server/proxmox/task-wait";
 import { durationLabel } from "@/lib/duration";
 import { notifyGuestTaskFailed } from "@/server/notifications/guest-task-fail";
-import { invalidateGuestNoteCache } from "@/server/services/guest-notes";
 import { isQemuAgentEnabled, vmDiskFromAgent } from "@/server/services/guest-disk";
 
 export const maxDuration = 800;
@@ -171,7 +170,6 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
         break;
       case "config":
         result = await vm.updateConfig(node, vmid, body.config ?? {});
-        invalidateGuestNoteCache(client.http.baseUrl, "vm", node, vmid);
         break;
       case "resize": {
         const disk = body.disk?.trim() ?? "";
