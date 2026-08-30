@@ -130,6 +130,7 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
     const remote = new WebSocket(wsUrl, ["binary"], {
       headers,
       rejectUnauthorized: !host.allowInsecureTls,
+      perMessageDeflate: false,
     } as import("ws").ClientOptions);
 
     const closeBoth = (code?: number, reason?: string) => {

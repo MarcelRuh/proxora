@@ -36,6 +36,7 @@ This matches [pve-xtermjs](https://github.com/proxmox/pve-xtermjs).
 5. The browser receives a JSON `vnc-auth` frame with the RFB password, replies `vnc-ready`, then `@novnc/novnc` speaks RFB. The PVE `OK` line never reaches the browser. Without the RFB password, QEMU VNC auth fails and the console stays on “connecting”.
 6. VGA is only opened when the VM is running (or paused). A stopped VM shows a hint instead of a failed WebSocket.
 7. Clipboard: browser paste via `clipboardPasteFrom`; VM copy arrives as a `clipboard` event and is written to the local clipboard. Ctrl+Alt+Del is a labeled button.
+8. USB tablet is PVE default-on. The proxy only writes `tablet: 1` when it is explicitly off. Rewriting it on a running VM can reset QEMU USB HID so the picture still updates but mouse and keyboard die until reboot.
 
 LXC and node shells stay on termproxy. QEMU SPICE is not implemented.
 

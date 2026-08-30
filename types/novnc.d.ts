@@ -9,6 +9,7 @@ declare module "@novnc/novnc/lib/rfb.js" {
     resizeSession: boolean;
     clipViewport: boolean;
     viewOnly: boolean;
+    focusOnClick: boolean;
     showDotCursor: boolean;
     qualityLevel: number;
     focus(): void;

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.79] – 2026-08-30
+
+### Fixed
+
+- VGA mouse/keyboard: do not rewrite `tablet` on a running VM when PVE already defaults it on (USB HID reset left the picture alive but input dead). Stop calling `focus()`/`scaleViewport` on every ResizeObserver tick.
+
 ## [1.0.78] – 2026-08-30
 
 ### Fixed

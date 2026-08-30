@@ -281,9 +281,15 @@ select optgroup {
 .vnc-console-screen > div {
   width: 100% !important;
   height: 100% !important;
+  overflow: hidden !important;
 }
 
 .vnc-console-screen canvas {
   max-width: none !important;
   max-height: none !important;
+  pointer-events: auto !important;
+}
+
+.vnc-console-screen canvas:focus {
+  outline: none;
 }

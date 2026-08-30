@@ -19,8 +19,12 @@ export function isTermproxySerialError(text: string): boolean {
   return /unable to find a serial interface/i.test(text);
 }
 
-/** Absolute pointer (usb-tablet). Without it, noVNC mouse feels relative/wrong. */
+/**
+ * USB tablet (absolute pointer). PVE default is on (`tablet=1`).
+ * Unset therefore counts as present — do not PUT tablet on a running VM
+ * or QEMU may reset the USB HID (keyboard + mouse go dead, picture stays).
+ */
 export function vmHasTablet(tablet: unknown): boolean {
-  const raw = String(tablet ?? "").trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes";
+  const raw = String(tablet ?? "1").trim().toLowerCase();
+  return raw !== "0" && raw !== "false" && raw !== "no" && raw !== "off";
 }

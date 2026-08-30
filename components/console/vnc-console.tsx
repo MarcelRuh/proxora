@@ -15,9 +15,15 @@ type Props = {
 
 type RfbInstance = InstanceType<typeof import("@novnc/novnc/lib/rfb.js").default>;
 
-function refreshRfbLayout(rfb: RfbInstance | null) {
+function applyScale(rfb: RfbInstance | null) {
   if (!rfb) return;
   rfb.scaleViewport = true;
+}
+
+function focusRfb(container: HTMLElement | null, rfb: RfbInstance | null) {
+  if (!rfb) return;
+  const canvas = container?.querySelector("canvas");
+  if (canvas instanceof HTMLCanvasElement) canvas.tabIndex = 0;
   rfb.focus();
 }
 
@@ -29,12 +35,14 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
   const [status, setStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
   const [detail, setDetail] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
+  const [grabbed, setGrabbed] = useState(false);
 
   useEffect(() => {
     if (!running) {
       rfbRef.current = null;
       setStatus("disconnected");
       setDetail(null);
+      setGrabbed(false);
       return;
     }
     const target = containerRef.current;
@@ -44,6 +52,7 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
     let attached = false;
     setStatus("connecting");
     setDetail(null);
+    setGrabbed(false);
 
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     const wsBase = process.env.NEXT_PUBLIC_WS_URL || `${proto}://${window.location.host}`;
@@ -55,9 +64,14 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
     });
     const url = `${wsBase}/ws/vnc?${params.toString()}`;
 
-    const syncLayout = () => {
+    const onLayout = () => {
       if (cancelled) return;
-      refreshRfbLayout(rfbRef.current);
+      applyScale(rfbRef.current);
+    };
+
+    const onPointerDown = () => {
+      focusRfb(target, rfbRef.current);
+      setGrabbed(true);
     };
 
     void import("@novnc/novnc/lib/rfb.js").then(({ default: RFB }) => {
@@ -70,6 +84,7 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
         if (cancelled) return;
         setStatus("error");
         setDetail(message);
+        setGrabbed(false);
       };
 
       ws.addEventListener("close", (event) => {
@@ -100,17 +115,23 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
         rfb.scaleViewport = true;
         rfb.clipViewport = false;
         rfb.resizeSession = false;
+        rfb.viewOnly = false;
         rfb.showDotCursor = true;
-        rfb.qualityLevel = 7;
+        rfb.qualityLevel = 6;
         rfb.addEventListener("connect", () => {
           attached = true;
           setStatus("connected");
           requestAnimationFrame(() => {
-            requestAnimationFrame(syncLayout);
+            applyScale(rfb);
+            focusRfb(containerRef.current, rfb);
+            setGrabbed(true);
           });
         });
         rfb.addEventListener("disconnect", () => {
-          if (!cancelled) setStatus("disconnected");
+          if (!cancelled) {
+            setStatus("disconnected");
+            setGrabbed(false);
+          }
         });
         rfb.addEventListener("securityfailure", () => fail(t("guest.consoleError")));
         rfb.addEventListener("credentialsrequired", () => {
@@ -130,16 +151,15 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
       ws.addEventListener("message", onAuth);
     });
 
-    const ro = new ResizeObserver(() => syncLayout());
-    ro.observe(target);
-    document.addEventListener("fullscreenchange", syncLayout);
-    window.addEventListener("resize", syncLayout);
+    target.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("fullscreenchange", onLayout);
+    window.addEventListener("resize", onLayout);
 
     return () => {
       cancelled = true;
-      ro.disconnect();
-      document.removeEventListener("fullscreenchange", syncLayout);
-      window.removeEventListener("resize", syncLayout);
+      target.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("fullscreenchange", onLayout);
+      window.removeEventListener("resize", onLayout);
       try {
         rfbRef.current?.disconnect();
       } catch {
@@ -178,7 +198,7 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
     } catch {
       /* browser blocked fullscreen */
     }
-    window.setTimeout(() => refreshRfbLayout(rfbRef.current), 80);
+    window.setTimeout(() => applyScale(rfbRef.current), 80);
   }
 
   const statusLabel =
@@ -208,6 +228,11 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
           ● {running ? statusLabel : t("guest.consoleVmStopped")}
         </span>
         <span className="text-slate-500">VGA {vmid} @ {node}</span>
+        {status === "connected" ? (
+          <span className={grabbed ? "text-slate-400" : "text-amber-300"}>
+            {grabbed ? t("guest.consoleInputGrabbed") : t("guest.consoleClickToGrab")}
+          </span>
+        ) : null}
         {detail && status === "error" ? <span className="text-red-400">{detail}</span> : null}
         <div className="ml-auto flex flex-wrap items-center gap-1">
           <Button
@@ -236,11 +261,7 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
         </div>
       </div>
       {running ? (
-        <div
-          ref={containerRef}
-          className="vnc-console-screen min-h-0 flex-1 touch-none select-none"
-          onMouseDown={() => rfbRef.current?.focus()}
-        />
+        <div ref={containerRef} className="vnc-console-screen min-h-0 flex-1 touch-none select-none" />
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-sm text-slate-400">
           {t("guest.consoleVmStoppedHint")}

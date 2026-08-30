@@ -21,9 +21,11 @@ describe("guest console helpers", () => {
     expect(isTermproxySerialError("OK")).toBe(false);
   });
 
-  it("detects an enabled USB tablet", () => {
-    expect(vmHasTablet(undefined)).toBe(false);
+  it("treats PVE default tablet as on and only 0 as off", () => {
+    expect(vmHasTablet(undefined)).toBe(true);
     expect(vmHasTablet(1)).toBe(true);
     expect(vmHasTablet("1")).toBe(true);
+    expect(vmHasTablet(0)).toBe(false);
+    expect(vmHasTablet("0")).toBe(false);
   });
 });

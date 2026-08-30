@@ -12,7 +12,7 @@ const server = createServer((_req, res) => {
   res.end("proxora console proxy");
 });
 
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
 attachConsoleProxy(wss);
 
 server.on("upgrade", (req, socket, head) => {
