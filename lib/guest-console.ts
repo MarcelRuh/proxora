@@ -18,3 +18,9 @@ export function vmHasSerialSocket(serial0: unknown): boolean {
 export function isTermproxySerialError(text: string): boolean {
   return /unable to find a serial interface/i.test(text);
 }
+
+/** Absolute pointer (usb-tablet). Without it, noVNC mouse feels relative/wrong. */
+export function vmHasTablet(tablet: unknown): boolean {
+  const raw = String(tablet ?? "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}

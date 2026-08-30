@@ -25,6 +25,7 @@ export interface VmCreateParams {
   onboot?: number;
   agent?: string;
   serial0?: string;
+  tablet?: number;
   [key: string]: unknown;
 }
 

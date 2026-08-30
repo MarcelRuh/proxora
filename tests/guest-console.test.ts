@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isTermproxySerialError, vmHasGraphics, vmHasSerialSocket } from "@/lib/guest-console";
+import { isTermproxySerialError, vmHasGraphics, vmHasSerialSocket, vmHasTablet } from "@/lib/guest-console";
 
 describe("guest console helpers", () => {
   it("treats unset VGA as a display and vga=none as headless", () => {
@@ -19,5 +19,11 @@ describe("guest console helpers", () => {
   it("detects the PVE serial error", () => {
     expect(isTermproxySerialError("unable to find a serial interface")).toBe(true);
     expect(isTermproxySerialError("OK")).toBe(false);
+  });
+
+  it("detects an enabled USB tablet", () => {
+    expect(vmHasTablet(undefined)).toBe(false);
+    expect(vmHasTablet(1)).toBe(true);
+    expect(vmHasTablet("1")).toBe(true);
   });
 });

@@ -262,3 +262,9 @@ select optgroup {
   background: linear-gradient(var(--proxora-pink), var(--proxora-purple));
   border-radius: 8px;
 }
+
+/* noVNC scales via inline width/height. Tailwind/preflight must not stretch the canvas. */
+.vnc-console-screen canvas {
+  max-width: none !important;
+  max-height: none !important;
+}

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.77] – 2026-08-30
+
+### Fixed
+
+- VGA console mouse/keyboard: do not stretch the noVNC canvas (that broke click mapping), show a local cursor when QEMU sends none, and enable USB tablet so the pointer is absolute.
+
 ## [1.0.76] – 2026-08-30
 
 ### Fixed

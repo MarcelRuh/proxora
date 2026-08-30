@@ -10,7 +10,7 @@ import { writeAuditLog } from "@/server/services/audit-service";
 import { clientForHost } from "@/server/services/host-service";
 import { consumeProxmoxVncHandshake, wsPayloadToBuffer } from "@/lib/vnc-handshake";
 import { rfbPasswordFromVncProxy } from "@/lib/vnc-password";
-import { isTermproxySerialError, vmHasGraphics, vmHasSerialSocket } from "@/lib/guest-console";
+import { isTermproxySerialError, vmHasGraphics, vmHasSerialSocket, vmHasTablet } from "@/lib/guest-console";
 
 function cookieValue(req: IncomingMessage, name: string): string | undefined {
   const header = req.headers.cookie;
@@ -96,6 +96,9 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
         }
         if (display === "serial") {
           await ensureVmSerialSocket(proxmox, node, Number(vmid), cfg.serial0);
+        }
+        if (display === "vga") {
+          await ensureVmTablet(proxmox, node, Number(vmid), cfg.tablet);
         }
       } catch (error) {
         logger.warn({ err: error instanceof Error ? error.message : error }, "VM console config check failed");
@@ -189,6 +192,16 @@ async function ensureVmSerialSocket(
 ) {
   if (vmHasSerialSocket(serial0)) return;
   await proxmox.vms.updateConfig(node, vmid, { serial0: "socket" });
+}
+
+async function ensureVmTablet(
+  proxmox: Awaited<ReturnType<typeof clientForHost>>,
+  node: string,
+  vmid: number,
+  tablet: unknown,
+) {
+  if (vmHasTablet(tablet)) return;
+  await proxmox.vms.updateConfig(node, vmid, { tablet: 1 });
 }
 
 function pipeTerm(

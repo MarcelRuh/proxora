@@ -7,7 +7,10 @@ declare module "@novnc/novnc/lib/rfb.js" {
     );
     scaleViewport: boolean;
     resizeSession: boolean;
+    clipViewport: boolean;
     viewOnly: boolean;
+    showDotCursor: boolean;
+    qualityLevel: number;
     focus(): void;
     blur(): void;
     disconnect(): void;

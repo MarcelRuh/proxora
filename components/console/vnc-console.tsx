@@ -86,10 +86,14 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
           credentials: password ? { password } : undefined,
         });
         rfb.scaleViewport = true;
+        rfb.clipViewport = false;
         rfb.resizeSession = false;
+        rfb.showDotCursor = true;
+        rfb.qualityLevel = 7;
         rfb.addEventListener("connect", () => {
           attached = true;
           setStatus("connected");
+          rfb.focus();
         });
         rfb.addEventListener("disconnect", () => {
           if (!cancelled) setStatus("disconnected");
@@ -104,7 +108,6 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
           void navigator.clipboard.writeText(text).catch(() => undefined);
         });
         rfbRef.current = rfb;
-        attached = true;
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: "vnc-ready" }));
         }
@@ -200,7 +203,11 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
         </div>
       </div>
       {running ? (
-        <div ref={containerRef} className="min-h-0 flex-1 overflow-hidden [&_canvas]:h-full [&_canvas]:w-full" />
+        <div
+          ref={containerRef}
+          className="vnc-console-screen min-h-[480px] flex-1 overflow-hidden touch-none select-none"
+          onMouseEnter={() => rfbRef.current?.focus()}
+        />
       ) : (
         <div className="flex min-h-[420px] flex-1 items-center justify-center px-6 text-center text-sm text-slate-400">
           {t("guest.consoleVmStoppedHint")}
