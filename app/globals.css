@@ -4,7 +4,9 @@
 @custom-variant dark (&:is(.dark *));
 
 :root,
-.dark {
+.dark,
+[data-ui="standard"] {
+  color-scheme: dark;
   --background: #0a0a0f;
   --foreground: #ffffff;
   --card: #0d0d15;
@@ -62,6 +64,7 @@
   --ui-shell-gap: 0px;
   --ui-sidebar-radius: 0;
   --ui-main-radius: 0;
+  --font-sans: var(--font-inter);
   --font-display: var(--font-orbitron);
 }
 
@@ -88,7 +91,7 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
-  --font-sans: var(--font-sans);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-mono);
   --font-display: var(--font-orbitron);
   --radius-lg: 0.5rem;
@@ -474,7 +477,6 @@ select optgroup {
   box-shadow: var(--ui-nav-active-shadow);
 }
 
-[data-ui="brutal"] .ui-preview-nav-on,
 .ui-preview[data-ui="brutal"] .ui-preview-nav-on {
   background: var(--primary);
 }
@@ -719,6 +721,7 @@ select optgroup {
   --ui-nav-tracking: 0.01em;
   --ui-nav-transform: none;
   --font-display: var(--font-serif);
+  --font-sans: var(--font-inter);
 }
 
 [data-ui="atelier"] .ui-atmosphere-orbs {
@@ -803,6 +806,7 @@ select optgroup {
   --ui-nav-active-text-shadow: none;
   --ui-nav-radius: 0;
   --ui-nav-tracking: 0.08em;
+  --font-sans: var(--font-inter);
 }
 
 [data-ui="brutal"] .ui-atmosphere-orbs {
@@ -898,7 +902,8 @@ select optgroup {
   --ui-shell-gap: 0.75rem;
   --ui-sidebar-radius: 1.25rem;
   --ui-main-radius: 1.25rem;
-  --font-display: var(--font-sans);
+  --font-display: var(--font-inter);
+  --font-sans: var(--font-inter);
 }
 
 [data-ui="harbor"] .ui-atmosphere-orbs {
@@ -954,6 +959,12 @@ html[data-ui="operator"] {
   --font-display: var(--font-mono);
 }
 
+html[data-ui="standard"] {
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-orbitron);
+  color-scheme: dark;
+}
+
 html[data-ui="atelier"],
 html[data-ui="atelier"] body {
   color-scheme: light;
@@ -962,7 +973,7 @@ html[data-ui="atelier"] body {
 
 html[data-ui="brutal"],
 html[data-ui="harbor"] {
-  --font-display: var(--font-sans);
+  --font-display: var(--font-inter);
 }
 
 .ui-preview[data-ui] {

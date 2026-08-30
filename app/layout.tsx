@@ -5,7 +5,7 @@ import { UI_THEME_BOOTSTRAP } from "@/lib/ui-theme";
 import "./globals.css";
 
 const inter = Inter({
-  variable: "--font-sans",
+  variable: "--font-inter",
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700"],
 });
