@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { api, ApiRequestError } from "@/lib/api";
-import { NeonAtmosphere } from "@/components/layout/neon-atmosphere";
+import { UiAtmosphere } from "@/components/layout/ui-atmosphere";
 import { BrandMark } from "@/components/layout/brand-mark";
 import { APP_NAME } from "@/lib/version";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { UiThemeSelect } from "@/components/theme/ui-theme-select";
 
 export function LoginForm({ next }: { next: string }) {
   const { t, locale, setLocale } = useI18n();
@@ -56,10 +57,10 @@ export function LoginForm({ next }: { next: string }) {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center p-4">
-      <NeonAtmosphere />
+      <UiAtmosphere />
       <Card className="relative z-10 w-full max-w-md">
         <CardHeader>
-          <BrandMark className="mb-3 h-12 w-12 drop-shadow-[0_0_16px_rgba(255,0,110,0.35)]" />
+          <BrandMark className="mb-3 h-12 w-12" />
           <CardTitle className="proxora-logo text-2xl">{APP_NAME.toUpperCase()}</CardTitle>
           <CardDescription>{ticket ? t("login.totpSubtitle") : t("login.subtitle")}</CardDescription>
         </CardHeader>
@@ -112,14 +113,17 @@ export function LoginForm({ next }: { next: string }) {
                 {t("login.back")}
               </button>
             ) : null}
-            <div className="flex justify-center gap-2 text-xs font-semibold uppercase tracking-wider">
-              <button type="button" className={locale === "de" ? "text-primary" : "text-muted-foreground"} onClick={() => setLocale("de")}>
-                DE
-              </button>
-              <span className="text-muted-foreground">/</span>
-              <button type="button" className={locale === "en" ? "text-primary" : "text-muted-foreground"} onClick={() => setLocale("en")}>
-                EN
-              </button>
+            <div className="grid gap-2">
+              <UiThemeSelect />
+              <div className="flex justify-center gap-2 text-xs font-semibold uppercase tracking-wider">
+                <button type="button" className={locale === "de" ? "text-primary" : "text-muted-foreground"} onClick={() => setLocale("de")}>
+                  DE
+                </button>
+                <span className="text-muted-foreground">/</span>
+                <button type="button" className={locale === "en" ? "text-primary" : "text-muted-foreground"} onClick={() => setLocale("en")}>
+                  EN
+                </button>
+              </div>
             </div>
           </form>
         </CardContent>

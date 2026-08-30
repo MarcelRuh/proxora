@@ -31,6 +31,38 @@
   --proxora-blue: #00b4d8;
   --proxora-purple: #8338ec;
   --proxora-pink: #ff006e;
+  --ui-radius: 4px;
+  --ui-radius-panel: 4px;
+  --ui-sidebar-width: 16rem;
+  --ui-chrome-border: rgba(131, 56, 236, 0.2);
+  --ui-btn-glow: 0 0 18px rgba(255, 0, 110, 0.35);
+  --ui-focus-glow: 0 0 24px rgba(255, 0, 110, 0.22);
+  --ui-panel-hover-border: rgba(131, 56, 236, 0.35);
+  --ui-panel-hover-shadow: 0 12px 40px rgba(0, 0, 0, 0.35), 0 0 24px rgba(131, 56, 236, 0.08);
+  --ui-dialog-shadow: 0 0 40px rgba(131, 56, 236, 0.2);
+  --ui-fill-glow: 0 0 12px rgba(255, 0, 110, 0.45);
+  --ui-logo-glow: drop-shadow(0 0 18px rgba(131, 56, 236, 0.45));
+  --ui-stat-glow: drop-shadow(0 0 16px rgba(255, 0, 110, 0.3));
+  --ui-nav-hover-shadow: 0 0 16px rgba(255, 0, 110, 0.15);
+  --ui-kicker-tracking: 0.28em;
+  --ui-kicker-transform: uppercase;
+  --ui-title-fill: linear-gradient(135deg, #fff, #aaa);
+  --ui-logo-fill: linear-gradient(135deg, var(--proxora-pink), var(--proxora-purple), var(--proxora-blue));
+  --ui-fill: linear-gradient(90deg, var(--proxora-pink), var(--proxora-purple));
+  --ui-panel-blur: blur(12px);
+  --ui-panel-accent-opacity: 0;
+  --ui-panel-accent-hover: 1;
+  --ui-nav-active-bg: rgba(255, 0, 110, 0.1);
+  --ui-nav-active-shadow: inset 3px 0 0 var(--proxora-pink), 0 0 18px rgba(255, 0, 110, 0.15);
+  --ui-nav-active-text-shadow: 0 0 16px rgba(255, 0, 110, 0.45);
+  --ui-nav-radius: 0;
+  --ui-nav-tracking: 0.05em;
+  --ui-nav-transform: uppercase;
+  --ui-shell-pad: 0px;
+  --ui-shell-gap: 0px;
+  --ui-sidebar-radius: 0;
+  --ui-main-radius: 0;
+  --font-display: var(--font-orbitron);
 }
 
 @theme inline {
@@ -58,7 +90,7 @@
   --color-danger: var(--danger);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
-  --font-display: var(--font-display);
+  --font-display: var(--font-orbitron);
   --radius-lg: 0.5rem;
   --radius-md: 0.35rem;
   --radius-sm: var(--radius);
@@ -83,7 +115,7 @@ body {
 
 select {
   color: var(--foreground);
-  background-color: #0d0d15;
+  background-color: var(--card);
 }
 
 select option,
@@ -105,8 +137,8 @@ select optgroup {
   background: var(--background);
 }
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(var(--proxora-pink), var(--proxora-purple));
-  border-radius: 4px;
+  background: var(--ui-fill);
+  border-radius: var(--ui-radius);
 }
 
 @keyframes proxora-orb-float {
@@ -149,20 +181,19 @@ select optgroup {
 .proxora-panel {
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--card) 94%, transparent);
-  border-radius: 4px;
-  backdrop-filter: blur(12px);
+  border-radius: var(--ui-radius-panel);
+  backdrop-filter: var(--ui-panel-blur);
   position: relative;
   overflow: hidden;
   transition:
     border-color 0.35s ease,
-    box-shadow 0.35s ease;
+    box-shadow 0.35s ease,
+    transform 0.2s ease;
 }
 
 .proxora-panel:hover {
-  border-color: rgba(131, 56, 236, 0.35);
-  box-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.35),
-    0 0 24px rgba(131, 56, 236, 0.08);
+  border-color: var(--ui-panel-hover-border);
+  box-shadow: var(--ui-panel-hover-shadow);
 }
 
 .proxora-panel::before {
@@ -173,30 +204,30 @@ select optgroup {
   width: 100%;
   height: 2px;
   background: linear-gradient(90deg, transparent, var(--proxora-pink), var(--proxora-purple), transparent);
-  opacity: 0;
+  opacity: var(--ui-panel-accent-opacity);
   pointer-events: none;
   transition: opacity 0.35s ease;
 }
 
 .proxora-panel:hover::before {
-  opacity: 1;
+  opacity: var(--ui-panel-accent-hover);
 }
 
 .proxora-logo {
   font-family: var(--font-display), sans-serif;
   font-weight: 900;
   letter-spacing: 0.08em;
-  background: linear-gradient(135deg, var(--proxora-pink), var(--proxora-purple), var(--proxora-blue));
+  background: var(--ui-logo-fill);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 18px rgba(131, 56, 236, 0.45));
+  filter: var(--ui-logo-glow);
 }
 
 .proxora-title {
   font-family: var(--font-display), sans-serif;
   font-weight: 900;
-  background: linear-gradient(135deg, #fff, #aaa);
+  background: var(--ui-title-fill);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -209,25 +240,24 @@ select optgroup {
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 16px rgba(255, 0, 110, 0.3));
+  filter: var(--ui-stat-glow);
 }
 
 .proxora-section {
   font-family: var(--font-display), sans-serif;
   font-size: 0.7rem;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
+  letter-spacing: var(--ui-kicker-tracking);
+  text-transform: var(--ui-kicker-transform);
   color: var(--proxora-blue);
   text-shadow: 0 0 18px rgba(0, 180, 216, 0.45);
 }
 
 .proxora-nav-active {
-  color: #ffffff !important;
-  background: rgba(255, 0, 110, 0.1);
-  box-shadow:
-    inset 3px 0 0 var(--proxora-pink),
-    0 0 18px rgba(255, 0, 110, 0.15);
-  text-shadow: 0 0 16px rgba(255, 0, 110, 0.45);
+  color: var(--foreground) !important;
+  background: var(--ui-nav-active-bg);
+  border-radius: var(--ui-nav-radius);
+  box-shadow: var(--ui-nav-active-shadow);
+  text-shadow: var(--ui-nav-active-text-shadow);
 }
 
 .proxora-pulse {
@@ -245,9 +275,14 @@ select optgroup {
 .proxora-gauge > span {
   display: block;
   height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--proxora-pink), var(--proxora-purple));
-  box-shadow: 0 0 12px rgba(255, 0, 110, 0.45);
+  border-radius: inherit;
+  background: var(--ui-fill);
+  box-shadow: var(--ui-fill-glow);
+}
+
+.proxora-fill {
+  background: var(--ui-fill);
+  box-shadow: var(--ui-fill-glow);
 }
 
 .xterm {
@@ -259,8 +294,8 @@ select optgroup {
   width: 8px;
 }
 .xterm-viewport::-webkit-scrollbar-thumb {
-  background: linear-gradient(var(--proxora-pink), var(--proxora-purple));
-  border-radius: 8px;
+  background: var(--ui-fill);
+  border-radius: var(--ui-radius);
 }
 
 /* noVNC _screen uses height:100%. The shell must have a definite height. */
@@ -293,3 +328,449 @@ select optgroup {
 .vnc-console-screen canvas:focus {
   outline: none;
 }
+
+.app-shell {
+  padding: var(--ui-shell-pad);
+  gap: var(--ui-shell-gap);
+}
+
+.app-sidebar {
+  width: var(--ui-sidebar-width);
+  border-color: var(--ui-chrome-border);
+  border-radius: var(--ui-sidebar-radius);
+}
+
+.app-sidebar-footer {
+  border-color: var(--ui-chrome-border);
+}
+
+.app-main {
+  border-radius: var(--ui-main-radius);
+}
+
+.app-nav-link {
+  letter-spacing: var(--ui-nav-tracking);
+  text-transform: var(--ui-nav-transform);
+  border-radius: var(--ui-nav-radius);
+}
+
+.app-nav-link:hover {
+  box-shadow: var(--ui-nav-hover-shadow);
+}
+
+.ui-atmosphere-scan,
+.ui-atmosphere-grid,
+.ui-atmosphere-grain {
+  display: none;
+  position: absolute;
+  inset: 0;
+}
+
+.ui-atmosphere-scan {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0 2px,
+    rgba(0, 0, 0, 0.18) 2px 3px
+  );
+  opacity: 0.35;
+}
+
+.ui-atmosphere-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.ui-atmosphere-grain {
+  opacity: 0.06;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+}
+
+.ui-theme-card {
+  border: 1px solid var(--border);
+  border-radius: var(--ui-radius);
+  padding: 0.75rem;
+  background: color-mix(in srgb, var(--card) 70%, transparent);
+}
+
+.ui-theme-card:hover {
+  border-color: var(--ui-panel-hover-border);
+}
+
+.ui-theme-card-active {
+  border-color: var(--primary);
+  box-shadow: var(--ui-btn-glow);
+}
+
+.ui-swatch {
+  display: flex;
+  height: 4.5rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--background);
+}
+
+.ui-swatch-side {
+  width: 28%;
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+}
+
+.ui-swatch-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+}
+
+.ui-swatch-title,
+.ui-swatch-row {
+  display: block;
+  height: 6px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--foreground) 28%, transparent);
+}
+
+.ui-swatch-row {
+  height: 4px;
+  background: color-mix(in srgb, var(--foreground) 14%, transparent);
+}
+
+.ui-swatch-row-short {
+  width: 55%;
+}
+
+.ui-swatch[data-preview="standard"] {
+  border-radius: 4px;
+}
+.ui-swatch[data-preview="standard"] .ui-swatch-title {
+  background: linear-gradient(90deg, var(--proxora-pink), var(--proxora-purple));
+}
+
+.ui-swatch[data-preview="operator"] {
+  border-radius: 0;
+}
+.ui-swatch[data-preview="operator"] .ui-swatch-side {
+  width: 22%;
+}
+.ui-swatch[data-preview="operator"] .ui-swatch-title,
+.ui-swatch[data-preview="operator"] .ui-swatch-row {
+  border-radius: 0;
+}
+
+.ui-swatch[data-preview="atelier"] {
+  border-radius: 14px;
+}
+.ui-swatch[data-preview="atelier"] .ui-swatch-side {
+  width: 32%;
+}
+.ui-swatch[data-preview="atelier"] .ui-swatch-title,
+.ui-swatch[data-preview="atelier"] .ui-swatch-row {
+  border-radius: 999px;
+}
+
+.ui-swatch[data-preview="brutal"] {
+  border-radius: 0;
+  border-width: 2px;
+  box-shadow: 3px 3px 0 var(--primary);
+}
+.ui-swatch[data-preview="brutal"] .ui-swatch-title,
+.ui-swatch[data-preview="brutal"] .ui-swatch-row {
+  border-radius: 0;
+}
+
+.ui-swatch[data-preview="harbor"] {
+  border-radius: 16px;
+}
+.ui-swatch[data-preview="harbor"] .ui-swatch-side {
+  border-right: 0;
+  margin: 6px 0 6px 6px;
+  border-radius: 12px;
+}
+.ui-swatch[data-preview="harbor"] .ui-swatch-title,
+.ui-swatch[data-preview="harbor"] .ui-swatch-row {
+  border-radius: 999px;
+}
+
+[data-ui="operator"] {
+  --ui-radius: 0px;
+  --ui-radius-panel: 0px;
+  --ui-sidebar-width: 13.5rem;
+  --ui-chrome-border: rgba(255, 255, 255, 0.12);
+  --ui-btn-glow: none;
+  --ui-focus-glow: none;
+  --ui-panel-hover-border: rgba(255, 255, 255, 0.28);
+  --ui-panel-hover-shadow: none;
+  --ui-dialog-shadow: none;
+  --ui-fill-glow: none;
+  --ui-logo-glow: none;
+  --ui-stat-glow: none;
+  --ui-nav-hover-shadow: none;
+  --ui-kicker-tracking: 0.12em;
+  --ui-title-fill: var(--foreground);
+  --ui-logo-fill: var(--foreground);
+  --ui-fill: var(--primary);
+  --ui-panel-blur: none;
+  --ui-panel-accent-hover: 0;
+  --ui-nav-active-bg: transparent;
+  --ui-nav-active-shadow: inset 2px 0 0 var(--primary);
+  --ui-nav-active-text-shadow: none;
+  --ui-nav-radius: 0;
+  --ui-nav-tracking: 0;
+  --ui-nav-transform: none;
+  --font-display: var(--font-mono);
+  --font-sans: var(--font-mono);
+}
+
+[data-ui="operator"] .ui-atmosphere-orbs {
+  display: none;
+}
+
+[data-ui="operator"] .ui-atmosphere-scan {
+  display: block;
+}
+
+[data-ui="operator"] .proxora-section {
+  text-shadow: none;
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+[data-ui="operator"] .proxora-logo,
+[data-ui="operator"] .proxora-title,
+[data-ui="operator"] .proxora-stat {
+  background: none;
+  -webkit-text-fill-color: var(--foreground);
+  letter-spacing: 0;
+  font-weight: 700;
+}
+
+[data-ui="operator"] .proxora-gauge,
+[data-ui="operator"] .rounded-full {
+  border-radius: 0;
+}
+
+[data-ui="operator"] body {
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+
+[data-ui="atelier"] {
+  --ui-radius: 14px;
+  --ui-radius-panel: 16px;
+  --ui-sidebar-width: 17.5rem;
+  --ui-chrome-border: rgba(255, 255, 255, 0.08);
+  --ui-btn-glow: none;
+  --ui-focus-glow: 0 0 0 3px color-mix(in srgb, var(--primary) 25%, transparent);
+  --ui-panel-hover-border: rgba(255, 255, 255, 0.14);
+  --ui-panel-hover-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+  --ui-dialog-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  --ui-fill-glow: none;
+  --ui-logo-glow: none;
+  --ui-stat-glow: none;
+  --ui-nav-hover-shadow: none;
+  --ui-kicker-tracking: 0.08em;
+  --ui-kicker-transform: none;
+  --ui-title-fill: var(--foreground);
+  --ui-logo-fill: var(--foreground);
+  --ui-fill: var(--primary);
+  --ui-panel-blur: blur(8px);
+  --ui-panel-accent-hover: 0;
+  --ui-nav-active-bg: color-mix(in srgb, var(--foreground) 8%, transparent);
+  --ui-nav-active-shadow: none;
+  --ui-nav-active-text-shadow: none;
+  --ui-nav-radius: 12px;
+  --ui-nav-tracking: 0.01em;
+  --ui-nav-transform: none;
+  --font-display: var(--font-serif);
+}
+
+[data-ui="atelier"] .ui-atmosphere-orbs {
+  opacity: 0.18;
+}
+
+[data-ui="atelier"] .ui-atmosphere-grain {
+  display: block;
+}
+
+[data-ui="atelier"] .proxora-section {
+  text-shadow: none;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+}
+
+[data-ui="atelier"] .proxora-logo,
+[data-ui="atelier"] .proxora-title,
+[data-ui="atelier"] .proxora-stat {
+  background: none;
+  -webkit-text-fill-color: var(--foreground);
+  letter-spacing: -0.02em;
+  font-weight: 650;
+  filter: none;
+}
+
+[data-ui="atelier"] .proxora-title {
+  font-weight: 600;
+}
+
+[data-ui="atelier"] main {
+  padding-top: 1.75rem;
+}
+
+[data-ui="brutal"] {
+  --ui-radius: 0px;
+  --ui-radius-panel: 0px;
+  --ui-sidebar-width: 15rem;
+  --ui-chrome-border: var(--foreground);
+  --ui-btn-glow: none;
+  --ui-focus-glow: none;
+  --ui-panel-hover-border: var(--foreground);
+  --ui-panel-hover-shadow: 6px 6px 0 var(--primary);
+  --ui-dialog-shadow: 8px 8px 0 var(--primary);
+  --ui-fill-glow: none;
+  --ui-logo-glow: none;
+  --ui-stat-glow: none;
+  --ui-nav-hover-shadow: none;
+  --ui-kicker-tracking: 0.22em;
+  --ui-title-fill: var(--foreground);
+  --ui-logo-fill: var(--foreground);
+  --ui-fill: var(--primary);
+  --ui-panel-blur: none;
+  --ui-panel-accent-hover: 0;
+  --ui-nav-active-bg: var(--primary);
+  --ui-nav-active-shadow: none;
+  --ui-nav-active-text-shadow: none;
+  --ui-nav-radius: 0;
+  --ui-nav-tracking: 0.08em;
+  --border: var(--foreground);
+  --input: var(--foreground);
+}
+
+[data-ui="brutal"] .ui-atmosphere-orbs {
+  display: none;
+}
+
+[data-ui="brutal"] .ui-atmosphere-grid {
+  display: block;
+}
+
+[data-ui="brutal"] .proxora-section {
+  text-shadow: none;
+}
+
+[data-ui="brutal"] .proxora-logo,
+[data-ui="brutal"] .proxora-title,
+[data-ui="brutal"] .proxora-stat {
+  background: none;
+  -webkit-text-fill-color: var(--foreground);
+  letter-spacing: 0.04em;
+  font-weight: 900;
+  filter: none;
+}
+
+[data-ui="brutal"] .proxora-panel:hover {
+  transform: translate(-2px, -2px);
+}
+
+[data-ui="brutal"] .proxora-nav-active {
+  color: var(--primary-foreground) !important;
+}
+
+[data-ui="brutal"] .rounded-full {
+  border-radius: 0;
+}
+
+[data-ui="harbor"] {
+  --ui-radius: 16px;
+  --ui-radius-panel: 18px;
+  --ui-sidebar-width: 16rem;
+  --ui-chrome-border: rgba(255, 255, 255, 0.08);
+  --ui-btn-glow: none;
+  --ui-focus-glow: 0 0 0 4px color-mix(in srgb, var(--primary) 22%, transparent);
+  --ui-panel-hover-border: rgba(255, 255, 255, 0.12);
+  --ui-panel-hover-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
+  --ui-dialog-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+  --ui-fill-glow: none;
+  --ui-logo-glow: none;
+  --ui-stat-glow: none;
+  --ui-nav-hover-shadow: none;
+  --ui-kicker-tracking: 0.16em;
+  --ui-title-fill: var(--foreground);
+  --ui-logo-fill: var(--foreground);
+  --ui-fill: var(--primary);
+  --ui-panel-blur: blur(18px);
+  --ui-panel-accent-hover: 0;
+  --ui-nav-active-bg: color-mix(in srgb, var(--primary) 16%, transparent);
+  --ui-nav-active-shadow: none;
+  --ui-nav-active-text-shadow: none;
+  --ui-nav-radius: 999px;
+  --ui-nav-tracking: 0.04em;
+  --ui-nav-transform: none;
+  --ui-shell-pad: 0.75rem;
+  --ui-shell-gap: 0.75rem;
+  --ui-sidebar-radius: 1.25rem;
+  --ui-main-radius: 1.25rem;
+  --font-display: var(--font-sans);
+}
+
+[data-ui="harbor"] .ui-atmosphere-orbs {
+  opacity: 0.22;
+}
+
+[data-ui="harbor"] .ui-atmosphere-orbs .proxora-orb {
+  animation: none;
+}
+
+[data-ui="harbor"] .proxora-section {
+  text-shadow: none;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+[data-ui="harbor"] .proxora-logo,
+[data-ui="harbor"] .proxora-title,
+[data-ui="harbor"] .proxora-stat {
+  background: none;
+  -webkit-text-fill-color: var(--foreground);
+  letter-spacing: -0.03em;
+  font-weight: 700;
+  filter: none;
+}
+
+[data-ui="harbor"] .app-sidebar {
+  border: 1px solid var(--border);
+}
+
+[data-ui="harbor"] .app-main {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 55%, transparent);
+  overflow: hidden;
+}
+
+@media (max-width: 1023px) {
+  [data-ui="harbor"] {
+    --ui-shell-pad: 0px;
+    --ui-shell-gap: 0px;
+    --ui-sidebar-radius: 0;
+    --ui-main-radius: 0;
+  }
+}
+
+[data-ui]:not([data-ui="standard"]) [class*="rounded-[4px]"] {
+  border-radius: var(--ui-radius);
+}
+
+html[data-ui="operator"] {
+  --font-sans: var(--font-mono);
+  --font-display: var(--font-mono);
+}
+
+html[data-ui="atelier"] {
+  --font-display: var(--font-serif);
+}
+
+html[data-ui="brutal"],
+html[data-ui="harbor"] {
+  --font-display: var(--font-sans);
+}
+

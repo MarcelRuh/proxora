@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 import { useState } from "react";
 import { AppToaster } from "@/components/ui/toaster";
 import { LocaleProvider } from "@/components/i18n/locale-provider";
+import { UiThemeProvider } from "@/components/theme/ui-theme-provider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [client] = useState(
@@ -22,12 +23,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" enableSystem={false}>
-      <LocaleProvider>
-        <QueryClientProvider client={client}>
-          {children}
-          <AppToaster />
-        </QueryClientProvider>
-      </LocaleProvider>
+      <UiThemeProvider>
+        <LocaleProvider>
+          <QueryClientProvider client={client}>
+            {children}
+            <AppToaster />
+          </QueryClientProvider>
+        </LocaleProvider>
+      </UiThemeProvider>
     </ThemeProvider>
   );
 }

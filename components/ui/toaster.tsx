@@ -10,7 +10,7 @@ export function AppToaster() {
       position="top-right"
       toastOptions={{
         className:
-          "!rounded-[4px] !border-[rgba(131,56,236,0.28)] !bg-[#0d0d15] !text-white !shadow-[0_0_24px_rgba(131,56,236,0.18)]",
+          "!rounded-[var(--ui-radius)] !border-[var(--ui-chrome-border)] !bg-[var(--card)] !text-[var(--foreground)] !shadow-[var(--ui-dialog-shadow)]",
       }}
     />
   );

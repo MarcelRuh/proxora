@@ -6,6 +6,7 @@ import { TotpSection } from "@/components/settings/totp-section";
 import { GuestNetworksSection } from "@/components/settings/guest-networks-section";
 import { NotificationsSection } from "@/components/settings/notifications-section";
 import { DiskAlertsSection } from "@/components/settings/disk-alerts-section";
+import { AppearanceSection } from "@/components/settings/appearance-section";
 import { useI18n } from "@/components/i18n/locale-provider";
 
 export default function SettingsPage() {
@@ -13,6 +14,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader kicker={t("settings.kicker")} title={t("settings.title")} />
+      <AppearanceSection />
       <ChangePasswordForm />
       <TotpSection />
       <GuestNetworksSection />

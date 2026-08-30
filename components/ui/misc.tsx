@@ -15,20 +15,20 @@ export function ProgressBar({
   const clamped = Math.max(0, Math.min(100, value));
   const color = autoTone
     ? clamped >= 90
-      ? "bg-danger"
-      : clamped >= 75
-        ? "bg-warning"
-        : "bg-gradient-to-r from-[#ff006e] to-[#8338ec]"
+        ? "bg-danger"
+        : clamped >= 75
+          ? "bg-warning"
+          : "proxora-fill"
     : tone === "danger"
       ? "bg-danger"
       : tone === "warning"
         ? "bg-warning"
-        : "bg-gradient-to-r from-[#ff006e] to-[#8338ec]";
+        : "proxora-fill";
   return (
     <div className={cn("h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]", className)}>
       <div
         className={cn("h-full rounded-full transition-all", color)}
-        style={{ width: `${clamped}%`, boxShadow: "0 0 12px rgba(255,0,110,0.4)" }}
+        style={{ width: `${clamped}%` }}
       />
     </div>
   );
@@ -48,7 +48,7 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-[4px] border border-dashed border-border px-6 py-16 text-center">
+    <div className="flex flex-col items-center justify-center gap-2 rounded-[var(--ui-radius)] border border-dashed border-border px-6 py-16 text-center">
       <p className="text-sm font-medium">{title}</p>
       {description ? <p className="max-w-md text-sm text-muted-foreground">{description}</p> : null}
       {action}

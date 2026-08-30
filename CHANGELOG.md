@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.1.0] – 2026-08-30
+
+### Added
+
+- Four additional UI skins besides Standard (Operator, Atelier, Brutal, Harbor). Same palette, different type, density, edges, and atmosphere. Switch in Settings, the sidebar, or on the login page; choice is stored locally.
+
 ## [1.0.88] – 2026-08-30
 
 ### Security

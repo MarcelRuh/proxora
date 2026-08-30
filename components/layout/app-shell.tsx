@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { CommandSearch } from "@/components/layout/command-search";
 import { useAptSummary } from "@/components/layout/apt-update-alert";
-import { NeonAtmosphere } from "@/components/layout/neon-atmosphere";
+import { UiAtmosphere } from "@/components/layout/ui-atmosphere";
 import { BrandMark } from "@/components/layout/brand-mark";
 import type { SessionUser } from "@/lib/types";
 import { hasAnyPermission, hasPermission } from "@/lib/permissions";
@@ -37,6 +37,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { SelfUpdateStatus } from "@/components/settings/self-update-section";
 import { ProgressBar } from "@/components/ui/misc";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { UiThemeSelect } from "@/components/theme/ui-theme-select";
 import type { MessageKey } from "@/lib/i18n/messages";
 
 const NAV: Array<{
@@ -90,16 +91,16 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
   }
 
   return (
-    <div className="relative flex h-dvh overflow-hidden bg-background">
-      <NeonAtmosphere />
+    <div className="app-shell relative flex h-dvh overflow-hidden bg-background">
+      <UiAtmosphere />
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex h-dvh w-64 shrink-0 flex-col overflow-hidden border-r border-[rgba(131,56,236,0.2)] bg-sidebar text-sidebar-foreground backdrop-blur-md transition-transform lg:static lg:h-full lg:translate-x-0",
+          "app-sidebar fixed inset-y-0 left-0 z-40 flex h-dvh shrink-0 flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground backdrop-blur-md transition-transform lg:static lg:inset-auto lg:h-auto lg:self-stretch lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
         <div className="flex shrink-0 items-center gap-3 px-4 py-5">
-          <BrandMark className="h-11 w-11 drop-shadow-[0_0_16px_rgba(255,0,110,0.35)]" />
+          <BrandMark className="h-11 w-11" />
           <div>
             <p className="proxora-logo text-lg leading-none">{APP_NAME.toUpperCase()}</p>
             <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.22em] text-sidebar-muted">
@@ -129,26 +130,27 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             />
           ))}
         </nav>
-        <div className="shrink-0 space-y-2 border-t border-[rgba(131,56,236,0.2)] p-3">
+        <div className="app-sidebar-footer shrink-0 space-y-2 border-t p-3">
           <button
             onClick={() => setSearchOpen(true)}
-            className="flex h-9 w-full items-center gap-2 rounded-[4px] border border-primary/40 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-muted hover:border-primary hover:text-white"
+            className="flex h-9 w-full items-center gap-2 rounded-[var(--ui-radius)] border border-primary/40 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-muted hover:border-primary hover:text-foreground"
           >
             <Search className="h-3.5 w-3.5" />
             {t("nav.search")}
             <kbd className="ml-auto text-[10px] text-sidebar-muted">⌘K</kbd>
           </button>
           {hasAnyPermission(user.role.permissions, ["proxora.update", "updates.view"]) ? <SidebarVersion /> : null}
+          <UiThemeSelect />
           <div className="flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider">
             <button
-              className={locale === "de" ? "text-primary" : "text-sidebar-muted hover:text-white"}
+              className={locale === "de" ? "text-primary" : "text-sidebar-muted hover:text-foreground"}
               onClick={() => setLocale("de")}
             >
               DE
             </button>
             <span className="text-sidebar-muted">/</span>
             <button
-              className={locale === "en" ? "text-primary" : "text-sidebar-muted hover:text-white"}
+              className={locale === "en" ? "text-primary" : "text-sidebar-muted hover:text-foreground"}
               onClick={() => setLocale("en")}
             >
               EN
@@ -169,7 +171,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
       {open ? (
         <button className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={() => setOpen(false)} />
       ) : null}
-      <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+      <div className="app-main relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
         <header className="sticky top-0 z-20 flex items-center gap-3 bg-background/80 px-4 py-3 backdrop-blur-md lg:hidden">
           <Button variant="outline" size="icon" onClick={() => setOpen(true)}>
             {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
@@ -201,8 +203,8 @@ function NavLink({
     <Link
       href={href}
       className={cn(
-        "flex items-center gap-2.5 px-3 py-2.5 text-sm font-medium uppercase tracking-wide transition-colors",
-        active ? "proxora-nav-active" : "text-sidebar-muted hover:bg-primary/10 hover:text-white hover:shadow-[0_0_16px_rgba(255,0,110,0.15)]",
+        "app-nav-link flex items-center gap-2.5 px-3 py-2.5 text-sm font-medium transition-colors",
+        active ? "proxora-nav-active" : "text-sidebar-muted hover:bg-primary/10 hover:text-foreground",
       )}
     >
       <Icon className="h-4 w-4" />
@@ -247,7 +249,7 @@ function SidebarVersion() {
   const updating = Boolean(status?.updating);
   const percent = status?.progress?.percent ?? (updating ? 2 : status?.updateAvailable ? 8 : 100);
   return (
-    <Link href="/proxora" className="block rounded-[4px] border border-[rgba(131,56,236,0.28)] px-2 py-2 hover:border-primary/50">
+    <Link href="/proxora" className="block rounded-[var(--ui-radius)] border border-[var(--ui-chrome-border)] px-2 py-2 hover:border-primary/50">
       <div className="flex items-center justify-between gap-2 text-[11px]">
         <span className="font-mono text-sidebar-foreground">
           {status?.updateAvailable ? `${current} → ${target}` : `v${current}`}
