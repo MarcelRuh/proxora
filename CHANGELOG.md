@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.1.4] – 2026-08-30
+
+### Changed
+
+- Language switcher shows DE and EN flags next to the labels.
+
 ## [1.1.3] – 2026-08-30
 
 ### Fixed

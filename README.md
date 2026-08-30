@@ -5,7 +5,7 @@
 [![CI](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-> Status: **v1.1.3** – self-hosted Proxmox control plane with switchable UI skins.
+> Status: **v1.1.4** – self-hosted Proxmox control plane with switchable UI skins.
 
 Proxora talks to each node through the official **Proxmox VE API**. No cluster required.
 

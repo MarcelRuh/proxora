@@ -37,6 +37,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { SelfUpdateStatus } from "@/components/settings/self-update-section";
 import { ProgressBar } from "@/components/ui/misc";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { LocaleSwitch } from "@/components/i18n/locale-switch";
 import { UiThemeSelect } from "@/components/theme/ui-theme-select";
 import type { MessageKey } from "@/lib/i18n/messages";
 
@@ -63,7 +64,7 @@ const NAV: Array<{
 ];
 
 export function AppShell({ children, user }: { children: ReactNode; user: SessionUser }) {
-  const { t, locale, setLocale } = useI18n();
+  const { t } = useI18n();
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -141,21 +142,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
           </button>
           {hasAnyPermission(user.role.permissions, ["proxora.update", "updates.view"]) ? <SidebarVersion /> : null}
           <UiThemeSelect />
-          <div className="flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider">
-            <button
-              className={locale === "de" ? "text-primary" : "text-sidebar-muted hover:text-foreground"}
-              onClick={() => setLocale("de")}
-            >
-              DE
-            </button>
-            <span className="text-sidebar-muted">/</span>
-            <button
-              className={locale === "en" ? "text-primary" : "text-sidebar-muted hover:text-foreground"}
-              onClick={() => setLocale("en")}
-            >
-              EN
-            </button>
-          </div>
+          <LocaleSwitch className="px-1" />
           <p className="px-1 text-[10px] text-sidebar-muted">
             {user.username} · {user.role.name}
           </p>

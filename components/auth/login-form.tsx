@@ -10,10 +10,11 @@ import { UiAtmosphere } from "@/components/layout/ui-atmosphere";
 import { BrandMark } from "@/components/layout/brand-mark";
 import { APP_NAME } from "@/lib/version";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { LocaleSwitch } from "@/components/i18n/locale-switch";
 import { UiThemeSelect } from "@/components/theme/ui-theme-select";
 
 export function LoginForm({ next }: { next: string }) {
-  const { t, locale, setLocale } = useI18n();
+  const { t } = useI18n();
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -115,15 +116,7 @@ export function LoginForm({ next }: { next: string }) {
             ) : null}
             <div className="grid gap-2">
               <UiThemeSelect />
-              <div className="flex justify-center gap-2 text-xs font-semibold uppercase tracking-wider">
-                <button type="button" className={locale === "de" ? "text-primary" : "text-muted-foreground"} onClick={() => setLocale("de")}>
-                  DE
-                </button>
-                <span className="text-muted-foreground">/</span>
-                <button type="button" className={locale === "en" ? "text-primary" : "text-muted-foreground"} onClick={() => setLocale("en")}>
-                  EN
-                </button>
-              </div>
+              <LocaleSwitch className="justify-center" />
             </div>
           </form>
         </CardContent>
