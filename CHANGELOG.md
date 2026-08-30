@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.71] – 2026-08-30
+
+### Added
+
+- Backup now and job runs show live vzdump progress (percent + log), same as restore.
+
 ## [1.0.70] – 2026-08-30
 
 ### Removed

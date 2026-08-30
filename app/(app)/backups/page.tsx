@@ -16,6 +16,7 @@ import type { PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
 import { JobDialog } from "@/components/backups/job-dialog";
+import { BackupTaskDialog } from "@/components/backups/backup-task-dialog";
 import { RestoreDialog } from "@/components/backups/restore-dialog";
 import type { BackupFile, BackupJob, BackupOverview } from "@/components/backups/types";
 
@@ -93,6 +94,7 @@ function HostBackups({
   const [jobOpen, setJobOpen] = useState(false);
   const [editJob, setEditJob] = useState<BackupJob | null>(null);
   const [restoreFile, setRestoreFile] = useState<BackupFile | null>(null);
+  const [runTask, setRunTask] = useState<{ node: string; upid: string; title: string } | null>(null);
   const [fileQuery, setFileQuery] = useState("");
   const [fileKind, setFileKind] = useState<BackupFileFilter["kind"]>("all");
   const [fileStorage, setFileStorage] = useState("all");
@@ -129,11 +131,28 @@ function HostBackups({
     };
   }, [overview?.guests, t]);
 
-  async function post(body: Record<string, unknown>, successKey: "backup.started" | "backup.jobDeleted" | "backup.fileDeleted") {
+  async function post(body: Record<string, unknown>, successKey: "backup.jobDeleted" | "backup.fileDeleted") {
     try {
       await api(`/api/hosts/${hostId}/backups`, { method: "POST", body: JSON.stringify(body) });
       toast.success(t(successKey));
       onDone();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t("common.failed"));
+    }
+  }
+
+  async function runJob(job: BackupJob) {
+    try {
+      const res = await api<{ upid?: string; node?: string }>(`/api/hosts/${hostId}/backups`, {
+        method: "POST",
+        body: JSON.stringify({ action: "run-job", id: job.id, node: job.node || overview?.primaryNode }),
+      });
+      if (!res.upid) throw new Error(t("common.failed"));
+      setRunTask({
+        node: res.node || job.node || overview?.primaryNode || "",
+        upid: res.upid,
+        title: t("backup.runJob"),
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t("common.failed"));
     }
@@ -208,7 +227,8 @@ function HostBackups({
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => void post({ action: "run-job", id: job.id, node: job.node || overview.primaryNode }, "backup.started")}
+                                  disabled={Boolean(runTask)}
+                                  onClick={() => void runJob(job)}
                                 >
                                   {t("backup.runJob")}
                                 </Button>
@@ -355,6 +375,17 @@ function HostBackups({
               onOpenChange={(next) => {
                 setJobOpen(next);
                 if (!next) setEditJob(null);
+              }}
+              onDone={onDone}
+            />
+            <BackupTaskDialog
+              hostId={hostId}
+              node={runTask?.node ?? ""}
+              upid={runTask?.upid ?? null}
+              open={Boolean(runTask)}
+              title={runTask?.title ?? t("backup.runJob")}
+              onOpenChange={(next) => {
+                if (!next) setRunTask(null);
               }}
               onDone={onDone}
             />

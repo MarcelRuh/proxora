@@ -75,7 +75,6 @@ export const POST = apiRoute(
   let notifyName: string | undefined;
   let notifyId: string | undefined;
   let notifyNode: string | undefined;
-  const t0 = Date.now();
   let result: Record<string, unknown>;
   try {
     result = await withHostClient(params.id, session.user, async (client, host) => {
@@ -97,8 +96,7 @@ export const POST = apiRoute(
         notifyName = started.job.all ? "Alle Gäste" : started.job.vmid || started.job.id;
         notifyId = started.job.all ? started.job.id : started.job.vmid || started.job.id;
         notifyNode = started.node;
-        await waitUpid(client, started.node, started.upid, TASK_TIMEOUT.backup);
-        return { upid: started.upid };
+        return { upid: started.upid, node: started.node };
       }
       case "run": {
         const first = Number(body.vmid.split(/[,\s]+/).find(Boolean));
@@ -114,8 +112,7 @@ export const POST = apiRoute(
             compress: body.compress ?? "zstd",
           }),
         );
-        await waitUpid(client, body.node, upid, TASK_TIMEOUT.backup);
-        return { upid };
+        return { upid, node: body.node };
       }
       case "restore": {
         notifyName = (await lookupGuestName(client, body.node, body.vmid)) || parseBackupVolid(body.volid).filename;
@@ -162,7 +159,6 @@ export const POST = apiRoute(
     throw error;
   }
 
-  const took = durationLabel(Date.now() - t0);
   const audit =
     body.action === "create-job"
       ? AUDIT_ACTIONS.BACKUP_JOB_CREATED
@@ -193,15 +189,43 @@ export const POST = apiRoute(
     metadata: { action: body.action, ...result },
   });
   if (body.action === "run" || body.action === "run-job") {
-    notifyTopic("backup.started", {
-      level: "success",
-      title: "Backup fertig",
-      message: `${body.action === "run-job" ? `Job ${"id" in body ? body.id : ""}` : `VM/CT ${"vmid" in body ? body.vmid : ""}`} — fertig in ${took}`,
-      hostId: params.id,
-      name: notifyName,
-      id: notifyId,
-      host: hostName,
-      node: notifyNode,
+    const backupUpid = typeof result.upid === "string" ? result.upid : "";
+    const backupNode = (typeof result.node === "string" && result.node) || notifyNode || "";
+    const backupHost = hostName;
+    const backupName = notifyName;
+    const backupId = notifyId;
+    const backupLabel =
+      body.action === "run-job" ? `Job ${"id" in body ? body.id : ""}` : `VM/CT ${"vmid" in body ? body.vmid : ""}`;
+    after(async () => {
+      const started = Date.now();
+      try {
+        if (isUpid(backupUpid) && backupNode) {
+          await withHostClient(params.id, session.user, async (client) => {
+            await waitUpid(client, backupNode, backupUpid, TASK_TIMEOUT.backup);
+          });
+        }
+        notifyTopic("backup.started", {
+          level: "success",
+          title: "Backup fertig",
+          message: `${backupLabel} — fertig in ${durationLabel(Date.now() - started)}`,
+          hostId: params.id,
+          name: backupName,
+          id: backupId,
+          host: backupHost,
+          node: backupNode,
+        });
+      } catch (error) {
+        notifyTopic("backup.failed", {
+          level: "error",
+          title: "Backup fehlgeschlagen",
+          message: `${backupName ?? params.id} — fehlgeschlagen: ${error instanceof Error ? error.message : "unbekannt"}`,
+          hostId: params.id,
+          name: backupName,
+          id: backupId,
+          host: backupHost,
+          node: backupNode,
+        });
+      }
     });
   }
   if (body.action === "restore") {

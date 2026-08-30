@@ -123,7 +123,10 @@ export function parseProxmoxTaskProgress(lines: ProxmoxLogLine[]): { percent: nu
     if (/extracting archive/i.test(text) && (percent == null || percent < 10)) {
       percent = Math.max(percent ?? 0, 10);
     }
-    if (/\b(restore is finished|restore successful)\b/i.test(text) || /^TASK OK$/i.test(text)) {
+    if (
+      /\b(restore is finished|restore successful|backup is finished|backup finished)\b/i.test(text) ||
+      /^TASK OK$/i.test(text)
+    ) {
       percent = 100;
     }
   }

@@ -217,6 +217,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             vmid={Number(params.vmid)}
             kind={kind}
             storages={backups?.backupStorages ?? []}
+            onDone={() => void qc.invalidateQueries({ queryKey: ["backups"] })}
           />
         ) : null}
         {latestBackup && can.restore ? (

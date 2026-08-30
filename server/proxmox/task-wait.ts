@@ -7,7 +7,7 @@ export const TASK_TIMEOUT = {
   reboot: 180_000,
   delete: 300_000,
   create: 300_000,
-  backup: 600_000,
+  backup: 14_400_000,
   snapshot: 180_000,
   clone: 600_000,
   migrate: 600_000,

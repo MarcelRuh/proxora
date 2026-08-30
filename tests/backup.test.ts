@@ -115,6 +115,17 @@ describe("proxmox restore log progress", () => {
     expect(parsed.detail).toBe("restore is finished");
   });
 
+  it("treats vzdump backup finished as 100%", () => {
+    const parsed = parseProxmoxTaskProgress([
+      "INFO: starting new backup job: vzdump 100",
+      "INFO: 12% (3.8 GiB of 32.0 GiB) in 8s",
+      "INFO: 88% (28.1 GiB of 32.0 GiB) in 51s",
+      "INFO: Backup finished",
+    ]);
+    expect(parsed.percent).toBe(100);
+    expect(parsed.detail).toBe("INFO: Backup finished");
+  });
+
   it("treats LXC archive extract as early progress", () => {
     const parsed = parseProxmoxTaskProgress([
       { n: 1, t: "extracting archive '/var/lib/vz/dump/vzdump-lxc-204.tar.zst'" },
