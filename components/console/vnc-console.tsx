@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ClipboardCopy, Maximize2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n/locale-provider";
-import { disableQemuExtendedKeys, grabRfbKeyboard } from "@/lib/vnc-input";
+import { disableQemuExtendedKeys, grabRfbKeyboard, rfbKeysymFromKeyboardEvent } from "@/lib/vnc-input";
 
 type Props = {
   hostId: string;
@@ -33,23 +33,17 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
   const shellRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<RfbInstance | null>(null);
-  const grabbedRef = useRef(false);
+  const tRef = useRef(t);
+  tRef.current = t;
   const [status, setStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
   const [detail, setDetail] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
-  const [grabbed, setGrabbed] = useState(false);
-
-  function setInputGrabbed(next: boolean) {
-    grabbedRef.current = next;
-    setGrabbed(next);
-  }
 
   useEffect(() => {
     if (!running) {
       rfbRef.current = null;
       setStatus("disconnected");
       setDetail(null);
-      setInputGrabbed(false);
       return;
     }
     const target = containerRef.current;
@@ -60,7 +54,6 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
     let releaseKeyboard: (() => void) | undefined;
     setStatus("connecting");
     setDetail(null);
-    setInputGrabbed(false);
 
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     const wsBase = process.env.NEXT_PUBLIC_WS_URL || `${proto}://${window.location.host}`;
@@ -77,16 +70,6 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
       applyScale(rfbRef.current);
     };
 
-    const onPointerDown = (event: PointerEvent) => {
-      const shell = shellRef.current;
-      if (shell && event.target instanceof Node && shell.contains(event.target)) {
-        focusRfb(target, rfbRef.current);
-        setInputGrabbed(true);
-      } else {
-        setInputGrabbed(false);
-      }
-    };
-
     void import("@novnc/novnc/lib/rfb.js").then(({ default: RFB }) => {
       if (cancelled || !containerRef.current) return;
       const ws = new WebSocket(url);
@@ -97,12 +80,11 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
         if (cancelled) return;
         setStatus("error");
         setDetail(message);
-        setInputGrabbed(false);
       };
 
       ws.addEventListener("close", (event) => {
         if (cancelled || attached) return;
-        fail(event.reason || t("guest.consoleDisconnected"));
+        fail(event.reason || tRef.current("guest.consoleDisconnected"));
       });
 
       const onAuth = (event: MessageEvent) => {
@@ -114,8 +96,8 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
           return;
         }
         if (msg.type === "status" && msg.status === "error") {
-          if (msg.code === "no-vga") fail(t("guest.consoleNoVga"));
-          else fail(msg.message || t("guest.consoleError"));
+          if (msg.code === "no-vga") fail(tRef.current("guest.consoleNoVga"));
+          else fail(msg.message || tRef.current("guest.consoleError"));
           return;
         }
         if (msg.type !== "vnc-auth") return;
@@ -133,26 +115,28 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
         rfb.qualityLevel = 6;
         disableQemuExtendedKeys(rfb);
         rfb.addEventListener("connect", () => {
+          if (cancelled) return;
           attached = true;
           setStatus("connected");
           releaseKeyboard?.();
           releaseKeyboard = grabRfbKeyboard(
             rfb,
-            () => !cancelled && rfbRef.current === rfb && grabbedRef.current,
+            () => !cancelled && rfbRef.current === rfb,
+            (keyEvent, down) => {
+              const keysym = rfbKeysymFromKeyboardEvent(keyEvent);
+              if (!keysym) return;
+              rfb.sendKey(keysym, keyEvent.code || null, down);
+            },
           );
           requestAnimationFrame(() => {
             applyScale(rfb);
             focusRfb(containerRef.current, rfb);
-            setInputGrabbed(true);
           });
         });
         rfb.addEventListener("disconnect", () => {
-          if (!cancelled) {
-            setStatus("disconnected");
-            setInputGrabbed(false);
-          }
+          if (!cancelled) setStatus("disconnected");
         });
-        rfb.addEventListener("securityfailure", () => fail(t("guest.consoleError")));
+        rfb.addEventListener("securityfailure", () => fail(tRef.current("guest.consoleError")));
         rfb.addEventListener("credentialsrequired", () => {
           if (password) rfb.sendCredentials({ password });
         });
@@ -170,14 +154,12 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
       ws.addEventListener("message", onAuth);
     });
 
-    document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("fullscreenchange", onLayout);
     window.addEventListener("resize", onLayout);
 
     return () => {
       cancelled = true;
       releaseKeyboard?.();
-      document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("fullscreenchange", onLayout);
       window.removeEventListener("resize", onLayout);
       try {
@@ -193,7 +175,7 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
       }
       target.replaceChildren();
     };
-  }, [hostId, node, vmid, nonce, running, t]);
+  }, [hostId, node, vmid, nonce, running]);
 
   async function pasteClipboard() {
     try {
@@ -249,9 +231,7 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
         </span>
         <span className="text-slate-500">VGA {vmid} @ {node}</span>
         {status === "connected" ? (
-          <span className={grabbed ? "text-slate-400" : "text-amber-300"}>
-            {grabbed ? t("guest.consoleInputGrabbed") : t("guest.consoleClickToGrab")}
-          </span>
+          <span className="text-slate-400">{t("guest.consoleInputGrabbed")}</span>
         ) : null}
         {detail && status === "error" ? <span className="text-red-400">{detail}</span> : null}
         <div className="ml-auto flex flex-wrap items-center gap-1">
@@ -281,7 +261,11 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
         </div>
       </div>
       {running ? (
-        <div ref={containerRef} className="vnc-console-screen min-h-0 flex-1 touch-none select-none" />
+        <div
+          ref={containerRef}
+          className="vnc-console-screen min-h-0 flex-1 touch-none select-none"
+          onPointerDown={() => focusRfb(containerRef.current, rfbRef.current)}
+        />
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-sm text-slate-400">
           {t("guest.consoleVmStoppedHint")}

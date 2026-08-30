@@ -18,6 +18,7 @@ declare module "@novnc/novnc/lib/rfb.js" {
     sendCtrlAltDel(): void;
     clipboardPasteFrom(text: string): void;
     sendCredentials(creds: { password?: string; username?: string }): void;
+    sendKey(keysym: number, code: string | null, down?: boolean): void;
     addEventListener(type: string, listener: (event: Event) => void): void;
     removeEventListener(type: string, listener: (event: Event) => void): void;
   }

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.81] – 2026-08-30
+
+### Fixed
+
+- VGA keyboard: capture keys on the window as soon as the session is connected (not only after a canvas click). Space/arrows are preventDefault’d so they go to the guest instead of scrolling the page.
+
 ## [1.0.80] – 2026-08-30
 
 ### Fixed
