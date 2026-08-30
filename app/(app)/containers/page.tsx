@@ -5,13 +5,14 @@ import { Button } from "@/components/ui/button";
 import { GuestTable } from "@/components/guests/guest-table";
 import { dashboardGuests, useDashboard } from "@/components/dashboard/use-dashboard";
 import { PageHeader } from "@/components/layout/page-header";
+import { QueryGate } from "@/components/layout/query-gate";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
 
 export default function ContainersPage() {
   const { t } = useI18n();
   const canCreate = useCan("lxc.create");
-  const { data } = useDashboard();
+  const { data, isLoading, error, refetch } = useDashboard();
 
   return (
     <div className="space-y-4">
@@ -27,7 +28,9 @@ export default function ContainersPage() {
           ) : undefined
         }
       />
-      <GuestTable kind="lxc" items={dashboardGuests(data, "lxc")} />
+      <QueryGate isLoading={false} error={error} onRetry={() => void refetch()}>
+        <GuestTable kind="lxc" items={dashboardGuests(data, "lxc")} loading={isLoading} />
+      </QueryGate>
     </div>
   );
 }

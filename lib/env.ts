@@ -13,7 +13,6 @@ export function getEnv() {
     encryptionKey: required("ENCRYPTION_KEY"),
     sessionSecret: process.env.SESSION_SECRET ?? required("ENCRYPTION_KEY"),
     sessionDays: Number(process.env.SESSION_DAYS ?? 7),
-    redisUrl: process.env.REDIS_URL,
     wsPort: Number(process.env.WS_PORT ?? 3001),
     appUrl: process.env.APP_URL ?? "http://localhost:3000",
     logLevel: process.env.LOG_LEVEL ?? "info",
@@ -21,4 +20,3 @@ export function getEnv() {
 }
 
 export const SESSION_COOKIE = "pm_session";
-export const CSRF_COOKIE = "pm_csrf";

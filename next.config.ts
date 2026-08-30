@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   // Custom server (server/index.ts) is unsupported with `output: "standalone"`.
   poweredByHeader: false,
   transpilePackages: ["@novnc/novnc"],
-  serverExternalPackages: ["@prisma/client", "pino", "pino-pretty", "ws", "bcryptjs", "undici", "ioredis"],
+  serverExternalPackages: ["@prisma/client", "pino", "pino-pretty", "ws", "bcryptjs", "undici"],
   async headers() {
     return [
       {

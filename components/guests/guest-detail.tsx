@@ -23,6 +23,8 @@ import { bytesToSize, formatUptime, guestCpuPercent, guestSizeDetail, percentage
 import type { PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
+import { PageSkeleton } from "@/components/layout/page-skeleton";
+import { QueryGate } from "@/components/layout/query-gate";
 import { vmHasGraphics } from "@/lib/guest-console";
 
 type GuestPayload = {
@@ -69,7 +71,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const [consoleOpen, setConsoleOpen] = useState(search.get("tab") === "console" || search.get("console") === "1");
   const [consoleMode, setConsoleMode] = useState<"vga" | "serial">(kind === "vm" ? "vga" : "serial");
   const path = `/api/hosts/${params.hostId}/${kind === "vm" ? "vms" : "lxc"}/${params.node}/${params.vmid}`;
-  const { data, refetch, isLoading } = useQuery({
+  const { data, refetch, isLoading, error } = useQuery({
     queryKey: ["guest", kind, params.hostId, params.node, params.vmid],
     queryFn: () => api<GuestPayload>(path),
   });
@@ -134,6 +136,11 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const maxdisk = num(status.maxdisk);
   const netin = num(status.netin);
   const netout = num(status.netout);
+
+  if (isLoading) return <PageSkeleton />;
+  if (error) {
+    return <QueryGate isLoading={false} error={error} onRetry={() => void refetch()}>{null}</QueryGate>;
+  }
 
   return (
     <div className="space-y-4">

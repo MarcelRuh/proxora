@@ -10,8 +10,6 @@ import {
   clientIp,
   clientUserAgent,
   createSession,
-  destroySession,
-  getSession,
   sessionCookieOptions,
 } from "@/server/auth/session";
 import { verifyPassword } from "@/lib/password";
@@ -130,37 +128,4 @@ async function finishLogin(
       allowedGuests: guests.length ? guests : null,
     },
   });
-}
-
-export async function GET() {
-  try {
-    const session = await getSession();
-    if (!session) return json({ user: null }, 200);
-    return json({ user: session.user });
-  } catch (error) {
-    return handleRouteError(error);
-  }
-}
-
-export async function DELETE(request: NextRequest) {
-  try {
-    assertSameOrigin(request);
-    const store = await cookies();
-    const token = store.get(SESSION_COOKIE)?.value;
-    const session = await getSession();
-    if (token) await destroySession(token);
-    store.delete(SESSION_COOKIE);
-    if (session) {
-      await writeAuditLog({
-        userId: session.user.id,
-        ip: await clientIp(),
-        action: AUDIT_ACTIONS.LOGOUT,
-        target: session.user.username,
-        result: "SUCCESS",
-      });
-    }
-    return json({ ok: true });
-  } catch (error) {
-    return handleRouteError(error);
-  }
 }

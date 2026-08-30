@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/misc";
 import { GuestStateBadge } from "@/components/status-badge";
 import { ConfirmAction } from "@/components/confirm-action";
 import { GuestCpuBar, GuestDiskBar, GuestRamBar } from "@/components/guests/guest-usage";
@@ -23,10 +24,12 @@ export const GuestTable = memo(function GuestTable({
   kind,
   items,
   hostId,
+  loading,
 }: {
   kind: "vm" | "lxc" | "all";
   items: Guest[];
   hostId?: string;
+  loading?: boolean;
 }) {
   const { t } = useI18n();
   const mixed = kind === "all";
@@ -134,7 +137,15 @@ export const GuestTable = memo(function GuestTable({
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <tr key={i} className="border-t border-border">
+                  <td colSpan={colCount} className="px-3 py-3">
+                    <Skeleton className="h-6 w-full" />
+                  </td>
+                </tr>
+              ))
+            ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={colCount} className="px-3 py-6 text-sm text-muted-foreground">
                   {items.length === 0 ? t("dashboard.noGuests") : t("table.noMatches")}

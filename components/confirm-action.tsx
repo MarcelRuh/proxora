@@ -1,11 +1,9 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { api } from "@/lib/api";
 import { useI18n } from "@/components/i18n/locale-provider";
 
 export function ConfirmAction({
@@ -74,17 +72,4 @@ export function ConfirmAction({
       </Dialog>
     </>
   );
-}
-
-export function useGuestAction(path: string, invalidateKey: unknown[]) {
-  const { t } = useI18n();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: Record<string, unknown>) => api(path, { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: () => {
-      toast.success(t("common.taskStarted"));
-      void qc.invalidateQueries({ queryKey: invalidateKey });
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
 }

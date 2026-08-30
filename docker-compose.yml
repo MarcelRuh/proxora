@@ -15,12 +15,6 @@ services:
       timeout: 5s
       retries: 10
 
-  redis:
-    image: redis:7-alpine
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-proxora}"]
-    ports:
-      - "6379:6379"
-
   proxora:
     build: .
     container_name: proxora
@@ -30,7 +24,6 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://proxora:proxora@postgres:5432/proxora?schema=public
-      REDIS_URL: redis://:${REDIS_PASSWORD:-proxora}@redis:6379
       APP_URL: http://localhost:3000
       PORT: "3000"
       LISTEN_HOST: "0.0.0.0"
@@ -43,8 +36,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_started
 
   proxora-updater:
     image: docker:27.5.1-cli

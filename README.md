@@ -5,7 +5,7 @@
 [![CI](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-> Status: **v1.0.86** – self-hosted Proxmox control plane with in-app updates.
+> Status: **v1.0.87** – self-hosted Proxmox control plane with in-app updates.
 
 Proxora talks to each node through the official **Proxmox VE API**. No cluster required.
 
@@ -91,7 +91,7 @@ Preserves `.env` and data volumes, syncs from GitHub, then runs `docker compose 
 | App | Next.js 16, React 19, TypeScript, Tailwind CSS |
 | API | Route handlers + Prisma/PostgreSQL |
 | Console | xterm.js + WebSocket termproxy |
-| Runtime | Docker Compose, optional Redis |
+| Runtime | Docker Compose |
 
 ## Quick start (development)
 

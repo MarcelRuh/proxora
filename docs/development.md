@@ -4,7 +4,6 @@
 
 - Node.js 22+
 - PostgreSQL 16
-- Redis (optional)
 - A Proxmox VE host reachable on `:8006` for live tests (not used by unit tests)
 
 ## Setup

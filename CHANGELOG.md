@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.87] – 2026-08-30
+
+### Changed
+
+- Clone/create VMID checks use cluster guest lists only; config/IP scans run only when a static IP is set.
+- After login, return to the page you were sent from (`?next=`), with open-redirect protection.
+- VM/LXC/host lists and guest detail show loading and error states instead of an empty table.
+- Unused Redis service, unused npm packages, and leftover UI primitives are gone.
+
+### Added
+
+- 404 page and translated login errors (credentials, TOTP, rate limit).
+- Empty state when no hosts are configured.
+
 ## [1.0.86] – 2026-08-30
 
 ### Changed

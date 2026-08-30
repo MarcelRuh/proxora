@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     const token = store.get(SESSION_COOKIE)?.value;
     const session = await getSession();
     if (token) await destroySession(token);
-    store.delete(SESSION_COOKIE);
+    store.delete({ name: SESSION_COOKIE, path: "/" });
     if (session) {
       await writeAuditLog({
         userId: session.user.id,

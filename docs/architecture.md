@@ -9,7 +9,6 @@ Browser
 Next.js UI + Route Handlers
   │
   ├── PostgreSQL (users, RBAC, hosts, audit, jobs)
-  ├── Redis (optional: cache / future queues)
   └── WebSocket console proxy
         │
         ├── Host A  → Proxmox API :8006
@@ -46,4 +45,4 @@ The Proxora app never receives `docker.sock` or the install checkout. Compose ru
 
 ## Extensibility
 
-`server/plugins/registry.ts` and `server/notifications/providers.ts` are the intended extension points for backup, Ceph, HA, SDN, Prometheus and additional notifiers. They are registered, not hardcoded into UI tables.
+`server/notifications/providers.ts` is the extension point for additional notifiers. They are registered, not hardcoded into UI tables.

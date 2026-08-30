@@ -1,7 +1,15 @@
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
+function prune(now: number) {
+  if (buckets.size < 256) return;
+  for (const [key, entry] of buckets) {
+    if (entry.resetAt < now) buckets.delete(key);
+  }
+}
+
 export function rateLimit(key: string, limit: number, windowMs: number): boolean {
   const now = Date.now();
+  prune(now);
   const current = buckets.get(key);
   if (!current || current.resetAt < now) {
     buckets.set(key, { count: 1, resetAt: now + windowMs });

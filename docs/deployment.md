@@ -12,7 +12,6 @@ Services:
 
 - `proxora` — Next.js + console proxy (`server/index.ts`)
 - `postgres` — application database
-- `redis` — optional cache / future job transport
 
 The entrypoint runs `prisma migrate deploy`, seeds the admin user, then starts the HTTP server on port 3000.
 
@@ -39,11 +38,9 @@ The wget installer prints username and password again in the final summary box. 
 | `APP_URL` | yes in prod | Canonical public origin. The installer sets `http://<LAN-IP>:3000`. Leave HTTPS URLs untouched (reverse proxy). Cookie `Secure` follows this scheme. |
 | `APP_ALLOWED_ORIGINS` | no | Extra CSRF origins, comma-separated |
 | `BOOTSTRAP_ADMIN_PASSWORD` | first boot | change after login |
-| `REDIS_URL` | no | |
 | `NEXT_PUBLIC_WS_URL` | no | only if WS is split |
 | `PROXORA_INSTALL_DIR` | for self-update | Host path of the Compose install |
 | `PROXORA_UPDATE_SIGNAL_DIR` | Compose | `/update-signal` shared with `proxora-updater` |
-| `REDIS_PASSWORD` | prod | Redis requirepass; URL is `redis://:${REDIS_PASSWORD}@redis:6379` |
 | `PROXORA_REPO` | no | default `MarcelRuh/proxora` |
 
 ## Reverse proxy
