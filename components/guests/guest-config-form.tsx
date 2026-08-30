@@ -10,6 +10,7 @@ import { buildMpSpec, isBindVolume, nextIndexedKey, parseMpSpec } from "@/lib/pr
 import { canResizeDisk, diskSizeDeltaGiB, formatDiskGiB, parseDiskSpec, setDiskSize } from "@/lib/proxmox-disk";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { Locale } from "@/lib/i18n/messages";
+import { applyWindowsGuestHardware } from "@/lib/windows-guest";
 
 const SKIP = new Set(["digest"]);
 
@@ -45,8 +46,9 @@ const NUMBER_KEYS = new Set([
 
 const CPU_KEYS = ["cores", "sockets", "vcpus", "memory", "balloon", "swap"];
 const META_KEYS = ["name", "hostname", "ostype", "tags", "description"];
+const HARDWARE_KEYS = ["cpu", "bios", "machine", "vga", "scsihw"];
 /** Keep in form state (so save does not delete them) but do not show. */
-const HIDDEN_UI_KEYS = new Set(["cpu", "cpulimit", "cpuunits"]);
+const HIDDEN_UI_KEYS = new Set(["cpulimit", "cpuunits"]);
 
 function isNet(key: string) {
   return /^net\d+$/.test(key);
@@ -121,6 +123,7 @@ export function GuestConfigForm({
       !isMp(k) &&
       !FLAG_KEYS.has(k) &&
       !primary.includes(k) &&
+      !HARDWARE_KEYS.includes(k) &&
       !HIDDEN_UI_KEYS.has(k),
   );
   const nextMp = nextIndexedKey("mp", Object.keys(form));
@@ -220,6 +223,74 @@ export function GuestConfigForm({
           ))}
         </div>
       </Section>
+
+      {kind === "vm" ? (
+        <Section title={t("config.hardware")} description={t("config.hardwareBody")}>
+          {readOnly ? null : (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">{t("config.windowsProfileBody")}</p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setForm((prev) => applyWindowsGuestHardware(prev));
+                  toast.message(t("config.windowsProfileApplied"));
+                }}
+              >
+                {t("config.windowsProfile")}
+              </Button>
+            </div>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <SelectField
+              name="cpu"
+              value={form.cpu ?? ""}
+              onChange={(v) => (v ? setField("cpu", v) : removeField("cpu"))}
+              options={[
+                { value: "", label: t("config.cpuDefault") },
+                { value: "host", label: t("config.cpuHost") },
+                { value: "kvm64", label: "kvm64" },
+                { value: "x86-64-v2-AES", label: "x86-64-v2-AES" },
+                { value: "max", label: "max" },
+              ]}
+            />
+            <SelectField
+              name="bios"
+              value={form.bios ?? ""}
+              onChange={(v) => (v ? setField("bios", v) : removeField("bios"))}
+              options={[
+                { value: "", label: t("config.biosDefault") },
+                { value: "ovmf", label: "OVMF (UEFI)" },
+                { value: "seabios", label: "SeaBIOS" },
+              ]}
+            />
+            <Field name="machine" value={form.machine ?? ""} onChange={(v) => (v ? setField("machine", v) : removeField("machine"))} hint="q35" />
+            <SelectField
+              name="vga"
+              value={form.vga ?? ""}
+              onChange={(v) => (v ? setField("vga", v) : removeField("vga"))}
+              options={[
+                { value: "", label: t("config.vgaDefault") },
+                { value: "std", label: "std" },
+                { value: "virtio", label: "virtio" },
+                { value: "qxl", label: "qxl" },
+                { value: "none", label: t("config.vgaNone") },
+              ]}
+            />
+            <SelectField
+              name="scsihw"
+              value={form.scsihw ?? ""}
+              onChange={(v) => (v ? setField("scsihw", v) : removeField("scsihw"))}
+              options={[
+                { value: "", label: t("config.scsihwDefault") },
+                { value: "virtio-scsi-single", label: t("create.scsihwSingle") },
+                { value: "virtio-scsi", label: t("create.scsihwMulti") },
+                { value: "lsi", label: "LSI" },
+              ]}
+            />
+          </div>
+        </Section>
+      ) : null}
 
       <Section title={t("config.general")} description={kind === "lxc" ? t("config.generalLxc") : t("config.generalVm")}>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -378,6 +449,10 @@ function labelFor(key: string, locale: Locale) {
     sockets: "Sockets",
     vcpus: "vCPUs",
     cpu: "CPU-Typ",
+    bios: "BIOS",
+    machine: "Machine",
+    vga: "VGA",
+    scsihw: "SCSI-Controller",
     memory: "RAM",
     hostDir: "Host-Pfad",
     guestDir: "Container-Pfad",
@@ -404,6 +479,10 @@ function labelFor(key: string, locale: Locale) {
     sockets: "Sockets",
     vcpus: "vCPUs",
     cpu: "CPU type",
+    bios: "BIOS",
+    machine: "Machine",
+    vga: "VGA",
+    scsihw: "SCSI controller",
     memory: "RAM",
     hostDir: "Host path",
     guestDir: "Container path",
@@ -457,6 +536,37 @@ function Field({
         {hint ? <span className="ml-1 text-xs font-normal text-muted-foreground">{hint}</span> : null}
       </Label>
       <Input value={value} onChange={(e) => onChange(e.target.value)} className={name === "description" ? undefined : "font-mono"} />
+    </div>
+  );
+}
+
+function SelectField({
+  name,
+  value,
+  onChange,
+  options,
+}: {
+  name: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  const { locale } = useI18n();
+  const opts = value && !options.some((o) => o.value === value) ? [{ value, label: value }, ...options] : options;
+  return (
+    <div className="space-y-1">
+      <Label>{labelFor(name, locale)}</Label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex h-9 w-full rounded-[4px] border border-input bg-white/[0.03] px-3 text-sm font-mono"
+      >
+        {opts.map((opt) => (
+          <option key={opt.value || "__default"} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

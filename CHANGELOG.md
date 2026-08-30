@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.82] – 2026-08-30
+
+### Added
+
+- VM hardware: CPU type, BIOS, machine, VGA, and SCSI controller are editable. A Windows profile fills host CPU, OVMF/q35, VirtIO-SCSI, agent, autostart, and net firewall without turning VGA off (console stays usable).
+- Windows VM create uses `cpu=host`, autostart, and `firewall=1` on net0 (same as a typical Win11 guest, with display kept).
+
 ## [1.0.81] – 2026-08-30
 
 ### Fixed

@@ -57,6 +57,7 @@ export default function CreateVmPage() {
     diskVolume: "",
     diskBus: "scsi" as "scsi" | "virtio" | "sata",
     scsihw: "virtio-scsi-single" as "virtio-scsi-single" | "virtio-scsi",
+    cpu: "" as "" | "host" | "kvm64",
     cores: 2,
     memory: 2048,
     bridge: "",
@@ -139,6 +140,7 @@ export default function CreateVmPage() {
           diskVolume: form.diskVolume || undefined,
           diskBus: form.diskBus,
           scsihw: form.scsihw,
+          cpu: form.cpu || undefined,
           cores: form.cores,
           memory: form.memory,
           bridge: form.bridge,
@@ -239,7 +241,8 @@ export default function CreateVmPage() {
                     : form.iso2 === iso
                       ? ""
                       : form.iso2;
-                setForm({ ...form, iso, iso2 });
+                const cpu = iso && isWindowsIso(iso) ? "host" : isWindowsIso(form.iso) ? "" : form.cpu;
+                setForm({ ...form, iso, iso2, cpu });
               }}
             >
               <option value="">{t("common.none")}</option>
@@ -249,6 +252,9 @@ export default function CreateVmPage() {
                 </option>
               ))}
             </select>
+            {form.iso && isWindowsIso(form.iso) ? (
+              <p className="mt-1 text-sm text-muted-foreground">{t("create.windowsHwHint")}</p>
+            ) : null}
             {form.hostId && !isos.length ? (
               <p className="mt-1 text-sm text-muted-foreground">
                 {t("create.noIsoHint")}{" "}
@@ -306,6 +312,18 @@ export default function CreateVmPage() {
                   {t(item.labelKey as MessageKey)}
                 </option>
               ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            {t("create.cpu")}
+            <select
+              className={selectClass}
+              value={form.cpu}
+              onChange={(e) => setForm({ ...form, cpu: e.target.value as typeof form.cpu })}
+            >
+              <option value="">{t("create.cpuDefault")}</option>
+              <option value="host">{t("create.cpuHost")}</option>
+              <option value="kvm64">kvm64</option>
             </select>
           </label>
           <label className="text-sm">

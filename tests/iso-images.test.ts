@@ -52,7 +52,7 @@ describe("iso images", () => {
     expect(isVirtioIso("local:iso/virtio-win-0.1.266.iso")).toBe(true);
     expect(ostypeFromIso("local:iso/Win11_24H2.iso")).toBe("win11");
     expect(ostypeFromIso("local:iso/Win10_22H2.iso")).toBe("win10");
-    expect(windowsVmFirmware("win11")).toEqual({ bios: "ovmf", machine: "q35" });
+    expect(windowsVmFirmware("win11")).toEqual({ bios: "ovmf", machine: "q35", cpu: "host" });
     expect(windowsVmFirmware("l26")).toBeNull();
     expect(
       suggestVirtioIso(

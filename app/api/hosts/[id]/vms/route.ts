@@ -14,6 +14,7 @@ import { durationLabel } from "@/lib/duration";
 import { assertGuestIdentityFree } from "@/server/services/guest-ips";
 import { ostypeFromIso, vmCdromDisks, windowsVmFirmware } from "@/lib/iso-images";
 import { diskExtras, vmDiskSpec } from "@/lib/vm-storage";
+import { withNetFirewall } from "@/lib/windows-guest";
 import type { VmCreateParams } from "@/server/proxmox/vms";
 
 export const maxDuration = 800;
@@ -78,7 +79,9 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     diskVolume: body.diskVolume,
     extras,
   });
-  const net = [
+  const ostype = body.ostype ?? ostypeFromIso(body.iso ?? "") ?? "l26";
+  const firmware = windowsVmFirmware(ostype);
+  let net = [
     `model=${body.netModel}`,
     `bridge=${body.bridge}`,
     body.vlan ? `tag=${body.vlan}` : null,
@@ -86,9 +89,8 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
   ]
     .filter(Boolean)
     .join(",");
+  if (firmware) net = withNetFirewall(net, true);
 
-  const ostype = body.ostype ?? ostypeFromIso(body.iso ?? "") ?? "l26";
-  const firmware = windowsVmFirmware(ostype);
   const bios = body.bios ?? firmware?.bios;
   const machine = body.machine ?? firmware?.machine;
   const efi = body.efi ?? Boolean(firmware);
@@ -103,7 +105,7 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     cores: body.cores,
     sockets: body.sockets ?? 1,
     numa: body.numa ? 1 : 0,
-    cpu: body.cpu,
+    cpu: body.cpu?.trim() || firmware?.cpu,
     scsihw: body.scsihw ?? "virtio-scsi-single",
     bios,
     machine,
@@ -113,6 +115,7 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     serial0: "socket",
     tablet: 1,
   };
+  if (firmware) payload.onboot = 1;
   if (body.diskBus === "virtio") payload.virtio0 = disk;
   else if (body.diskBus === "sata") payload.sata0 = disk;
   else if (body.diskBus === "ide") payload.ide0 = disk;

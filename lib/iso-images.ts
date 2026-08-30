@@ -87,9 +87,9 @@ export function isWindowsOstype(ostype: string | undefined): boolean {
   return Boolean(ostype?.toLowerCase().startsWith("win"));
 }
 
-export function windowsVmFirmware(ostype: string): { bios: "ovmf"; machine: "q35" } | null {
+export function windowsVmFirmware(ostype: string): { bios: "ovmf"; machine: "q35"; cpu: "host" } | null {
   if (!isWindowsOstype(ostype)) return null;
-  return { bios: "ovmf", machine: "q35" };
+  return { bios: "ovmf", machine: "q35", cpu: "host" };
 }
 
 export function vmCdromDisks(iso?: string, iso2?: string): Record<string, string> {
