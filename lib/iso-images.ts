@@ -45,6 +45,14 @@ export function isoVolid(storage: string, filename: string): string {
   return `${storage}:iso/${filename}`;
 }
 
+export function isIsoContentVolid(volid: string): boolean {
+  const raw = volid.trim();
+  if (!raw || raw.includes("..")) return false;
+  const lower = raw.toLowerCase();
+  if (!lower.includes(":iso/") && !lower.includes("/iso/")) return false;
+  return /\.iso$/i.test(volidFilename(raw));
+}
+
 export function isIsoRow(row: Record<string, unknown>): boolean {
   const content = String(row.content ?? "").toLowerCase();
   const volid = storageContentVolid(row);

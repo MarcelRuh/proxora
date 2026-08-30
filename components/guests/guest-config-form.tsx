@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -104,9 +104,12 @@ export function GuestConfigForm({
   const [volBackup, setVolBackup] = useState(true);
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
+  const originalRef = useRef(original);
 
   useEffect(() => {
-    setForm(original);
+    const previous = originalRef.current;
+    originalRef.current = original;
+    setForm((current) => (JSON.stringify(current) === JSON.stringify(previous) ? original : current));
   }, [original]);
 
   const primary = preferredOrder(kind);

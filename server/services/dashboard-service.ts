@@ -2,13 +2,14 @@ import type { SessionUser } from "@/server/auth/session";
 import { listHosts, withHostClient } from "@/server/services/host-service";
 import { filterGuestsForUser } from "@/server/auth/session-core";
 import { isClusterNodeOnline, minPositiveUptime, weightedCpuRatio } from "@/lib/cluster-metrics";
+import type { ConnectionState } from "@/lib/types";
 import type { GuestListItem, ProxmoxResource } from "@/server/proxmox/types";
 
 export type HostOverview = {
   id: string;
   name: string;
   url: string;
-  connectionState: string;
+  connectionState: ConnectionState;
   proxmoxVersion: string | null;
   lastError: string | null;
   clusterName: string | null;
@@ -36,7 +37,7 @@ function hostShell(
     id: string;
     name: string;
     url: string;
-    connectionState: string;
+    connectionState: ConnectionState;
     proxmoxVersion: string | null;
     lastError: string | null;
     clusterName: string | null;

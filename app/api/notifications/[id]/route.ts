@@ -5,6 +5,7 @@ import { apiRoute } from "@/server/http/api-route";
 import { json } from "@/server/http/respond";
 import { NotFoundError } from "@/lib/errors";
 import { eventsFromConfig, eventsSeenFromConfig, eventsWithNewTopics, NOTIFICATION_TOPICS, configWithEvents } from "@/lib/notification-topics";
+import { assertSafeWebhookUrl } from "@/lib/webhook-url";
 
 const patchSchema = z.object({
   name: z.string().min(1).optional(),
@@ -24,7 +25,7 @@ export const PATCH = apiRoute("notifications.update", async (req, _session, para
     config = {};
   }
   config = configWithEvents(config, body.events);
-  if (body.url) config.url = body.url;
+  if (body.url) config.url = assertSafeWebhookUrl(body.url);
   const channel = await prisma.notificationChannel.update({
     where: { id: existing.id },
     data: {

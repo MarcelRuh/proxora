@@ -52,6 +52,7 @@ export const GuestTable = memo(function GuestTable({
     },
   };
   const qc = useQueryClient();
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const [tag, setTag] = useState("all");
@@ -76,6 +77,8 @@ export const GuestTable = memo(function GuestTable({
 
   async function guestAction(hid: string, node: string, vmid: number, action: string, row: "vm" | "lxc", extra: Record<string, unknown> = {}) {
     const permPath = row === "vm" ? "vms" : "lxc";
+    const id = `${hid}:${vmid}`;
+    setBusyId(id);
     try {
       await api(`/api/hosts/${hid}/${permPath}/${node}/${vmid}`, {
         method: "POST",
@@ -86,6 +89,8 @@ export const GuestTable = memo(function GuestTable({
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.failed"));
       throw err;
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -159,6 +164,9 @@ export const GuestTable = memo(function GuestTable({
                 const kindLabel = row === "vm" ? "VM" : "LXC";
                 const detailBase = row === "vm" ? "vms" : "containers";
                 const rowTags = parseGuestTags(g.tags);
+                const running = g.status === "running";
+                const stopped = g.status === "stopped";
+                const rowBusy = busyId === `${hid}:${g.vmid}`;
                 return (
                   <tr key={`${row}-${hid}-${g.node}-${g.vmid}`} className="border-t border-border">
                     <td className="px-3 py-2 font-mono">{g.vmid}</td>
@@ -211,17 +219,17 @@ export const GuestTable = memo(function GuestTable({
                     <td className="px-3 py-2">
                       <div className="flex gap-1">
                         {perms.start ? (
-                          <Button size="icon" variant="ghost" title={t("guest.start")} onClick={() => void guestAction(hid, g.node, g.vmid, "start", row)}>
+                          <Button size="icon" variant="ghost" title={t("guest.start")} disabled={!stopped || rowBusy} onClick={() => void guestAction(hid, g.node, g.vmid, "start", row)}>
                             <Play className="h-4 w-4" />
                           </Button>
                         ) : null}
                         {perms.shutdown ? (
-                          <Button size="icon" variant="ghost" title={t("guest.shutdown")} onClick={() => void guestAction(hid, g.node, g.vmid, "shutdown", row)}>
+                          <Button size="icon" variant="ghost" title={t("guest.shutdown")} disabled={!running || rowBusy} onClick={() => void guestAction(hid, g.node, g.vmid, "shutdown", row)}>
                             <Square className="h-4 w-4" />
                           </Button>
                         ) : null}
                         {perms.reboot ? (
-                          <Button size="icon" variant="ghost" title={t("guest.reboot")} onClick={() => void guestAction(hid, g.node, g.vmid, "reboot", row)}>
+                          <Button size="icon" variant="ghost" title={t("guest.reboot")} disabled={!running || rowBusy} onClick={() => void guestAction(hid, g.node, g.vmid, "reboot", row)}>
                             <RotateCcw className="h-4 w-4" />
                           </Button>
                         ) : null}
@@ -231,6 +239,7 @@ export const GuestTable = memo(function GuestTable({
                             variant="ghost"
                             title={t("guest.createSnapshot")}
                             aria-label={t("guest.createSnapshot")}
+                            disabled={rowBusy}
                             onClick={() =>
                               void guestAction(hid, g.node, g.vmid, "snapshot", row, { snapname: `snap-${Date.now()}` })
                             }
@@ -253,7 +262,7 @@ export const GuestTable = memo(function GuestTable({
                             destructive
                             onConfirm={() => guestAction(hid, g.node, g.vmid, "delete", row)}
                           >
-                            <Button size="sm" variant="destructive">
+                            <Button size="sm" variant="destructive" disabled={rowBusy}>
                               {t("guest.delete")}
                             </Button>
                           </ConfirmAction>

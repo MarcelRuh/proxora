@@ -14,6 +14,7 @@ export {
   canAccessHost,
   createSession,
   destroySession,
+  destroyUserSessions,
   filterGuestsForUser,
   getSessionFromToken,
   hashPassword,

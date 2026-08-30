@@ -12,6 +12,7 @@ import { ProxmoxTaskProgress } from "@/components/backups/task-progress";
 import { api } from "@/lib/api";
 import { isFailedTaskExit } from "@/lib/backup-tasks";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { useCan } from "@/components/auth/session-user";
 import {
   filenameFromUrl,
   isoVolid,
@@ -46,6 +47,7 @@ type Job = {
 
 export function IsoImagePanel({ hostId }: { hostId: string }) {
   const { t } = useI18n();
+  const canDelete = useCan("storage.delete");
   const [node, setNode] = useState("");
   const [storage, setStorage] = useState("");
   const [query, setQuery] = useState("");
@@ -124,9 +126,11 @@ export function IsoImagePanel({ hostId }: { hostId: string }) {
       return;
     }
     void (async () => {
-      const oldFiles = job.replaceVolids.filter(
-        (volid) => !volid.endsWith(`/${job.filename}`) && !volid.endsWith(job.filename),
-      );
+      const oldFiles = canDelete
+        ? job.replaceVolids.filter(
+            (volid) => !volid.endsWith(`/${job.filename}`) && !volid.endsWith(job.filename),
+          )
+        : [];
       for (const volid of oldFiles) {
         try {
           await api(`/api/hosts/${hostId}/isos`, {
@@ -367,7 +371,7 @@ export function IsoImagePanel({ hostId }: { hostId: string }) {
                               {t("tmpl.downloadAction")}
                             </Button>
                           ) : null}
-                          {row.installedFilename ? (
+                          {row.installedFilename && canDelete ? (
                             <ConfirmAction
                               title={t("iso.deleteTitle")}
                               description={

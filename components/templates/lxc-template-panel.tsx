@@ -12,6 +12,7 @@ import { ProxmoxTaskProgress } from "@/components/backups/task-progress";
 import { api } from "@/lib/api";
 import { isFailedTaskExit } from "@/lib/backup-tasks";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { useCan } from "@/components/auth/session-user";
 import { groupTemplatePackages, vztmplVolid, type CatalogTemplate, type TemplatePackageRow } from "@/lib/lxc-templates";
 import { formatVolumeUsers, usersForVolids, type VolumeUser } from "@/lib/volume-usage";
 
@@ -42,6 +43,7 @@ type Job = {
 
 export function LxcTemplatePanel({ hostId }: { hostId: string }) {
   const { t } = useI18n();
+  const canDelete = useCan("storage.delete");
   const [node, setNode] = useState("");
   const [storage, setStorage] = useState("");
   const [query, setQuery] = useState("");
@@ -125,7 +127,9 @@ export function LxcTemplatePanel({ hostId }: { hostId: string }) {
       return;
     }
     void (async () => {
-      const oldFiles = job.replaceVolids.filter((volid) => !volid.endsWith(`/${job.template}`) && !volid.endsWith(job.template));
+      const oldFiles = canDelete
+        ? job.replaceVolids.filter((volid) => !volid.endsWith(`/${job.template}`) && !volid.endsWith(job.template))
+        : [];
       for (const volid of oldFiles) {
         try {
           await api(`/api/hosts/${hostId}/templates`, {
@@ -332,7 +336,7 @@ export function LxcTemplatePanel({ hostId }: { hostId: string }) {
                             {t("tmpl.downloadAction")}
                           </Button>
                         ) : null}
-                        {row.installedVersion ? (
+                        {row.installedVersion && canDelete ? (
                           <ConfirmAction
                             title={t("tmpl.deleteTitle")}
                             description={

@@ -4,6 +4,7 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { sanitizePermissions } from "@/lib/permissions";
 import { hashPassword } from "@/lib/password";
 import { parseGuestKind } from "@/lib/guest-scope";
+import { destroyUserSessions } from "@/server/auth/session-core";
 
 const guestScopeSchema = z.object({
   hostId: z.string().min(1),
@@ -107,6 +108,7 @@ export async function updateUser(id: string, input: z.infer<typeof updateUserSch
     where: { id },
     data,
   });
+  if (input.password) await destroyUserSessions(id);
   if (input.hostIds) {
     await prisma.userHostAccess.deleteMany({ where: { userId: id } });
     if (input.hostIds.length) {

@@ -139,7 +139,7 @@ export default function DashboardPage() {
                     <p className="font-medium">{h.name}</p>
                     <p className="text-xs text-muted-foreground">Proxmox VE {h.proxmoxVersion ?? t("dashboard.unknown")}</p>
                   </div>
-                  <HostStateBadge state={h.connectionState as never} />
+                  <HostStateBadge state={h.connectionState} />
                 </div>
                 {h.connectionState === "ONLINE" ? (
                   <div className="grid gap-2 sm:grid-cols-3">

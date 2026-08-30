@@ -5,6 +5,7 @@ import {
   isoVersionFromFilename,
   isoVolid,
   isHttpUrl,
+  isIsoContentVolid,
   isVirtioIso,
   isWindowsIso,
   mergeIsoCatalog,
@@ -22,6 +23,9 @@ describe("iso images", () => {
     expect(isoFamily("debian-13.6.0-amd64-netinst.iso")).toBe("debian-13-amd64-netinst");
     expect(isoVersionFromFilename("debian-13.6.0-amd64-netinst.iso")).toBe("13.6.0");
     expect(isoVersionFromFilename("ubuntu-24.04.3-live-server-amd64.iso")).toBe("24.04.3");
+    expect(isIsoContentVolid("local:iso/debian-13.6.0-amd64-netinst.iso")).toBe(true);
+    expect(isIsoContentVolid("local:backup/vzdump-qemu-100.vma.zst")).toBe(false);
+    expect(isIsoContentVolid("local:iso/../backup/secret.iso")).toBe(false);
   });
 
   it("parses filenames from download URLs", () => {

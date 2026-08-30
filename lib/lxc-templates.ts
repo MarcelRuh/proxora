@@ -36,6 +36,13 @@ export function vztmplVolid(storage: string, filename: string): string {
   return `${storage}:vztmpl/${filename}`;
 }
 
+export function isVztmplContentVolid(volid: string): boolean {
+  const raw = volid.trim();
+  if (!raw || raw.includes("..")) return false;
+  const lower = raw.toLowerCase();
+  return lower.includes(":vztmpl/") || lower.includes("/vztmpl/");
+}
+
 export function storageContentVolid(row: Record<string, unknown> | null | undefined): string {
   if (!row) return "";
   const volid = String(row.volid ?? "").trim();

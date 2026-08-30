@@ -5,11 +5,12 @@ import { clientIp } from "@/server/auth/session";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
-import { ValidationError } from "@/lib/errors";
+import { ForbiddenError, ValidationError } from "@/lib/errors";
 import { parseBackupVolid } from "@/lib/backup";
-import { mergeTemplateCatalog, normalizeAplTemplate, vztmplVolid } from "@/lib/lxc-templates";
+import { isVztmplContentVolid, mergeTemplateCatalog, normalizeAplTemplate, vztmplVolid } from "@/lib/lxc-templates";
 import { collectVztmplVolumes } from "@/server/services/lxc-template-catalog";
 import { collectVolumeUsers } from "@/server/services/volume-usage";
+import { hasPermission } from "@/lib/permissions";
 
 export const GET = apiRoute("lxc.create", async (req, session, params) => {
   const nodeParam = new URL(req.url).searchParams.get("node")?.trim() || undefined;
@@ -54,13 +55,16 @@ const deleteSchema = z.object({
   volid: z.string().min(1, "Volume fehlt"),
 });
 
-export const POST = apiRoute("lxc.create", async (req, session, params) => {
+export const POST = apiRoute(["lxc.create", "storage.delete"], async (req, session, params) => {
   const raw = await req.json();
   const action = raw && typeof raw === "object" && "action" in raw && raw.action === "delete" ? "delete" : "download";
   if (action === "delete") {
+    if (!hasPermission(session.user.role.permissions, "storage.delete")) throw new ForbiddenError();
     const body = deleteSchema.parse(raw);
     const parsed = parseBackupVolid(body.volid);
-    if (!parsed.storage || !parsed.volume) throw new ValidationError("Ungültiges Template-Volume");
+    if (!parsed.storage || !parsed.volume || !isVztmplContentVolid(body.volid)) {
+      throw new ValidationError("Ungültiges Template-Volume");
+    }
     await withHostClient(params.id, session.user, async (client, host) => {
       await client.storage.deleteContent(body.node, parsed.storage, parsed.volume);
       await writeAuditLog({
@@ -76,6 +80,7 @@ export const POST = apiRoute("lxc.create", async (req, session, params) => {
     return json({ ok: true, volid: body.volid });
   }
 
+  if (!hasPermission(session.user.role.permissions, "lxc.create")) throw new ForbiddenError();
   const body = downloadSchema.parse(raw);
   const result = await withHostClient(params.id, session.user, async (client, host) => {
     const upid = await client.nodes.downloadAppliance(body.node, body.storage, body.template);

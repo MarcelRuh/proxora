@@ -1,4 +1,5 @@
 import { AppError, ValidationError } from "@/lib/errors";
+import { assertSafeWebhookUrl } from "@/lib/webhook-url";
 import {
   buildDiscordWebhookPayload,
   discordErrorMessage,
@@ -46,7 +47,7 @@ export const discordProvider: NotificationProvider = {
     if (!url) return;
     let endpoint: string;
     try {
-      endpoint = discordWaitUrl(url);
+      endpoint = discordWaitUrl(assertSafeWebhookUrl(url));
     } catch {
       throw new ValidationError("Invalid webhook URL");
     }
@@ -59,7 +60,7 @@ export const webhookProvider: NotificationProvider = {
   async send(event, config) {
     const url = String(config.url ?? "").trim();
     if (!url) return;
-    await postJson(url, event);
+    await postJson(assertSafeWebhookUrl(url), event);
   },
 };
 

@@ -28,6 +28,7 @@ export function CloneDialog({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [newid, setNewid] = useState(String(vmid + 1));
+  const [idTouched, setIdTouched] = useState(false);
   const [cloneName, setCloneName] = useState(`${name}-clone`);
   const { data } = useQuery({
     queryKey: ["nextid", hostId],
@@ -37,8 +38,14 @@ export function CloneDialog({
   });
 
   useEffect(() => {
-    if (data?.nextid) setNewid(String(data.nextid));
-  }, [data?.nextid]);
+    if (!open) return;
+    setIdTouched(false);
+    setNewid(String(vmid + 1));
+  }, [open, vmid]);
+
+  useEffect(() => {
+    if (data?.nextid && !idTouched) setNewid(String(data.nextid));
+  }, [data?.nextid, idTouched]);
 
   useEffect(() => {
     setCloneName(`${name}-clone`);
@@ -76,7 +83,13 @@ export function CloneDialog({
           <div className="grid gap-3">
             <div className="space-y-1">
               <Label>{t("guest.cloneId")}</Label>
-              <Input value={newid} onChange={(e) => setNewid(e.target.value)} />
+              <Input
+                value={newid}
+                onChange={(e) => {
+                  setIdTouched(true);
+                  setNewid(e.target.value);
+                }}
+              />
             </div>
             <div className="space-y-1">
               <Label>{t("guest.cloneName")}</Label>

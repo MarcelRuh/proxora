@@ -17,7 +17,7 @@ export default function ContainersPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        kicker={t("vms.kicker")}
+        kicker={t("lxc.kicker")}
         title={t("lxc.title")}
         description={t("lxc.description")}
         actions={

@@ -7,6 +7,7 @@ import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { prisma } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { ValidationError } from "@/lib/errors";
+import { destroyUserSessions } from "@/server/auth/session";
 
 const schema = z.object({
   currentPassword: z.string().min(1),
@@ -23,6 +24,7 @@ export const POST = apiRoute(null, async (req, session) => {
     where: { id: user.id },
     data: { passwordHash: await hashPassword(body.newPassword) },
   });
+  await destroyUserSessions(user.id, session.id);
   await writeAuditLog({
     userId: session.user.id,
     ip: await clientIp(),

@@ -51,7 +51,7 @@ export type SessionUser = {
 export type DashboardHost = {
   id: string;
   name: string;
-  connectionState: string;
+  connectionState: ConnectionState;
   proxmoxVersion: string | null;
   cpu?: number;
   cpuCores?: number;

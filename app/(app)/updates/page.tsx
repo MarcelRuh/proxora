@@ -11,6 +11,7 @@ import { WebConsole } from "@/components/console/web-console";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
+import { QueryGate } from "@/components/layout/query-gate";
 import { useI18n } from "@/components/i18n/locale-provider";
 
 type AptPackage = { Package: string; Version?: string; OldVersion?: string };
@@ -22,10 +23,10 @@ type HostUpdates = {
 };
 
 export default function UpdatesPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const qc = useQueryClient();
   const [shell, setShell] = useState<{ hostId: string; node: string; name: string } | null>(null);
-  const { data: hosts } = useQuery({
+  const { data: hosts, error: hostsError, refetch: refetchHosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
   });
@@ -53,7 +54,7 @@ export default function UpdatesPage() {
               host: h,
               version: h.proxmoxVersion,
               updates: [],
-              error: e instanceof Error ? e.message : "Aktualisierungsliste fehlgeschlagen",
+              error: e instanceof Error ? e.message : t("updates.listFailed"),
             };
           }
         }),
@@ -68,7 +69,7 @@ export default function UpdatesPage() {
         body: JSON.stringify({ action: "check", node }),
       }),
     onSuccess: () => {
-      toast.success("Paketliste aktualisiert");
+      toast.success(t("updates.packagesUpdatedOne"));
       void qc.invalidateQueries({ queryKey: ["update-details"] });
       void qc.invalidateQueries({ queryKey: ["apt-summary"] });
       void qc.invalidateQueries({ queryKey: ["hosts"] });
@@ -88,10 +89,10 @@ export default function UpdatesPage() {
         ),
       );
       const failed = results.filter((r) => r.status === "rejected").length;
-      if (failed) throw new Error(`${failed} Host(s) konnten die Paketliste nicht aktualisieren`);
+      if (failed) throw new Error(t("updates.checkAllFailed", { n: failed }));
     },
     onSuccess: () => {
-      toast.success("Paketlisten aktualisiert");
+      toast.success(t("updates.packagesUpdated"));
       void qc.invalidateQueries({ queryKey: ["update-details"] });
       void qc.invalidateQueries({ queryKey: ["apt-summary"] });
       void qc.invalidateQueries({ queryKey: ["hosts"] });
@@ -104,14 +105,14 @@ export default function UpdatesPage() {
       <PageHeader
         kicker={t("page.maintenance")}
         title={t("updates.title")}
-        description="Paketlisten werden alle 3 Stunden geprüft. Bei neuen Updates kommt eine Meldung. Upgrade öffnet die Node-Shell wie in der Proxmox-GUI."
+        description={t("updates.description")}
         actions={
           <Button
             variant="outline"
             disabled={checkAll.isPending || !hosts?.hosts.length}
             onClick={() => checkAll.mutate()}
           >
-            {checkAll.isPending ? "Aktualisiere…" : "Alle Paketlisten prüfen"}
+            {checkAll.isPending ? t("updates.checkingAll") : t("updates.checkAll")}
           </Button>
         }
       />
@@ -119,11 +120,8 @@ export default function UpdatesPage() {
       {shell ? (
         <Card>
           <CardHeader>
-            <CardTitle>Upgrade-Konsole · {shell.name}</CardTitle>
-            <CardDescription>
-              Interaktives Upgrade auf {shell.node}. Nach Abschluss die Konsole schließen — die Paketliste wird dann
-              automatisch neu geprüft. Benötigt root@pam, wie in Proxmox selbst.
-            </CardDescription>
+            <CardTitle>{t("updates.consoleTitle", { name: shell.name })}</CardTitle>
+            <CardDescription>{t("updates.consoleBody", { node: shell.node })}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <WebConsole hostId={shell.hostId} node={shell.node} kind="node" cmd="upgrade" />
@@ -138,91 +136,97 @@ export default function UpdatesPage() {
                 checkOne.mutate({ hostId, node });
               }}
             >
-              {checkOne.isPending ? "Prüfe Paketliste…" : "Konsole schließen"}
+              {checkOne.isPending ? t("updates.checkingList") : t("updates.closeConsole")}
             </Button>
           </CardContent>
         </Card>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {(details ?? []).map((row) => {
-          const count = row.updates.reduce((acc, n) => acc + n.count, 0);
-          const checking = checkOne.isPending && checkOne.variables?.hostId === row.host.id;
-          return (
-            <Card key={row.host.id}>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>{row.host.name}</CardTitle>
-                <Badge variant={row.error ? "danger" : count > 0 ? "warning" : "success"}>
-                  {row.error ? "Fehler" : `${count} Updates`}
-                </Badge>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  Version: {row.version ?? "unbekannt"}
-                  {row.host.aptCheckedAt
-                    ? ` · Zuletzt geprüft ${new Date(row.host.aptCheckedAt).toLocaleString("de-DE")}`
-                    : " · Noch nicht automatisch geprüft"}
-                </p>
-                {row.error ? <p className="text-sm text-destructive">{row.error}</p> : null}
-                <ul className="max-h-32 overflow-auto text-xs text-muted-foreground">
-                  {row.updates.flatMap((n) =>
-                    n.packages.slice(0, 12).map((p) => (
-                      <li key={`${n.node}-${p.Package}`}>
-                        {p.Package} {p.OldVersion ? `${p.OldVersion} → ` : ""}
-                        {p.Version}
-                      </li>
-                    )),
-                  )}
-                </ul>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={checking || checkAll.isPending}
-                    onClick={() => checkOne.mutate({ hostId: row.host.id })}
-                  >
-                    {checking ? "Prüfe…" : "Paketliste prüfen"}
-                  </Button>
-                  {(row.updates.length ? row.updates : [{ node: "" }]).map((n) => (
-                    <ConfirmAction
-                      key={n.node || row.host.id}
-                      title={`${row.host.name}${n.node ? ` (${n.node})` : ""} upgraden?`}
-                      description="Öffnet die Proxmox-Upgrade-Shell (apt dist-upgrade). Du bestätigst dort selbst. Ein stilles API-Upgrade gibt es in Proxmox VE nicht."
-                      actionLabel="Upgrade starten"
-                      destructive
-                      onConfirm={async () => {
-                        const r = await api<{ mode: "console"; node: string }>(`/api/hosts/${row.host.id}/updates`, {
-                          method: "POST",
-                          body: JSON.stringify({
-                            action: "upgrade",
-                            node: n.node || undefined,
-                            confirm: true,
-                          }),
-                        });
-                        setShell({ hostId: row.host.id, node: r.node, name: row.host.name });
-                        toast.success("Upgrade-Konsole geöffnet");
-                      }}
+      <QueryGate isLoading={false} error={hostsError} onRetry={() => void refetchHosts()}>
+        <div className="grid gap-4 md:grid-cols-2">
+          {(details ?? []).map((row) => {
+            const count = row.updates.reduce((acc, n) => acc + n.count, 0);
+            const checking = checkOne.isPending && checkOne.variables?.hostId === row.host.id;
+            const checkedAt = row.host.aptCheckedAt
+              ? new Date(row.host.aptCheckedAt).toLocaleString(locale === "en" ? "en-GB" : "de-DE")
+              : null;
+            return (
+              <Card key={row.host.id}>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle>{row.host.name}</CardTitle>
+                  <Badge variant={row.error ? "danger" : count > 0 ? "warning" : "success"}>
+                    {row.error ? t("updates.error") : t("updates.count", { n: count })}
+                  </Badge>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    {t("updates.version", { version: row.version ?? t("updates.unknown") })}
+                    {checkedAt ? ` · ${t("updates.lastChecked", { time: checkedAt })}` : ` · ${t("updates.neverChecked")}`}
+                  </p>
+                  {row.error ? <p className="text-sm text-destructive">{row.error}</p> : null}
+                  <ul className="max-h-32 overflow-auto text-xs text-muted-foreground">
+                    {row.updates.flatMap((n) =>
+                      n.packages.slice(0, 12).map((p) => (
+                        <li key={`${n.node}-${p.Package}`}>
+                          {p.Package} {p.OldVersion ? `${p.OldVersion} → ` : ""}
+                          {p.Version}
+                        </li>
+                      )),
+                    )}
+                  </ul>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={checking || checkAll.isPending}
+                      onClick={() => checkOne.mutate({ hostId: row.host.id })}
                     >
-                      <Button size="sm">Upgrade {row.updates.length > 1 ? n.node : ""}</Button>
-                    </ConfirmAction>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-      {isFetching && !details ? <p className="text-sm text-muted-foreground">Lade Update-Listen…</p> : null}
+                      {checking ? t("updates.checking") : t("updates.checkOne")}
+                    </Button>
+                    {(row.updates.length ? row.updates : [{ node: "" }]).map((n) => (
+                      <ConfirmAction
+                        key={n.node || row.host.id}
+                        title={t("updates.upgradeTitle", {
+                          name: row.host.name,
+                          node: n.node ? ` (${n.node})` : "",
+                        })}
+                        description={t("updates.upgradeBody")}
+                        actionLabel={t("updates.upgradeStart")}
+                        destructive
+                        onConfirm={async () => {
+                          const r = await api<{ mode: "console"; node: string }>(`/api/hosts/${row.host.id}/updates`, {
+                            method: "POST",
+                            body: JSON.stringify({
+                              action: "upgrade",
+                              node: n.node || undefined,
+                              confirm: true,
+                            }),
+                          });
+                          setShell({ hostId: row.host.id, node: r.node, name: row.host.name });
+                          toast.success(t("updates.consoleOpened"));
+                        }}
+                      >
+                        <Button size="sm">{t("updates.upgrade", { node: row.updates.length > 1 ? n.node : "" })}</Button>
+                      </ConfirmAction>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+        {isFetching && !details ? <p className="text-sm text-muted-foreground">{t("updates.loading")}</p> : null}
+      </QueryGate>
 
       {(jobs?.jobs ?? []).length ? (
         <Card>
           <CardHeader>
-            <CardTitle>Frühere Update-Jobs</CardTitle>
+            <CardTitle>{t("updates.jobsTitle")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             {(jobs?.jobs ?? []).map((j) => (
               <div key={j.id} className="flex flex-wrap justify-between gap-2">
-                <span>{j.host?.name ?? "unbekannt"}</span>
+                <span>{j.host?.name ?? t("updates.unknown")}</span>
                 <div className="flex items-center gap-2">
                   {j.error ? <span className="text-xs text-destructive">{j.error}</span> : null}
                   <Badge variant={j.status === "FAILED" ? "danger" : j.status === "SUCCESS" ? "success" : "warning"}>

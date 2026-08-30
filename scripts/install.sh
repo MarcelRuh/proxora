@@ -97,12 +97,13 @@ if [[ ! -f "${INSTALL_DIR}/.env" ]]; then
   ADMIN_USER="${BOOTSTRAP_ADMIN_USERNAME:-admin}"
   ADMIN_PW="${BOOTSTRAP_ADMIN_PASSWORD:-$(rand_pw)}"
   ADMIN_EMAIL="${BOOTSTRAP_ADMIN_EMAIL:-admin@localhost}"
+  PG_PW="${POSTGRES_PASSWORD:-$(rand_pw)}"
   as_root tee "${INSTALL_DIR}/.env" >/dev/null <<EOF
 APP_URL=http://${LAN_IP}:3000
 NODE_ENV=production
-DATABASE_URL=postgresql://proxora:proxora@postgres:5432/proxora?schema=public
+DATABASE_URL=postgresql://proxora:${PG_PW}@postgres:5432/proxora?schema=public
 POSTGRES_USER=proxora
-POSTGRES_PASSWORD=proxora
+POSTGRES_PASSWORD=${PG_PW}
 POSTGRES_DB=proxora
 ENCRYPTION_KEY=$(rand)
 SESSION_SECRET=$(rand)

@@ -180,7 +180,7 @@ export default function CreateLxcPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <PageHeader kicker={t("vms.kicker")} title={t("lxc.create")} />
+      <PageHeader kicker={t("lxc.kicker")} title={t("lxc.create")} />
       <Card>
         <CardContent className="grid gap-3 pt-5 md:grid-cols-2">
           <label className="text-sm md:col-span-2">

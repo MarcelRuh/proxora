@@ -10,6 +10,7 @@ import { verifyPassword } from "@/lib/password";
 import { ValidationError } from "@/lib/errors";
 import { generateTotpSecret, totpOtpauthUrl, verifyTotp } from "@/lib/totp";
 import QRCode from "qrcode";
+import { destroyUserSessions } from "@/server/auth/session";
 
 const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("begin") }),
@@ -71,6 +72,7 @@ export const POST = apiRoute(null, async (req, session) => {
     where: { id: user.id },
     data: { totpEnabled: false, totpSecret: null },
   });
+  await destroyUserSessions(user.id, session.id);
   await writeAuditLog({
     userId: session.user.id,
     ip: await clientIp(),

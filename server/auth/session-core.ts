@@ -51,6 +51,12 @@ export async function destroySession(token: string) {
   await prisma.session.deleteMany({ where: { tokenHash: sha256(token) } });
 }
 
+export async function destroyUserSessions(userId: string, exceptId?: string) {
+  await prisma.session.deleteMany({
+    where: exceptId ? { userId, id: { not: exceptId } } : { userId },
+  });
+}
+
 export async function getSessionFromToken(token: string | undefined | null): Promise<AuthSession | null> {
   if (!token) return null;
   await ensureSystemRoles();

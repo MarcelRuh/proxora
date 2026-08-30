@@ -4,6 +4,7 @@ import {
   groupTemplatePackages,
   headlineFromPackage,
   isLxcAppliance,
+  isVztmplContentVolid,
   mergeTemplateCatalog,
   normalizeAplTemplate,
   parseVztmplFilename,
@@ -20,6 +21,9 @@ describe("lxc templates", () => {
     expect(volidFilename("local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst")).toBe(
       "debian-13-standard_13.1-2_amd64.tar.zst",
     );
+    expect(isVztmplContentVolid("local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst")).toBe(true);
+    expect(isVztmplContentVolid("local:backup/vzdump-lxc-100.tar.zst")).toBe(false);
+    expect(isVztmplContentVolid("local:vztmpl/../backup/vzdump-lxc-100.tar.zst")).toBe(false);
   });
 
   it("parses debian 13.1-2 filenames", () => {

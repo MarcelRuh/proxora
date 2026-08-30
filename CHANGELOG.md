@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.0.88] – 2026-08-30
+
+### Security
+
+- ISO/template delete requires `storage.delete` and only accepts `iso/` / `vztmpl/` volids.
+- Password change and TOTP disable invalidate other sessions.
+- Notification webhooks reject loopback, link-local, and RFC1918 URLs.
+- Settings API only exposes `guest-ip`; watch-state keys are no longer writable there.
+- New installs get a random PostgreSQL password instead of `proxora`.
+
+### Changed
+
+- Guest table start/shutdown/reboot follow guest status; config refetch no longer overwrites unsaved edits.
+- Clone dialog keeps a manually entered VMID.
+- Updates and audit pages are translated (DE/EN) with loading and empty states.
+
 ## [1.0.87] – 2026-08-30
 
 ### Changed
