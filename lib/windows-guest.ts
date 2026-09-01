@@ -10,7 +10,6 @@ export const WINDOWS_GUEST_HARDWARE = {
   agent: "1",
   tablet: "1",
   onboot: "1",
-  keyboard: "de",
 } as const;
 
 export function withNetFirewall(spec: string, enabled = true): string {
@@ -33,7 +32,6 @@ export function applyWindowsGuestHardware(config: Record<string, string>): Recor
   next.agent = WINDOWS_GUEST_HARDWARE.agent;
   next.tablet = WINDOWS_GUEST_HARDWARE.tablet;
   next.onboot = WINDOWS_GUEST_HARDWARE.onboot;
-  next.keyboard = WINDOWS_GUEST_HARDWARE.keyboard;
   if (next.vga?.split(",")[0]?.trim().toLowerCase() === "none") next.vga = "std";
   if (next.net0) next.net0 = withNetFirewall(next.net0, true);
   return next;

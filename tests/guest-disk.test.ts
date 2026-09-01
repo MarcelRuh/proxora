@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { attachVmAgentDisks, clearVmDiskCache, vmDiskFromAgent } from "@/server/services/guest-disk";
+import { applyCachedVmDisks, attachVmAgentDisks, clearVmDiskCache, vmDiskFromAgent } from "@/server/services/guest-disk";
 import type { ProxmoxClient } from "@/server/proxmox/client";
 import type { GuestListItem } from "@/server/proxmox/types";
 
@@ -60,6 +60,19 @@ describe("attachVmAgentDisks", () => {
     expect(first[1]?.maxdisk).toBe(0);
     const second = await attachVmAgentDisks(client, [guest({ vmid: 100 })]);
     expect(second[0]?.maxdisk).toBe(40 * GB);
+    expect(calls.n).toBe(1);
+  });
+
+  it("applies cache without calling the agent", async () => {
+    const calls = { n: 0 };
+    const client = clientWithFs(
+      { result: [{ mountpoint: "/", type: "ext4", "used-bytes": 4 * GB, "total-bytes": 40 * GB }] },
+      calls,
+    );
+    await vmDiskFromAgent(client, "pve", 100);
+    expect(calls.n).toBe(1);
+    const [vm] = applyCachedVmDisks(client, [guest({ vmid: 100 })]);
+    expect(vm?.maxdisk).toBe(40 * GB);
     expect(calls.n).toBe(1);
   });
 

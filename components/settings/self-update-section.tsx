@@ -79,7 +79,7 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
   const { data: status } = useQuery({
     queryKey: ["self-update"],
     queryFn: () => api<SelfUpdateStatus>("/api/system/self-update"),
-    refetchInterval: (q) => (busy || q.state.data?.updating ? 1500 : 30_000),
+    refetchInterval: (q) => (busy || q.state.data?.updating ? 1500 : 60_000),
   });
 
   const progress = status?.progress ?? optimisticProgress;

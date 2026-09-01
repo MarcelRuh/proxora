@@ -310,24 +310,8 @@ select optgroup {
   background: #020617;
 }
 
-.vnc-console-frame {
-  position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  overflow: auto;
-}
-
 .vnc-console-screen {
   position: relative;
-  width: 100%;
-  height: 100%;
-}
-
-.vnc-console-screen[data-view="fit"],
-.vnc-console-screen[data-view="native"] {
-  flex: 1 1 auto;
   width: 100%;
   height: 100%;
 }

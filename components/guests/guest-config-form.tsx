@@ -12,7 +12,6 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import type { Locale } from "@/lib/i18n/messages";
 import { applyWindowsGuestHardware } from "@/lib/windows-guest";
 import { isWindowsOstype } from "@/lib/iso-images";
-import { QEMU_KEYBOARD_LAYOUTS } from "@/lib/guest-console";
 
 const SKIP = new Set(["digest"]);
 
@@ -48,7 +47,7 @@ const NUMBER_KEYS = new Set([
 
 const CPU_KEYS = ["cores", "sockets", "vcpus", "memory", "balloon", "swap"];
 const META_KEYS = ["name", "hostname", "ostype", "tags", "description"];
-const HARDWARE_KEYS = ["cpu", "bios", "machine", "vga", "scsihw", "keyboard"];
+const HARDWARE_KEYS = ["cpu", "bios", "machine", "vga", "scsihw"];
 /** Keep in form state (so save does not delete them) but do not show. */
 const HIDDEN_UI_KEYS = new Set(["cpulimit", "cpuunits"]);
 
@@ -283,16 +282,6 @@ export function GuestConfigForm({
               ]}
             />
             <SelectField
-              name="keyboard"
-              value={form.keyboard ?? ""}
-              hint={t("config.keyboardHint")}
-              onChange={(v) => (v ? setField("keyboard", v) : removeField("keyboard"))}
-              options={[
-                { value: "", label: t("config.keyboardDefault") },
-                ...QEMU_KEYBOARD_LAYOUTS.map((layout) => ({ value: layout.value, label: layout.label })),
-              ]}
-            />
-            <SelectField
               name="scsihw"
               value={form.scsihw ?? ""}
               onChange={(v) => (v ? setField("scsihw", v) : removeField("scsihw"))}
@@ -497,7 +486,6 @@ function labelFor(key: string, locale: Locale) {
     bios: "BIOS",
     machine: "Machine",
     vga: "VGA",
-    keyboard: "Tastatur",
     scsihw: "SCSI-Controller",
     memory: "RAM",
     hostDir: "Host-Pfad",
@@ -528,7 +516,6 @@ function labelFor(key: string, locale: Locale) {
     bios: "BIOS",
     machine: "Machine",
     vga: "VGA",
-    keyboard: "Keyboard",
     scsihw: "SCSI controller",
     memory: "RAM",
     hostDir: "Host path",

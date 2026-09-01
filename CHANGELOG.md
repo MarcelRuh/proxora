@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.1.6] – 2026-09-01
+
+### Removed
+
+- VGA console resolution presets and QEMU keyboard layout selector.
+
+### Changed
+
+- Dashboard no longer waits on QEMU guest-agent disk probes; cached values are shown immediately and missing values fill in the background.
+- GitHub self-update checks are cached longer and skip extra git/SHA lookups when a release version is already known.
+
 ## [1.1.5] – 2026-09-01
 
 ### Fixed

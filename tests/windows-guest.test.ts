@@ -17,7 +17,6 @@ describe("windows guest hardware", () => {
     expect(next.agent).toBe("1");
     expect(next.tablet).toBe("1");
     expect(next.onboot).toBe("1");
-    expect(next.keyboard).toBe("de");
     expect(next.net0).toBe("virtio=BC:24:11:52:AA:71,bridge=vmbr0,firewall=1");
     expect(next.scsi0).toBe("apps:vm-243-disk-1,size=80G");
   });

@@ -160,7 +160,7 @@ export async function getSelfUpdateStatus(): Promise<SelfUpdateStatus> {
   } catch (error) {
     shaError = error instanceof Error ? error.message : String(error);
   }
-  if (!remoteRevision) {
+  if (!remoteRevision && !remoteVersion) {
     try {
       remoteRevision = await fetchGithubCommitSha(opts.repo, targetTag ?? opts.branch);
     } catch (error) {

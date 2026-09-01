@@ -23,6 +23,16 @@ export function clearVmDiskCache() {
   cache.clear();
 }
 
+/** Apply cached guest-agent usage without waiting on Proxmox. */
+export function applyCachedVmDisks(client: ProxmoxClient, vms: GuestListItem[]): GuestListItem[] {
+  return vms.map((vm) => {
+    if (vm.status !== "running" || !vm.node || !vm.vmid || vm.template) return vm;
+    const cached = peekVmDiskCache(client, vm.node, vm.vmid);
+    if (!cached) return vm;
+    return { ...vm, disk: cached.used, maxdisk: cached.total };
+  });
+}
+
 export async function vmDiskFromAgent(
   client: ProxmoxClient,
   node: string,

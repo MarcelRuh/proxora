@@ -67,16 +67,25 @@ export async function fetchGithubPackageVersion(repo: string, ref: string): Prom
   return json.version ?? null;
 }
 
+const CHANGELOG_CACHE_MS = 5 * 60_000;
+let changelogCache: { at: number; key: string; value: string | null } | null = null;
+
 export async function fetchGithubChangelog(
   repo: string,
   ref: string,
   currentVersion: string,
 ): Promise<string | null> {
+  const key = `${repo}:${ref}:${currentVersion}`;
+  if (changelogCache && changelogCache.key === key && Date.now() - changelogCache.at < CHANGELOG_CACHE_MS) {
+    return changelogCache.value;
+  }
   const url = `https://raw.githubusercontent.com/${repo}/${ref}/CHANGELOG.md`;
   const res = await fetch(url, { headers: { "User-Agent": "proxora-self-update" } });
   if (!res.ok) return null;
   const text = await res.text();
-  return extractNewerChangelog(text, currentVersion);
+  const value = extractNewerChangelog(text, currentVersion);
+  changelogCache = { at: Date.now(), key, value };
+  return value;
 }
 
 export function extractNewerChangelog(markdown: string, currentVersion: string): string {
@@ -180,18 +189,14 @@ async function fetchGithubLatestReleaseFromGit(repo: string): Promise<GithubRele
   }
 }
 
-const RELEASE_CACHE_MS = 60_000;
+const RELEASE_CACHE_MS = 5 * 60_000;
 let releaseCache: { at: number; repo: string; value: GithubRelease | null } | null = null;
 
 async function fetchGithubLatestReleaseUncached(repo: string): Promise<GithubRelease | null> {
-  const [fromHtml, fromGit] = await Promise.all([
-    fetchGithubLatestReleaseFromHtml(repo),
-    fetchGithubLatestReleaseFromGit(repo),
-  ]);
-  const candidates = [fromHtml, fromGit].filter((r): r is GithubRelease => Boolean(r));
-  const newestTag = pickLatestSemverTag(candidates.map((r) => r.tag));
-  const newest = candidates.find((r) => r.tag === newestTag) ?? null;
-  if (newest) return newest;
+  const fromHtml = await fetchGithubLatestReleaseFromHtml(repo);
+  if (fromHtml) return fromHtml;
+  const fromGit = await fetchGithubLatestReleaseFromGit(repo);
+  if (fromGit) return fromGit;
   const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, { headers: githubHeaders() });
   if (!res.ok) return null;
   return parseGithubRelease(await res.json());
