@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.1.7] – 2026-09-01
+
+### Added
+
+- Full-page host terminal (node shell) from the host list and host detail, including a node picker for clusters.
+
 ## [1.1.6] – 2026-09-01
 
 ### Removed

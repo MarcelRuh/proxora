@@ -22,6 +22,7 @@ export default function HostsPage() {
   const canCreate = useCan("hosts.create");
   const canDelete = useCan("hosts.delete");
   const canEdit = useCan("hosts.update") || useCan("hosts.credentials");
+  const canConsole = useCan("hosts.console");
   const qc = useQueryClient();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["hosts"],
@@ -68,6 +69,11 @@ export default function HostsPage() {
                     <Button size="sm" asChild>
                       <Link href={`/hosts/${host.id}`}>{t("hosts.open")}</Link>
                     </Button>
+                    {canConsole ? (
+                      <Button size="sm" variant="outline" asChild>
+                        <Link href={`/hosts/${host.id}/console`}>{t("hosts.terminal")}</Link>
+                      </Button>
+                    ) : null}
                     {canEdit ? (
                       <Button size="sm" variant="outline" onClick={() => setEditing(host)}>
                         {t("hosts.edit")}

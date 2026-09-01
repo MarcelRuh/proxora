@@ -6,6 +6,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Button } from "@/components/ui/button";
 import { Maximize2, Minus, Plus, RefreshCw } from "lucide-react";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { cn } from "@/lib/utils";
 
 type Props = {
   hostId: string;
@@ -13,9 +14,10 @@ type Props = {
   kind: "vm" | "lxc" | "node";
   vmid?: number;
   cmd?: "upgrade";
+  fill?: boolean;
 };
 
-export function WebConsole({ hostId, node, kind, vmid, cmd }: Props) {
+export function WebConsole({ hostId, node, kind, vmid, cmd, fill }: Props) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -136,7 +138,12 @@ export function WebConsole({ hostId, node, kind, vmid, cmd }: Props) {
           : t("guest.consoleDisconnected");
 
   return (
-    <div className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-[#020617]">
+    <div
+      className={cn(
+        "flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-[#020617]",
+        fill && "h-[min(calc(100dvh-11rem),880px)]",
+      )}
+    >
       <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2 text-xs text-slate-300">
         <span
           className={
@@ -146,7 +153,11 @@ export function WebConsole({ hostId, node, kind, vmid, cmd }: Props) {
           ● {statusLabel}
         </span>
         <span className="text-slate-500">
-          {cmd === "upgrade" ? "UPGRADE" : kind.toUpperCase()} {vmid ?? node} @ {node}
+          {cmd === "upgrade"
+            ? `UPGRADE ${node}`
+            : kind === "node"
+              ? `SHELL ${node}`
+              : `${kind.toUpperCase()} ${vmid ?? node} @ ${node}`}
         </span>
         {detail && status === "error" ? <span className="text-red-400">{detail}</span> : null}
         <div className="ml-auto flex items-center gap-1">

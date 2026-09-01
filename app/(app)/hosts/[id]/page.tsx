@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/misc";
 import { HostStateBadge, GuestStateBadge } from "@/components/status-badge";
 import { ConfirmAction } from "@/components/confirm-action";
-import { WebConsole } from "@/components/console/web-console";
 import { api } from "@/lib/api";
 import { formatUptime, percentage } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
@@ -39,7 +38,6 @@ export default function HostDetailPage() {
   const canReboot = useCan("hosts.reboot");
   const canShutdown = useCan("hosts.shutdown");
   const canEdit = useCan("hosts.update") || useCan("hosts.credentials");
-  const [consoleNode, setConsoleNode] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const { data, error, refetch, isLoading } = useQuery({
     queryKey: ["host", params.id],
@@ -101,8 +99,10 @@ export default function HostDetailPage() {
               </CardTitle>
               <div className="flex flex-wrap gap-2">
                 {canConsole ? (
-                  <Button size="sm" onClick={() => setConsoleNode(item.node)}>
-                    {t("guest.console")}
+                  <Button size="sm" asChild>
+                    <Link href={`/hosts/${params.id}/console?node=${encodeURIComponent(item.node)}`}>
+                      {t("hosts.terminal")}
+                    </Link>
                   </Button>
                 ) : null}
                 <Button size="sm" variant="outline" asChild>
@@ -150,7 +150,6 @@ export default function HostDetailPage() {
           </Card>
         );
       })}
-      {consoleNode && canConsole ? <WebConsole hostId={params.id} node={consoleNode} kind="node" /> : null}
       <Section title={t("nav.vms")} href="/vms" viewAll={t("hosts.viewAll")}>
         {(data?.vms ?? []).map((vm) => (
           <Row

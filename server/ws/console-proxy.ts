@@ -164,9 +164,10 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
     });
   } catch (error) {
     logger.error({ err: error }, "Failed to open console");
+    const message = error instanceof Error ? error.message : "Failed to open console";
     if (browser.readyState === WebSocket.OPEN) {
       try {
-        browser.send(JSON.stringify({ type: "status", status: "error", message: "Failed to open console" }));
+        browser.send(JSON.stringify({ type: "status", status: "error", message }));
       } catch {
         /* ignore */
       }
