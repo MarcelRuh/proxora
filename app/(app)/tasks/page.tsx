@@ -20,6 +20,7 @@ import {
   taskGuestHref,
   taskGuestLabel,
   taskRunState,
+  tasksPollIntervalMs,
   taskTypeLabel,
   type TaskKindGroup,
   type TaskStatusFilter,
@@ -67,7 +68,9 @@ export default function TasksPage() {
       );
       return rows.flat().sort((a, b) => b.starttime - a.starttime);
     },
-    refetchInterval: 10_000,
+    refetchInterval: (q) => tasksPollIntervalMs(q.state.data),
+    staleTime: 8_000,
+    placeholderData: (previous) => previous,
   });
 
   const [hostId, setHostId] = useState("all");

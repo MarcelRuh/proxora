@@ -78,7 +78,9 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const { data: live } = useQuery({
     queryKey: ["guest-live", kind, params.hostId, params.node, params.vmid],
     queryFn: () => api<Pick<GuestPayload, "status" | "agentDisk">>(`${path}?light=1`),
-    refetchInterval: 12_000,
+    refetchInterval: 15_000,
+    staleTime: 8_000,
+    placeholderData: (previous) => previous,
     enabled: Boolean(data),
   });
   const { data: hosts } = useQuery({

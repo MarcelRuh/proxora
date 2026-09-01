@@ -26,7 +26,9 @@ export default function AuditPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["audit"],
     queryFn: () => api<{ logs: Log[] }>("/api/audit"),
-    refetchInterval: 20_000,
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+    placeholderData: (previous) => previous,
   });
   const logs = data?.logs ?? [];
 

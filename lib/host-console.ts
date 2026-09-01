@@ -9,3 +9,19 @@ export function pickHostConsoleNode(
   const online = nodes.find((n) => n.online === "online" && n.node);
   return online?.node ?? names[0] ?? null;
 }
+
+export function isHostConsolePermissionError(message: string): boolean {
+  return /permission|forbidden|sys\.console|\b403\b/i.test(message);
+}
+
+export function consoleProxyErrorDetail(
+  kind: "vm" | "lxc" | "node",
+  parsed: { code?: string; message?: string },
+): { key: "guest.consoleSerialMissing" | "hosts.terminalPermission" } | { message: string } {
+  if (parsed.code === "no-serial") return { key: "guest.consoleSerialMissing" };
+  const message = (parsed.message ?? "").trim();
+  if (kind === "node" && isHostConsolePermissionError(message)) {
+    return { key: "hosts.terminalPermission" };
+  }
+  return { message };
+}

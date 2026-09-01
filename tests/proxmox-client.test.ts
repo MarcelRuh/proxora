@@ -91,24 +91,32 @@ describe("ProxmoxClient", () => {
     expect(cts[0]?.uptime).toBe(90);
   });
 
-  it("splits nodes and guests from one cluster/resources call", async () => {
-    vi.mocked(undiciFetch).mockResolvedValueOnce(
-      jsonResponse([
-        { type: "node", node: "pve1", status: "online", cpu: 0.2, maxcpu: 8, mem: 1, maxmem: 2, disk: 1, maxdisk: 4, uptime: 100 },
-        { type: "node", node: "pve2", status: "online", cpu: 0.4, maxcpu: 8, mem: 1, maxmem: 2, disk: 1, maxdisk: 4, uptime: 50 },
-        { type: "qemu", vmid: 100, name: "web", node: "pve1", status: "running" },
-        { type: "lxc", vmid: 200, name: "db", node: "pve2", status: "running", maxcpu: 2 },
-        { type: "storage", storage: "local" },
-      ]) as never,
-    );
+  it("loads inventory from filtered node and vm cluster/resources calls", async () => {
+    vi.mocked(undiciFetch)
+      .mockResolvedValueOnce(
+        jsonResponse([
+          { type: "node", node: "pve1", status: "online", cpu: 0.2, maxcpu: 8, mem: 1, maxmem: 2, disk: 1, maxdisk: 4, uptime: 100 },
+          { type: "node", node: "pve2", status: "online", cpu: 0.4, maxcpu: 8, mem: 1, maxmem: 2, disk: 1, maxdisk: 4, uptime: 50 },
+          { type: "storage", storage: "local" },
+        ]) as never,
+      )
+      .mockResolvedValueOnce(
+        jsonResponse([
+          { type: "qemu", vmid: 100, name: "web", node: "pve1", status: "running" },
+          { type: "lxc", vmid: 200, name: "db", node: "pve2", status: "running", maxcpu: 2 },
+        ]) as never,
+      );
     const inv = await client.listInventory();
     expect(inv.nodes).toHaveLength(2);
     expect(inv.vms).toHaveLength(1);
     expect(inv.containers).toHaveLength(1);
     expect(inv.containers[0]?.cpus).toBe(2);
-    expect(vi.mocked(undiciFetch).mock.calls).toHaveLength(1);
-    expect(String(vi.mocked(undiciFetch).mock.calls[0]?.[0])).toContain("/cluster/resources");
-    expect(String(vi.mocked(undiciFetch).mock.calls[0]?.[0])).not.toContain("type=");
+    const urls = vi.mocked(undiciFetch).mock.calls.map(([url]) => String(url));
+    expect(urls).toHaveLength(2);
+    expect(urls[0]).toContain("/cluster/resources");
+    expect(urls[0]).toContain("type=node");
+    expect(urls[1]).toContain("/cluster/resources");
+    expect(urls[1]).toContain("type=vm");
   });
 
   it("logs in with root password via /access/ticket", async () => {

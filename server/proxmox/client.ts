@@ -93,8 +93,13 @@ export class ProxmoxClient {
   }
 
   async listInventory(): Promise<{ nodes: ProxmoxResource[]; vms: GuestListItem[]; containers: GuestListItem[] }> {
-    const resources = await this.listResources();
-    return splitResources(resources);
+    const [nodeRows, guestRows] = await Promise.all([this.listResources("node"), this.listResources("vm")]);
+    const { vms, containers } = splitResources(guestRows);
+    return {
+      nodes: nodeRows.filter((r) => r.type === "node"),
+      vms,
+      containers,
+    };
   }
 
   async listGuests(): Promise<{ vms: GuestListItem[]; containers: GuestListItem[] }> {

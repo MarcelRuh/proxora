@@ -37,6 +37,8 @@ export default function UpdatesPage() {
         jobs: Array<{ id: string; status: string; host?: { name: string } | null; error?: string | null }>;
       }>("/api/updates"),
     refetchInterval: 15_000,
+    staleTime: 8_000,
+    placeholderData: (previous) => previous,
   });
   const { data: details, isFetching } = useQuery({
     queryKey: ["update-details", hosts?.hosts.map((h) => h.id)],
@@ -60,6 +62,8 @@ export default function UpdatesPage() {
         }),
       );
     },
+    staleTime: 60_000,
+    placeholderData: (previous) => previous,
   });
 
   const checkOne = useMutation({

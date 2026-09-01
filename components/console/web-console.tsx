@@ -6,6 +6,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Button } from "@/components/ui/button";
 import { Maximize2, Minus, Plus, RefreshCw } from "lucide-react";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { consoleProxyErrorDetail } from "@/lib/host-console";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -19,20 +20,25 @@ type Props = {
 
 export function WebConsole({ hostId, node, kind, vmid, cmd, fill }: Props) {
   const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const fontSizeRef = useRef(14);
   const [status, setStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
   const [detail, setDetail] = useState<string | null>(null);
   const [fontSize, setFontSize] = useState(14);
   const [nonce, setNonce] = useState(0);
+  fontSizeRef.current = fontSize;
 
   useEffect(() => {
     if (!containerRef.current) return;
     const term = new Terminal({
       cursorBlink: true,
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-      fontSize,
+      fontSize: fontSizeRef.current,
       theme: {
         background: "#020617",
         foreground: "#e2e8f0",
@@ -44,6 +50,7 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill }: Props) {
     term.open(containerRef.current);
     fit.fit();
     termRef.current = term;
+    fitRef.current = fit;
 
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     const wsBase = process.env.NEXT_PUBLIC_WS_URL || `${proto}://${window.location.host}`;
@@ -81,9 +88,8 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill }: Props) {
               setDetail(null);
             } else {
               setStatus("error");
-              setDetail(
-                parsed.code === "no-serial" ? t("guest.consoleSerialMissing") : parsed.message || t("guest.consoleError"),
-              );
+              const mapped = consoleProxyErrorDetail(kind, parsed);
+              setDetail("key" in mapped ? tRef.current(mapped.key) : mapped.message || tRef.current("guest.consoleError"));
             }
             return;
           }
@@ -125,8 +131,17 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill }: Props) {
       window.removeEventListener("resize", onResize);
       ws.close();
       term.dispose();
+      termRef.current = null;
+      fitRef.current = null;
     };
-  }, [hostId, node, kind, vmid, cmd, fontSize, nonce, t]);
+  }, [hostId, node, kind, vmid, cmd, nonce]);
+
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.fontSize = fontSize;
+    fitRef.current?.fit();
+  }, [fontSize]);
 
   const statusLabel =
     status === "connected"

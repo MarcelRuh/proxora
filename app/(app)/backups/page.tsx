@@ -44,7 +44,9 @@ export default function BackupsPage() {
       );
       return rows;
     },
-    refetchInterval: 20_000,
+    refetchInterval: 45_000,
+    staleTime: 20_000,
+    placeholderData: (previous) => previous,
   });
 
   function refresh() {

@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.1.8] – 2026-09-01
+
+### Changed
+
+- Dashboard no longer starts QEMU guest-agent disk probes on every poll; cached values still show immediately and fill via disk watch / VM detail.
+- Inventory loads filtered `cluster/resources` (`type=node` and `type=vm`) instead of the full untyped dump.
+- Tasks poll every 30s when idle and every 3s while a task is running.
+- Host detail, storage/ZFS, backups, audit, and guest live metrics refresh less often; lists keep previous data while refetching.
+- Changing the shell font size no longer reconnects the terminal.
+
+### Fixed
+
+- Host terminal shows a Sys.Console hint when the Proxmox token lacks that privilege.
+
 ## [1.1.7] – 2026-09-01
 
 ### Added

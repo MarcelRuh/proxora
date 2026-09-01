@@ -28,6 +28,8 @@ export default function HostsPage() {
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
     refetchInterval: 30_000,
+    staleTime: 15_000,
+    placeholderData: (previous) => previous,
   });
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<PublicHost | null>(null);

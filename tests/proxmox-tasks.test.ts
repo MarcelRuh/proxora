@@ -5,6 +5,9 @@ import {
   taskGuestLabel,
   taskKindGroup,
   taskRunState,
+  tasksPollIntervalMs,
+  TASKS_POLL_ACTIVE_MS,
+  TASKS_POLL_IDLE_MS,
   taskTypeLabel,
 } from "@/lib/proxmox-tasks";
 import { guestTaskLabel } from "@/lib/backup-tasks";
@@ -31,6 +34,15 @@ describe("task labels and status", () => {
     expect(taskRunState({ status: "stopped", exitstatus: "OK" })).toBe("ok");
     expect(taskRunState({ status: "stopped", exitstatus: "interrupted" })).toBe("failed");
     expect(taskRunState({ status: "OK" })).toBe("ok");
+  });
+
+  it("polls faster while a task is running", () => {
+    expect(tasksPollIntervalMs(undefined)).toBe(TASKS_POLL_IDLE_MS);
+    expect(tasksPollIntervalMs([])).toBe(TASKS_POLL_IDLE_MS);
+    expect(tasksPollIntervalMs([{ status: "stopped", exitstatus: "OK" }])).toBe(TASKS_POLL_IDLE_MS);
+    expect(tasksPollIntervalMs([{ status: "running" }, { status: "stopped", exitstatus: "OK" }])).toBe(
+      TASKS_POLL_ACTIVE_MS,
+    );
   });
 
   it("shows guest name next to the id", () => {
