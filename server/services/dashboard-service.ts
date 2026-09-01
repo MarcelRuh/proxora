@@ -1,5 +1,6 @@
 import type { SessionUser } from "@/server/auth/session";
 import { listHosts, withHostClient } from "@/server/services/host-service";
+import { attachVmAgentDisks } from "@/server/services/guest-disk";
 import { filterGuestsForUser } from "@/server/auth/session-core";
 import { isClusterNodeOnline, minPositiveUptime, weightedCpuRatio } from "@/lib/cluster-metrics";
 import type { ConnectionState } from "@/lib/types";
@@ -80,7 +81,10 @@ export async function getDashboard(user: SessionUser) {
           const diskUsed = pool.reduce((acc, n) => acc + (n.disk ?? 0), 0);
           const diskTotal = pool.reduce((acc, n) => acc + (n.maxdisk ?? 0), 0);
           const onlineNodes = inv.nodes.filter((n) => isClusterNodeOnline(n.status)).length;
-          const vms = filterGuestsForUser(user, host.id, "vm", inv.vms);
+          const vms = await attachVmAgentDisks(
+            client,
+            filterGuestsForUser(user, host.id, "vm", inv.vms),
+          );
           const containers = filterGuestsForUser(user, host.id, "lxc", inv.containers);
           return {
             overview: hostShell(host, {

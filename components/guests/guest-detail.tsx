@@ -341,6 +341,22 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
               node={params.node}
               vmid={Number(params.vmid)}
               running={running || paused}
+              keyboard={typeof config.keyboard === "string" ? config.keyboard : ""}
+              canSetKeyboard={can.config}
+              onKeyboardChange={
+                can.config
+                  ? async (layout) => {
+                      await api(path, {
+                        method: "POST",
+                        body: JSON.stringify({ action: "config", config: { keyboard: layout } }),
+                      });
+                      void refetch();
+                      void qc.invalidateQueries({
+                        queryKey: ["guest-live", kind, params.hostId, params.node, params.vmid],
+                      });
+                    }
+                  : undefined
+              }
             />
           ) : (
             <WebConsole hostId={params.hostId} node={params.node} kind={kind} vmid={Number(params.vmid)} />

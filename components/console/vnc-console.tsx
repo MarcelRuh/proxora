@@ -6,20 +6,29 @@ import { ClipboardCopy, Maximize2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { disableQemuExtendedKeys, grabRfbKeyboard, rfbKeysymFromKeyboardEvent, sendClipboardAsKeys } from "@/lib/vnc-input";
+import { QEMU_KEYBOARD_LAYOUTS, parseQemuKeyboard } from "@/lib/guest-console";
+import {
+  applyVncView,
+  parseVncView,
+  VNC_VIEW_PRESETS,
+  VNC_VIEW_STORAGE_KEY,
+  type VncViewId,
+} from "@/lib/vnc-display";
 
 type Props = {
   hostId: string;
   node: string;
   vmid: number;
   running: boolean;
+  keyboard?: string;
+  canSetKeyboard?: boolean;
+  onKeyboardChange?: (layout: string) => Promise<void>;
 };
 
 type RfbInstance = InstanceType<typeof import("@novnc/novnc/lib/rfb.js").default>;
 
-function applyScale(rfb: RfbInstance | null) {
-  if (!rfb) return;
-  rfb.scaleViewport = true;
-}
+const toolbarSelectClass =
+  "h-7 max-w-[11rem] rounded border border-white/15 bg-transparent px-1.5 text-[11px] text-slate-300";
 
 function focusRfb(container: HTMLElement | null, rfb: RfbInstance | null) {
   if (!rfb) return;
@@ -28,7 +37,15 @@ function focusRfb(container: HTMLElement | null, rfb: RfbInstance | null) {
   rfb.focus();
 }
 
-export function VncConsole({ hostId, node, vmid, running }: Props) {
+export function VncConsole({
+  hostId,
+  node,
+  vmid,
+  running,
+  keyboard,
+  canSetKeyboard,
+  onKeyboardChange,
+}: Props) {
   const { t } = useI18n();
   const shellRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -38,6 +55,17 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
   const [status, setStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
   const [detail, setDetail] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
+  const [view, setView] = useState<VncViewId>(() =>
+    typeof window === "undefined" ? "fit" : parseVncView(window.localStorage.getItem(VNC_VIEW_STORAGE_KEY)),
+  );
+  const viewRef = useRef<VncViewId>(view);
+  viewRef.current = view;
+  const [savingKeyboard, setSavingKeyboard] = useState(false);
+  const layout = parseQemuKeyboard(keyboard);
+
+  useEffect(() => {
+    applyVncView(rfbRef.current, containerRef.current, view);
+  }, [view]);
 
   useEffect(() => {
     if (!running) {
@@ -67,7 +95,7 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
 
     const onLayout = () => {
       if (cancelled) return;
-      applyScale(rfbRef.current);
+      applyVncView(rfbRef.current, containerRef.current, viewRef.current);
     };
 
     void import("@novnc/novnc/lib/rfb.js").then(({ default: RFB }) => {
@@ -107,12 +135,10 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
         const rfb = new RFB(containerRef.current, ws, {
           credentials: password ? { password } : undefined,
         });
-        rfb.scaleViewport = true;
-        rfb.clipViewport = false;
-        rfb.resizeSession = false;
         rfb.viewOnly = false;
         rfb.showDotCursor = true;
         rfb.qualityLevel = 6;
+        applyVncView(rfb, containerRef.current, viewRef.current);
         disableQemuExtendedKeys(rfb);
         rfb.addEventListener("connect", () => {
           if (cancelled) return;
@@ -138,7 +164,7 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
             },
           );
           requestAnimationFrame(() => {
-            applyScale(rfb);
+            applyVncView(rfb, containerRef.current, viewRef.current);
             focusRfb(containerRef.current, rfb);
           });
         });
@@ -186,6 +212,29 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
     };
   }, [hostId, node, vmid, nonce, running]);
 
+  function changeView(next: VncViewId) {
+    setView(next);
+    try {
+      window.localStorage.setItem(VNC_VIEW_STORAGE_KEY, next);
+    } catch {
+      /* private mode */
+    }
+    applyVncView(rfbRef.current, containerRef.current, next);
+  }
+
+  async function changeKeyboard(next: string) {
+    if (!onKeyboardChange || next === layout) return;
+    setSavingKeyboard(true);
+    try {
+      await onKeyboardChange(next);
+      toast.success(t("guest.consoleKeyboardSaved"));
+    } catch {
+      toast.error(t("guest.consoleError"));
+    } finally {
+      setSavingKeyboard(false);
+    }
+  }
+
   async function pasteIntoGuest(rfb: RfbInstance) {
     try {
       const text = await navigator.clipboard.readText();
@@ -218,7 +267,7 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
     } catch {
       /* browser blocked fullscreen */
     }
-    window.setTimeout(() => applyScale(rfbRef.current), 80);
+    window.setTimeout(() => applyVncView(rfbRef.current, containerRef.current, view), 80);
   }
 
   const statusLabel =
@@ -253,6 +302,41 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
         ) : null}
         {detail && status === "error" ? <span className="text-red-400">{detail}</span> : null}
         <div className="ml-auto flex flex-wrap items-center gap-1">
+          <label className="flex items-center gap-1 text-slate-400">
+            <span className="sr-only">{t("guest.consoleView")}</span>
+            <select
+              className={toolbarSelectClass}
+              value={view}
+              title={t("guest.consoleView")}
+              onChange={(e) => changeView(parseVncView(e.target.value))}
+            >
+              {VNC_VIEW_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.id === "fit"
+                    ? t("guest.consoleViewFit")
+                    : preset.id === "native"
+                      ? t("guest.consoleViewNative")
+                      : t("guest.consoleViewSize", { size: preset.id })}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-1 text-slate-400">
+            <span className="sr-only">{t("guest.consoleKeyboard")}</span>
+            <select
+              className={toolbarSelectClass}
+              value={layout}
+              title={t("guest.consoleKeyboard")}
+              disabled={!canSetKeyboard || savingKeyboard || !onKeyboardChange}
+              onChange={(e) => void changeKeyboard(e.target.value)}
+            >
+              {QEMU_KEYBOARD_LAYOUTS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <Button
             size="sm"
             variant="ghost"
@@ -279,11 +363,13 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
         </div>
       </div>
       {running ? (
-        <div
-          ref={containerRef}
-          className="vnc-console-screen min-h-0 flex-1 touch-none select-none"
-          onPointerDown={() => focusRfb(containerRef.current, rfbRef.current)}
-        />
+        <div className="vnc-console-frame min-h-0 flex-1">
+          <div
+            ref={containerRef}
+            className="vnc-console-screen min-h-0 flex-1 touch-none select-none"
+            onPointerDown={() => focusRfb(containerRef.current, rfbRef.current)}
+          />
+        </div>
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-sm text-slate-400">
           {t("guest.consoleVmStoppedHint")}

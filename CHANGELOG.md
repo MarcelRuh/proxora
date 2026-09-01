@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.1.5] – 2026-09-01
+
+### Fixed
+
+- Dashboard and VM list show guest disk usage for running QEMU VMs (QEMU Guest Agent `get-fsinfo`), matching the VM detail page.
+
+### Added
+
+- VGA console display modes: fit, 1:1, and guest resize presets (1024×768 through 1920×1080).
+- QEMU keyboard layout in the VGA toolbar and VM hardware config, including Deutsch.
+
 ## [1.1.4] – 2026-08-30
 
 ### Changed
