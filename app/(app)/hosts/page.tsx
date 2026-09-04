@@ -15,6 +15,7 @@ import { QueryGate } from "@/components/layout/query-gate";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
 import { HostEditorDialog } from "@/components/hosts/host-editor";
+import { HostMaintenanceButton } from "@/components/hosts/host-maintenance";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
 
 export default function HostsPage() {
@@ -96,6 +97,7 @@ export default function HostsPage() {
                     >
                       {t("hosts.test")}
                     </Button>
+                    <HostMaintenanceButton host={host} onDone={refresh} />
                     {canDelete ? (
                       <ConfirmAction
                         title={t("hosts.removeTitle", { name: host.name })}

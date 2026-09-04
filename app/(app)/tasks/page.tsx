@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { ConfirmAction } from "@/components/confirm-action";
 import { ProxmoxTaskProgress } from "@/components/backups/task-progress";
 import { PageHeader } from "@/components/layout/page-header";
+import { QueryGate } from "@/components/layout/query-gate";
+import { EmptyState } from "@/components/ui/misc";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
@@ -48,11 +50,12 @@ export default function TasksPage() {
   const { t, locale } = useI18n();
   const canCancel = useCan("tasks.cancel");
   const qc = useQueryClient();
-  const { data: hosts } = useQuery({
+  const { data: hosts, isPending: hostsPending, error: hostsError, refetch: refetchHosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
   });
-  const { data } = useQuery({
+  const hasHosts = Boolean(hosts?.hosts.length);
+  const { data, isPending } = useQuery({
     queryKey: ["tasks", hosts?.hosts.map((h) => h.id)],
     enabled: Boolean(hosts),
     queryFn: async () => {
@@ -132,6 +135,10 @@ export default function TasksPage() {
   return (
     <div className="space-y-4">
       <PageHeader kicker={t("page.ops")} title={t("tasks.title")} description={t("tasks.description")} />
+      <QueryGate isLoading={hostsPending || (hasHosts && isPending)} error={hostsError} onRetry={() => void refetchHosts()}>
+        {!hasHosts ? (
+          <EmptyState title={t("hosts.empty")} description={t("hosts.emptyBody")} />
+        ) : (
       <Card>
         <CardHeader>
           <CardTitle>{t("tasks.title")}</CardTitle>
@@ -252,6 +259,8 @@ export default function TasksPage() {
           </div>
         </CardContent>
       </Card>
+        )}
+      </QueryGate>
       {open ? (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-3">

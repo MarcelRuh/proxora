@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ConfirmAction } from "@/components/confirm-action";
 import { PageHeader } from "@/components/layout/page-header";
+import { QueryGate } from "@/components/layout/query-gate";
+import { EmptyState } from "@/components/ui/misc";
 import { api } from "@/lib/api";
 import { bytesToSize } from "@/lib/utils";
 import { filterBackupFiles, type BackupFileFilter } from "@/lib/backup";
@@ -23,12 +25,13 @@ import type { BackupFile, BackupJob, BackupOverview } from "@/components/backups
 export default function BackupsPage() {
   const { t, locale } = useI18n();
   const qc = useQueryClient();
-  const { data: hosts } = useQuery({
+  const { data: hosts, isPending: hostsPending, error: hostsError, refetch: refetchHosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
   });
   const hostIds = hosts?.hosts.map((h) => h.id);
-  const { data } = useQuery({
+  const hasHosts = Boolean(hosts?.hosts.length);
+  const { data, isPending } = useQuery({
     queryKey: ["backups", hostIds],
     enabled: Boolean(hosts),
     queryFn: async () => {
@@ -56,17 +59,25 @@ export default function BackupsPage() {
   return (
     <div className="space-y-4">
       <PageHeader kicker={t("backup.kicker")} title={t("backup.title")} description={t("backup.description")} />
-      {(data ?? []).map((block) => (
-        <HostBackups
-          key={block.host.id}
-          hostId={block.host.id}
-          hostName={block.host.name}
-          overview={block.overview}
-          error={"error" in block ? block.error : undefined}
-          locale={locale}
-          onDone={refresh}
-        />
-      ))}
+      <QueryGate isLoading={hostsPending || (hasHosts && isPending)} error={hostsError} onRetry={() => void refetchHosts()}>
+        {!hasHosts ? (
+          <EmptyState title={t("backup.empty")} description={t("backup.emptyBody")} />
+        ) : (
+          <div className="space-y-4">
+            {(data ?? []).map((block) => (
+            <HostBackups
+              key={block.host.id}
+              hostId={block.host.id}
+              hostName={block.host.name}
+              overview={block.overview}
+              error={"error" in block ? block.error : undefined}
+              locale={locale}
+              onDone={refresh}
+            />
+            ))}
+          </div>
+        )}
+      </QueryGate>
     </div>
   );
 }

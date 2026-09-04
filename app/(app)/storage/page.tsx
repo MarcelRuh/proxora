@@ -9,6 +9,8 @@ import { api } from "@/lib/api";
 import { bytesToSize, percentage } from "@/lib/utils";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
+import { QueryGate } from "@/components/layout/query-gate";
+import { EmptyState } from "@/components/ui/misc";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { ZfsSection, type ZfsHostBlock } from "@/components/storage/zfs-section";
 import { StorageContentPanel } from "@/components/storage/storage-content-panel";
@@ -33,12 +35,13 @@ type OpenStorage = { hostId: string; node: string; storage: string };
 export default function StoragePage() {
   const { t } = useI18n();
   const [open, setOpen] = useState<OpenStorage | null>(null);
-  const { data: hosts } = useQuery({
+  const { data: hosts, isPending: hostsPending, error: hostsError, refetch: refetchHosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
   });
   const hostIds = hosts?.hosts.map((h) => h.id);
-  const { data } = useQuery({
+  const hasHosts = Boolean(hosts?.hosts.length);
+  const { data, isPending } = useQuery({
     queryKey: ["storage", hostIds],
     enabled: Boolean(hosts),
     queryFn: async () => {
@@ -93,7 +96,12 @@ export default function StoragePage() {
         title={t("storage.title")}
         description={t("storage.description")}
       />
-      {(data ?? []).map((block) => (
+      <QueryGate isLoading={hostsPending || (hasHosts && isPending)} error={hostsError} onRetry={() => void refetchHosts()}>
+        {!hasHosts ? (
+          <EmptyState title={t("storage.empty")} description={t("storage.emptyBody")} />
+        ) : (
+          <div className="space-y-4">
+          {(data ?? []).map((block) => (
         <Card key={block.host.id}>
           <CardHeader>
             <CardTitle>{block.host.name}</CardTitle>
@@ -171,7 +179,10 @@ export default function StoragePage() {
             <ZfsSection block={zfs?.find((row) => row.hostId === block.host.id)} />
           </CardContent>
         </Card>
-      ))}
+          ))}
+          </div>
+        )}
+      </QueryGate>
     </div>
   );
 }

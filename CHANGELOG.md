@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.2.0] – 2026-09-04
+
+### Added
+
+- Cloud-Init drive and IPv4 (DHCP or static) when creating a QEMU VM, matching LXC create.
+- Host maintenance mode in the host list and host detail (pauses health checks and dashboard inventory).
+
+### Changed
+
+- Guest-create options reuse the IP cache instead of fetching every guest config.
+- Backups, storage, and tasks show a loading skeleton or empty state instead of a blank first paint.
+
 ## [1.1.9] – 2026-09-04
 
 ### Added

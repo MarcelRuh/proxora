@@ -1,5 +1,5 @@
 import { parseGuestConfigIps } from "@/lib/create-ip";
-import { rememberGuestIpCache } from "@/server/services/guest-ip-cache";
+import { peekGuestIpCache, rememberGuestIpCache } from "@/server/services/guest-ip-cache";
 import { identityConflict } from "@/lib/guest-identity";
 import { prisma } from "@/lib/db";
 import { ConflictError } from "@/lib/errors";
@@ -27,12 +27,23 @@ export async function collectUsedGuestIps(client: ProxmoxClient): Promise<{ vmid
   const listed = await listedGuests(client);
   const vmids = listed.map((g) => g.vmid).filter((id) => Number.isInteger(id) && id > 0);
   const ips = new Set<string>();
-  if (listed.length === 0) return { vmids, ips: [] };
+  const pending = listed.filter((g) => g.node && g.vmid && !g.template);
+  if (pending.length === 0) return { vmids, ips: [] };
+
+  const missing: typeof pending = [];
+  for (const g of pending) {
+    const cached = peekGuestIpCache(client, g.kind, g.node, g.vmid);
+    if (cached) {
+      for (const ip of cached) ips.add(ip);
+    } else {
+      missing.push(g);
+    }
+  }
 
   let i = 0;
-  const workers = Array.from({ length: Math.min(6, listed.length) }, async () => {
-    while (i < listed.length) {
-      const g = listed[i++];
+  const workers = Array.from({ length: Math.min(6, missing.length) }, async () => {
+    while (i < missing.length) {
+      const g = missing[i++];
       if (!g?.node || !g.vmid) continue;
       const cfg =
         g.kind === "vm"

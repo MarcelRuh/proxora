@@ -293,7 +293,10 @@ export async function withHostClient<T>(
   try {
     const client = await clientForHost(host);
     const result = await fn(client, host);
-    if (host.connectionState !== HostConnectionState.ONLINE) {
+    if (
+      host.connectionState !== HostConnectionState.ONLINE &&
+      host.connectionState !== HostConnectionState.MAINTENANCE
+    ) {
       await prisma.host.update({
         where: { id: host.id },
         data: { connectionState: HostConnectionState.ONLINE, lastSeenAt: new Date(), lastError: null },
@@ -307,18 +310,31 @@ export async function withHostClient<T>(
     }
     const message = error instanceof Error ? error.message : "Unknown error";
     logger.warn({ host: host.name, err: message }, "Host request failed");
-    await prisma.host.update({
-      where: { id: host.id },
-      data: { connectionState: HostConnectionState.ERROR, lastError: message },
-    });
-    notifyHostState(host, HostConnectionState.ERROR);
-    const { requestHostReconnect } = await import("@/server/services/host-reconnect");
-    requestHostReconnect();
+    if (host.connectionState !== HostConnectionState.MAINTENANCE) {
+      await prisma.host.update({
+        where: { id: host.id },
+        data: { connectionState: HostConnectionState.ERROR, lastError: message },
+      });
+      notifyHostState(host, HostConnectionState.ERROR);
+      const { requestHostReconnect } = await import("@/server/services/host-reconnect");
+      requestHostReconnect();
+    }
     throw new HostUnreachableError(host.name, message);
   }
 }
 
-export async function setHostState(id: string, state: HostConnectionState, user: SessionUser) {
+export async function setHostState(id: string, state: "MAINTENANCE" | "ONLINE", user: SessionUser) {
   await getHostOrThrow(id, user);
-  return prisma.host.update({ where: { id }, data: { connectionState: state } });
+  if (state === "MAINTENANCE") {
+    return prisma.host.update({
+      where: { id },
+      data: { connectionState: HostConnectionState.MAINTENANCE, lastError: null },
+    });
+  }
+  await prisma.host.update({
+    where: { id },
+    data: { connectionState: HostConnectionState.CONNECTING, lastError: null },
+  });
+  await testHost(id, user);
+  return getHostOrThrow(id, user);
 }

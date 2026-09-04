@@ -17,6 +17,8 @@ import { useCan } from "@/components/auth/session-user";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { PublicHost } from "@/lib/types";
 import { HostEditorDialog } from "@/components/hosts/host-editor";
+import { HostMaintenanceButton } from "@/components/hosts/host-maintenance";
+import { QueryGate } from "@/components/layout/query-gate";
 
 type Status = {
   host: string;
@@ -39,7 +41,7 @@ export default function HostDetailPage() {
   const canShutdown = useCan("hosts.shutdown");
   const canEdit = useCan("hosts.update") || useCan("hosts.credentials");
   const [editOpen, setEditOpen] = useState(false);
-  const { data, error, refetch, isLoading } = useQuery({
+  const { data, error, refetch, isPending } = useQuery({
     queryKey: ["host", params.id],
     queryFn: () => api<Status>(`/api/hosts/${params.id}/status`),
     refetchInterval: 45_000,
@@ -87,9 +89,15 @@ export default function HostDetailPage() {
                 {t("hosts.edit")}
               </Button>
             ) : null}
+            {meta ? <HostMaintenanceButton host={meta.host} onDone={() => {
+              void qc.invalidateQueries({ queryKey: ["hosts"] });
+              void qc.invalidateQueries({ queryKey: ["host-meta", params.id] });
+              void qc.invalidateQueries({ queryKey: ["host", params.id] });
+            }} /> : null}
           </div>
         }
       />
+      <QueryGate isLoading={isPending && !data} error={null} onRetry={() => void refetch()}>
       {nodes.map((item) => {
         const st = item.status;
         return (
@@ -182,7 +190,7 @@ export default function HostDetailPage() {
           </div>
         ))}
       </Section>
-      {isLoading ? <p className="text-sm text-muted-foreground">{t("hosts.loadingTelemetry")}</p> : null}
+      </QueryGate>
       {meta?.host ? (
         <HostEditorDialog
           mode="edit"
