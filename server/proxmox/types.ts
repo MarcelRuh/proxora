@@ -156,6 +156,7 @@ export interface GuestListItem {
   uptime: number;
   tags?: string;
   description?: string;
+  ips?: string[];
   template: boolean;
   netin?: number;
   netout?: number;

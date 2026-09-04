@@ -15,6 +15,7 @@ import { WebConsole } from "@/components/console/web-console";
 import { VncConsole } from "@/components/console/vnc-console";
 import { GuestConfigForm } from "@/components/guests/guest-config-form";
 import { CloneDialog } from "@/components/guests/clone-dialog";
+import { MigrateDialog } from "@/components/guests/migrate-dialog";
 import { BackupNowDialog } from "@/components/backups/backup-now-dialog";
 import { RestoreDialog } from "@/components/backups/restore-dialog";
 import type { BackupFile, BackupOverview } from "@/components/backups/types";
@@ -26,6 +27,7 @@ import { useCan } from "@/components/auth/session-user";
 import { PageSkeleton } from "@/components/layout/page-skeleton";
 import { QueryGate } from "@/components/layout/query-gate";
 import { vmHasGraphics } from "@/lib/guest-console";
+import { parseGuestConfigIps } from "@/lib/create-ip";
 
 type GuestPayload = {
   status: Record<string, unknown>;
@@ -33,6 +35,7 @@ type GuestPayload = {
   snapshots: Array<Record<string, unknown>>;
   agentDisk?: { used: number; total: number } | null;
   agentEnabled?: boolean;
+  ips?: string[];
 };
 
 function num(value: unknown): number {
@@ -54,6 +57,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     resume: useCan("vm.resume"),
     reset: useCan("vm.reset"),
     clone: useCan(kind === "vm" ? "vm.clone" : "lxc.clone"),
+    migrate: useCan(kind === "vm" ? "vm.migrate" : "lxc.migrate"),
     delete: useCan(kind === "vm" ? "vm.delete" : "lxc.delete"),
     console: useCan(kind === "vm" ? "vm.console" : "lxc.console"),
     config: useCan(kind === "vm" ? "vm.config" : "lxc.config"),
@@ -138,6 +142,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const maxdisk = num(status.maxdisk);
   const netin = num(status.netin);
   const netout = num(status.netout);
+  const ips = data?.ips?.length ? data.ips : parseGuestConfigIps(config);
 
   if (isLoading) return <PageSkeleton />;
   if (error) {
@@ -226,6 +231,19 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             onDone={() => void refetch()}
           />
         ) : null}
+        {can.migrate ? (
+          <MigrateDialog
+            kind={kind}
+            hostId={params.hostId}
+            node={params.node}
+            vmid={Number(params.vmid)}
+            path={path}
+            running={running || paused}
+            onDone={(target) => {
+              router.push(`/${kind === "lxc" ? "containers" : "vms"}/${params.hostId}/${encodeURIComponent(target)}/${params.vmid}`);
+            }}
+          />
+        ) : null}
         {can.backup ? (
           <BackupNowDialog
             hostId={params.hostId}
@@ -307,6 +325,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             <CardTitle className="text-muted-foreground">{t("guest.network")}</CardTitle>
           </CardHeader>
           <CardContent>
+            {ips.length ? <p className="mb-1 font-mono text-sm">{ips.join(", ")}</p> : null}
             <p className="text-sm">
               ↓ {bytesToSize(netin)} <span className="text-muted-foreground">in</span>
             </p>

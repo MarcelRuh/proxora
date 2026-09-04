@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { clientForHost } from "@/server/services/host-service";
 import { vmDiskFromAgent } from "@/server/services/guest-disk";
+import { rememberGuestIps } from "@/server/services/guest-ip-cache";
 import {
   applyDiskWatchState,
   diskSampleHref,
@@ -66,6 +67,8 @@ export async function scanDiskUsage(): Promise<number> {
       const client = await clientForHost(host);
       const nodes = await client.nodes.list();
       const guests = await client.listGuests().catch(() => ({ vms: [], containers: [] }));
+      void rememberGuestIps(client, "vm", guests.vms).catch(() => undefined);
+      void rememberGuestIps(client, "lxc", guests.containers).catch(() => undefined);
 
       await Promise.all(
         nodes.map(async (n) => {

@@ -14,6 +14,7 @@ export const PREVIEW_ACTIONS: Permission[] = [
   "vm.config",
   "vm.delete",
   "vm.clone",
+  "vm.migrate",
   "lxc.start",
   "lxc.shutdown",
   "lxc.force-stop",
@@ -22,6 +23,7 @@ export const PREVIEW_ACTIONS: Permission[] = [
   "lxc.config",
   "lxc.delete",
   "lxc.clone",
+  "lxc.migrate",
   "backup.run",
   "backup.restore",
 ];

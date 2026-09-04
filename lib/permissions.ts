@@ -37,6 +37,7 @@ export const PERMISSIONS = [
   "lxc.snapshot.delete",
   "lxc.snapshot.rollback",
   "lxc.clone",
+  "lxc.migrate",
   "storage.view",
   "storage.delete",
   "zfs.view",
@@ -141,6 +142,7 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
   { id: "lxc.snapshot.delete", group: "lxc", de: "Container-Snapshot löschen", en: "Delete container snapshot" },
   { id: "lxc.snapshot.rollback", group: "lxc", de: "Container-Snapshot wiederherstellen", en: "Roll back container snapshot" },
   { id: "lxc.clone", group: "lxc", de: "Container klonen", en: "Clone container" },
+  { id: "lxc.migrate", group: "lxc", de: "Container migrieren", en: "Migrate container" },
   { id: "storage.view", group: "storage", de: "Storage ansehen", en: "View storage" },
   { id: "storage.delete", group: "storage", de: "Storage-Dateien löschen", en: "Delete storage files" },
   { id: "zfs.view", group: "storage", de: "ZFS ansehen", en: "View ZFS" },
@@ -325,7 +327,7 @@ export function permissionForGuestAction(kind: "vm" | "lxc", action: string): Pe
     case "clone":
       return `${prefix}.clone` as Permission;
     case "migrate":
-      return "vm.migrate";
+      return `${prefix}.migrate` as Permission;
     case "snapshot":
       return `${prefix}.snapshot.create` as Permission;
     case "snapshot-delete":

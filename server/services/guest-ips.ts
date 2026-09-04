@@ -1,4 +1,5 @@
 import { parseGuestConfigIps } from "@/lib/create-ip";
+import { rememberGuestIpCache } from "@/server/services/guest-ip-cache";
 import { identityConflict } from "@/lib/guest-identity";
 import { prisma } from "@/lib/db";
 import { ConflictError } from "@/lib/errors";
@@ -38,7 +39,9 @@ export async function collectUsedGuestIps(client: ProxmoxClient): Promise<{ vmid
           ? await client.vms.config(g.node, g.vmid).catch(() => null)
           : await client.lxc.config(g.node, g.vmid).catch(() => null);
       if (!cfg) continue;
-      for (const ip of parseGuestConfigIps(cfg)) ips.add(ip);
+      const found = parseGuestConfigIps(cfg);
+      rememberGuestIpCache(client, g.kind, g.node, g.vmid, found);
+      for (const ip of found) ips.add(ip);
     }
   });
   await Promise.all(workers);

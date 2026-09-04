@@ -15,6 +15,8 @@ import { GuestCpuBar, GuestDiskBar, GuestRamBar } from "@/components/guests/gues
 import { api } from "@/lib/api";
 import { DEFAULT_GUEST_SORT, nextGuestSort, sortGuests, type GuestSortKey } from "@/lib/guest-sort";
 import { guestHasTag, parseGuestTags, uniqueGuestTags } from "@/lib/guest-tags";
+import { bulkActionFits, guestRowKey, type BulkGuestAction } from "@/lib/guest-bulk";
+import { formatGuestIps } from "@/lib/guest-ip-display";
 import { formatUptime } from "@/lib/utils";
 import type { Guest } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
@@ -38,6 +40,7 @@ export const GuestTable = memo(function GuestTable({
       start: useCan("vm.start"),
       shutdown: useCan("vm.shutdown"),
       reboot: useCan("vm.reboot"),
+      stop: useCan("vm.force-stop"),
       console: useCan("vm.console"),
       snapshot: useCan("vm.snapshot.create"),
       delete: useCan("vm.delete"),
@@ -46,6 +49,7 @@ export const GuestTable = memo(function GuestTable({
       start: useCan("lxc.start"),
       shutdown: useCan("lxc.shutdown"),
       reboot: useCan("lxc.reboot"),
+      stop: useCan("lxc.force-stop"),
       console: useCan("lxc.console"),
       snapshot: useCan("lxc.snapshot.create"),
       delete: useCan("lxc.delete"),
@@ -53,15 +57,26 @@ export const GuestTable = memo(function GuestTable({
   };
   const qc = useQueryClient();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const [tag, setTag] = useState("all");
   const [sort, setSort] = useState(DEFAULT_GUEST_SORT);
   const tags = useMemo(() => uniqueGuestTags(items), [items]);
+
+  function rowKind(g: Guest): "vm" | "lxc" {
+    if (g.kind === "vm" || g.kind === "lxc") return g.kind;
+    return kind === "lxc" ? "lxc" : "vm";
+  }
+
+  function rowKey(g: Guest): string {
+    return guestRowKey({ ...g, hostId: g.hostId ?? hostId }, rowKind(g));
+  }
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const matched = items.filter((g) => {
-      const hay = `${g.name} ${g.vmid} ${g.hostName ?? ""} ${g.node} ${g.tags ?? ""} ${g.description ?? ""}`.toLowerCase();
+      const hay = `${g.name} ${g.vmid} ${g.hostName ?? ""} ${g.node} ${g.tags ?? ""} ${g.description ?? ""} ${(g.ips ?? []).join(" ")}`.toLowerCase();
       const textOk = !needle || hay.includes(needle);
       const statusOk = status === "all" || g.status === status;
       const tagOk = tag === "all" || guestHasTag(g.tags, tag);
@@ -70,10 +85,10 @@ export const GuestTable = memo(function GuestTable({
     return sortGuests(matched, sort);
   }, [items, q, status, tag, sort]);
 
-  function rowKind(g: Guest): "vm" | "lxc" {
-    if (g.kind === "vm" || g.kind === "lxc") return g.kind;
-    return kind === "lxc" ? "lxc" : "vm";
-  }
+  const visibleKeys = filtered.map((g) => rowKey(g));
+  const selectedVisible = visibleKeys.filter((key) => selected.has(key));
+  const allVisibleSelected = filtered.length > 0 && selectedVisible.length === filtered.length;
+  const someVisibleSelected = selectedVisible.length > 0 && !allVisibleSelected;
 
   async function guestAction(hid: string, node: string, vmid: number, action: string, row: "vm" | "lxc", extra: Record<string, unknown> = {}) {
     const permPath = row === "vm" ? "vms" : "lxc";
@@ -94,7 +109,52 @@ export const GuestTable = memo(function GuestTable({
     }
   }
 
-  const colCount = mixed ? 10 : 9;
+  function canBulk(g: Guest, action: BulkGuestAction): boolean {
+    const row = rowKind(g);
+    if (action === "start") return can[row].start;
+    if (action === "shutdown") return can[row].shutdown;
+    if (action === "reboot") return can[row].reboot;
+    if (action === "stop") return can[row].stop;
+    return false;
+  }
+
+  async function runBulk(action: BulkGuestAction) {
+    const targets = filtered.filter((g) => selected.has(rowKey(g)) && bulkActionFits(g, action) && canBulk(g, action));
+    if (!targets.length) {
+      toast.error(t("table.bulkNone"));
+      return;
+    }
+    setBusyId("bulk");
+    let ok = 0;
+    let fail = 0;
+    const queue = [...targets];
+    async function worker() {
+      while (queue.length) {
+        const g = queue.shift();
+        if (!g) break;
+        const hid = g.hostId ?? hostId ?? "";
+        const row = rowKind(g);
+        const permPath = row === "vm" ? "vms" : "lxc";
+        try {
+          await api(`/api/hosts/${hid}/${permPath}/${g.node}/${g.vmid}`, {
+            method: "POST",
+            body: JSON.stringify({ action }),
+          });
+          ok += 1;
+        } catch {
+          fail += 1;
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(4, targets.length) }, () => worker()));
+    setBusyId(null);
+    setSelected(new Set());
+    toast.success(t("table.bulkDone", { ok, fail }));
+    await qc.invalidateQueries({ queryKey: ["dashboard"] });
+  }
+
+  const colCount = mixed ? 12 : 11;
+  const bulkBusy = busyId === "bulk";
 
   return (
     <div className="space-y-3">
@@ -125,13 +185,71 @@ export const GuestTable = memo(function GuestTable({
           </select>
         ) : null}
       </div>
+      {selectedVisible.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-[4px] border border-border bg-muted/30 px-3 py-2 text-sm">
+          <span className="text-muted-foreground">{t("table.selected", { n: selectedVisible.length })}</span>
+          <Button size="sm" disabled={bulkBusy} onClick={() => void runBulk("start")}>
+            {t("guest.start")}
+          </Button>
+          <ConfirmAction
+            title={t("table.bulkShutdownTitle")}
+            description={t("table.bulkShutdownBody", { n: selectedVisible.length })}
+            actionLabel={t("guest.shutdown")}
+            onConfirm={() => runBulk("shutdown")}
+          >
+            <Button size="sm" variant="outline" disabled={bulkBusy}>
+              {t("guest.shutdown")}
+            </Button>
+          </ConfirmAction>
+          <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => void runBulk("reboot")}>
+            {t("guest.reboot")}
+          </Button>
+          <ConfirmAction
+            title={t("table.bulkStopTitle")}
+            description={t("table.bulkStopBody", { n: selectedVisible.length })}
+            actionLabel={t("guest.stop")}
+            destructive
+            onConfirm={() => runBulk("stop")}
+          >
+            <Button size="sm" variant="destructive" disabled={bulkBusy}>
+              {t("guest.stop")}
+            </Button>
+          </ConfirmAction>
+          <Button size="sm" variant="ghost" disabled={bulkBusy} onClick={() => setSelected(new Set())}>
+            {t("table.clearSelection")}
+          </Button>
+        </div>
+      ) : null}
       <div className="overflow-x-auto rounded-[4px] border border-border">
-        <table className={`w-full text-left text-sm ${mixed ? "min-w-[960px]" : "min-w-[720px]"}`}>
+        <table className={`w-full text-left text-sm ${mixed ? "min-w-[1080px]" : "min-w-[860px]"}`}>
           <thead className="font-[family-name:var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
             <tr>
+              <th className="w-10 px-3 py-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-primary"
+                  checked={allVisibleSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someVisibleSelected;
+                  }}
+                  onChange={() => {
+                    setSelected((prev) => {
+                      const next = new Set(prev);
+                      if (allVisibleSelected) {
+                        visibleKeys.forEach((key) => next.delete(key));
+                      } else {
+                        visibleKeys.forEach((key) => next.add(key));
+                      }
+                      return next;
+                    });
+                  }}
+                  aria-label={t("table.selectAll")}
+                />
+              </th>
               <SortHeader label={t("table.id")} column="vmid" sort={sort} onSort={setSort} />
               {mixed ? <SortHeader label={t("table.type")} column="kind" sort={sort} onSort={setSort} /> : null}
               <SortHeader label={t("table.name")} column="name" sort={sort} onSort={setSort} />
+              <th className="px-3 py-2 font-medium">{t("table.ip")}</th>
               <SortHeader label={t("table.hostNode")} column="host" sort={sort} onSort={setSort} />
               <SortHeader label={t("table.status")} column="status" sort={sort} onSort={setSort} />
               <SortHeader label={t("table.cpu")} column="cpu" sort={sort} onSort={setSort} />
@@ -166,9 +284,27 @@ export const GuestTable = memo(function GuestTable({
                 const rowTags = parseGuestTags(g.tags);
                 const running = g.status === "running";
                 const stopped = g.status === "stopped";
-                const rowBusy = busyId === `${hid}:${g.vmid}`;
+                const key = rowKey(g);
+                const rowBusy = busyId === `${hid}:${g.vmid}` || bulkBusy;
+                const ipLabel = formatGuestIps(g.ips);
                 return (
-                  <tr key={`${row}-${hid}-${g.node}-${g.vmid}`} className="border-t border-border">
+                  <tr key={key} className="border-t border-border">
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-primary"
+                        checked={selected.has(key)}
+                        onChange={() => {
+                          setSelected((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(key)) next.delete(key);
+                            else next.add(key);
+                            return next;
+                          });
+                        }}
+                        aria-label={`${g.vmid} ${g.name}`}
+                      />
+                    </td>
                     <td className="px-3 py-2 font-mono">{g.vmid}</td>
                     {mixed ? (
                       <td className="px-3 py-2">
@@ -199,6 +335,9 @@ export const GuestTable = memo(function GuestTable({
                           ))}
                         </div>
                       ) : null}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs" title={(g.ips ?? []).join(", ")}>
+                      {ipLabel || "—"}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {g.hostName ?? hid} / {g.node}

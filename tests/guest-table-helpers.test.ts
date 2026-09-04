@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { failedTaskKind, isFailedBackupTask } from "@/lib/backup-tasks";
 import { DEFAULT_GUEST_SORT, nextGuestSort, sortGuests } from "@/lib/guest-sort";
+import { formatGuestIps } from "@/lib/guest-ip-display";
 import { guestHasTag, parseGuestTags, uniqueGuestTags } from "@/lib/guest-tags";
 import { plainGuestNote } from "@/lib/guest-notes";
 
@@ -43,6 +44,14 @@ describe("guest sort", () => {
 
   it("toggles direction on the same column", () => {
     expect(nextGuestSort({ key: "name", dir: "asc" }, "name")).toEqual({ key: "name", dir: "desc" });
+  });
+});
+
+describe("formatGuestIps", () => {
+  it("shows the first address and a remainder count", () => {
+    expect(formatGuestIps(["10.0.0.8"])).toBe("10.0.0.8");
+    expect(formatGuestIps(["10.0.0.8", "10.0.0.9"])).toBe("10.0.0.8 +1");
+    expect(formatGuestIps([])).toBe("");
   });
 });
 

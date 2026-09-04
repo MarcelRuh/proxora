@@ -75,6 +75,10 @@ export class LxcApi {
     return this.http.post<string>(`/nodes/${encodeURIComponent(node)}/lxc/${vmid}/clone`, params);
   }
 
+  migrate(node: string, vmid: number, params: Record<string, unknown>) {
+    return this.http.post<string>(`/nodes/${encodeURIComponent(node)}/lxc/${vmid}/migrate`, params);
+  }
+
   snapshots(node: string, vmid: number) {
     return this.http.get<Array<Record<string, unknown>>>(
       `/nodes/${encodeURIComponent(node)}/lxc/${vmid}/snapshot`,

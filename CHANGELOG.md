@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.1.9] – 2026-09-04
+
+### Added
+
+- VM and LXC migration to another cluster node from the guest detail page (local disks included).
+- Bulk start / shutdown / reboot / force-stop on the guest tables.
+- Guest IPv4 column on dashboard and VM/LXC lists (config, then QEMU guest agent for DHCP).
+
 ## [1.1.8] – 2026-09-01
 
 ### Changed

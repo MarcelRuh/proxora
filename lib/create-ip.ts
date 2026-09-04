@@ -104,3 +104,29 @@ export function parseGuestConfigIps(config: Record<string, unknown>): string[] {
   }
   return ips;
 }
+
+/** QEMU guest-agent `network-get-interfaces` (skips loopback and IPv6). */
+export function parseAgentNetworkIps(payload: unknown): string[] {
+  const root = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const list = Array.isArray(payload) ? payload : Array.isArray(root.result) ? root.result : [];
+  const ips: string[] = [];
+  for (const nic of list) {
+    if (!nic || typeof nic !== "object") continue;
+    const rec = nic as Record<string, unknown>;
+    const name = String(rec.name ?? "").trim().toLowerCase();
+    if (!name || name === "lo" || name.startsWith("lo:")) continue;
+    const addrs = rec["ip-addresses"] ?? rec.ip_addresses;
+    if (!Array.isArray(addrs)) continue;
+    for (const entry of addrs) {
+      if (!entry || typeof entry !== "object") continue;
+      const addr = entry as Record<string, unknown>;
+      const type = String(addr["ip-address-type"] ?? addr.type ?? "").toLowerCase();
+      if (type === "ipv6") continue;
+      const raw = String(addr["ip-address"] ?? addr.ip ?? "").trim();
+      const host = ipv4Host(raw);
+      if (!host || host.startsWith("127.")) continue;
+      ips.push(host);
+    }
+  }
+  return [...new Set(ips)];
+}

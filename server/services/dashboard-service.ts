@@ -1,6 +1,7 @@
 import type { SessionUser } from "@/server/auth/session";
 import { listHosts, withHostClient } from "@/server/services/host-service";
 import { applyCachedVmDisks } from "@/server/services/guest-disk";
+import { applyCachedGuestIps, rememberGuestIps } from "@/server/services/guest-ip-cache";
 import { filterGuestsForUser } from "@/server/auth/session-core";
 import { isClusterNodeOnline, minPositiveUptime, weightedCpuRatio } from "@/lib/cluster-metrics";
 import type { ConnectionState } from "@/lib/types";
@@ -82,8 +83,14 @@ export async function getDashboard(user: SessionUser) {
           const diskTotal = pool.reduce((acc, n) => acc + (n.maxdisk ?? 0), 0);
           const onlineNodes = inv.nodes.filter((n) => isClusterNodeOnline(n.status)).length;
           const filteredVms = filterGuestsForUser(user, host.id, "vm", inv.vms);
-          const vms = applyCachedVmDisks(client, filteredVms);
-          const containers = filterGuestsForUser(user, host.id, "lxc", inv.containers);
+          const vms = applyCachedGuestIps(client, "vm", applyCachedVmDisks(client, filteredVms));
+          const containers = applyCachedGuestIps(
+            client,
+            "lxc",
+            filterGuestsForUser(user, host.id, "lxc", inv.containers),
+          );
+          void rememberGuestIps(client, "vm", filteredVms).catch(() => undefined);
+          void rememberGuestIps(client, "lxc", containers).catch(() => undefined);
           return {
             overview: hostShell(host, {
               connectionState: "ONLINE",

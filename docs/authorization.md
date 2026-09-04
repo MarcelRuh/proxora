@@ -15,7 +15,7 @@ Each catalog entry is a single action. Labels in the role editor are in DE/EN; t
 | --- | --- |
 | Hosts | `hosts.view` `hosts.create` `hosts.update` `hosts.credentials` `hosts.delete` `hosts.reboot` `hosts.shutdown` `hosts.console` |
 | VM | `vm.view` `vm.create` `vm.config` `vm.delete` `vm.start` `vm.shutdown` `vm.force-stop` `vm.reboot` `vm.reset` `vm.pause` `vm.resume` `vm.console` `vm.snapshot.create` `vm.snapshot.delete` `vm.snapshot.rollback` `vm.clone` `vm.migrate` |
-| LXC | same pattern without pause/reset/migrate; hard stop is `lxc.force-stop` |
+| LXC | same pattern without pause/reset; migrate is `lxc.migrate`; hard stop is `lxc.force-stop` |
 | Storage | `storage.view` `zfs.view` |
 | Backup | `backup.view` `backup.run` `backup.restore` `backup.delete` `backup.job.create` `backup.job.update` `backup.job.delete` |
 | Updates | `updates.view` `updates.check` `updates.upgrade` `proxora.update` |

@@ -37,6 +37,7 @@ export type Guest = {
   kind?: "vm" | "lxc";
   tags?: string;
   description?: string;
+  ips?: string[];
 };
 
 export type SessionUser = {

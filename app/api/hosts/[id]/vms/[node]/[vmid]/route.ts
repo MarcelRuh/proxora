@@ -16,6 +16,9 @@ import { waitGuestAction } from "@/server/proxmox/task-wait";
 import { durationLabel } from "@/lib/duration";
 import { notifyGuestTaskFailed } from "@/server/notifications/guest-task-fail";
 import { isQemuAgentEnabled, vmDiskFromAgent } from "@/server/services/guest-disk";
+import { rememberGuestIpCache } from "@/server/services/guest-ip-cache";
+import { parseAgentNetworkIps, parseGuestConfigIps } from "@/lib/create-ip";
+import { guestIsRunning, qemuMigrateParams } from "@/lib/guest-migrate";
 
 export const maxDuration = 800;
 
@@ -96,7 +99,14 @@ export const GET = apiRoute("vm.view", async (req, session, params) => {
       status.disk = agentDisk.used;
       status.maxdisk = agentDisk.total;
     }
-    return { status, config, snapshots, agentDisk, agentEnabled: isQemuAgentEnabled(config) };
+    const configIps = parseGuestConfigIps(config);
+    let ips = configIps;
+    if (running && !ips.length) {
+      const net = await client.vms.agentNetworkInterfaces(params.node, vmid).catch(() => null);
+      ips = parseAgentNetworkIps(net);
+    }
+    rememberGuestIpCache(client, "vm", params.node, vmid, ips);
+    return { status, config, snapshots, agentDisk, agentEnabled: isQemuAgentEnabled(config), ips };
   });
   return json(data);
 });
@@ -156,9 +166,14 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
         if (body.newid) await assertGuestIdentityFree(body.newid);
         result = await vm.clone(node, vmid, { newid: body.newid, name: body.name, full: 1 });
         break;
-      case "migrate":
-        result = await vm.migrate(node, vmid, { target: body.target, online: 1 });
+      case "migrate": {
+        const target = body.target?.trim() ?? "";
+        if (!target) throw new ValidationError("Ziel-Node fehlt");
+        if (target === node) throw new ValidationError("Ziel-Node ist der aktuelle Node");
+        const live = await vm.status(node, vmid).catch(() => null);
+        result = await vm.migrate(node, vmid, qemuMigrateParams(target, guestIsRunning(String(live?.status ?? ""))));
         break;
+      }
       case "snapshot":
         result = await vm.createSnapshot(node, vmid, body.snapname ?? `snap-${Date.now()}`, body.description);
         break;

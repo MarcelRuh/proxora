@@ -61,6 +61,7 @@ Adding a host runs:
 | VM create | POST | `/nodes/{node}/qemu` |
 | LXC create | POST | `/nodes/{node}/lxc` |
 | Snapshots | POST/DELETE | `/nodes/{node}/qemu\|lxc/{vmid}/snapshot` |
+| Migrate | POST | `/nodes/{node}/qemu\|lxc/{vmid}/migrate` |
 | Storage | GET | `/nodes/{node}/storage` |
 | ZFS | GET | `/nodes/{node}/disks/zfs` |
 | APT list | GET | `/nodes/{node}/apt/update` |

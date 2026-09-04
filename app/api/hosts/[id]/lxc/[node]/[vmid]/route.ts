@@ -13,6 +13,9 @@ import { assertGuestAccess } from "@/server/auth/session-core";
 import { assertGuestIdentityFree } from "@/server/services/guest-ips";
 import { withHostClient } from "@/server/services/host-service";
 import { waitGuestAction } from "@/server/proxmox/task-wait";
+import { guestIsRunning, lxcMigrateParams } from "@/lib/guest-migrate";
+import { parseGuestConfigIps } from "@/lib/create-ip";
+import { rememberGuestIpCache } from "@/server/services/guest-ip-cache";
 import { durationLabel } from "@/lib/duration";
 import { notifyGuestTaskFailed } from "@/server/notifications/guest-task-fail";
 
@@ -26,6 +29,7 @@ const actionSchema = z.object({
     "reboot",
     "delete",
     "clone",
+    "migrate",
     "snapshot",
     "snapshot-delete",
     "snapshot-rollback",
@@ -35,6 +39,7 @@ const actionSchema = z.object({
   confirm: z.boolean().optional(),
   newid: z.number().int().positive().optional(),
   hostname: z.string().optional(),
+  target: z.string().optional(),
   snapname: z.string().optional(),
   description: z.string().optional(),
   config: z.record(z.string(), z.unknown()).optional(),
@@ -49,6 +54,7 @@ const ACTION_AUDIT: Record<string, string> = {
   reboot: AUDIT_ACTIONS.LXC_REBOOT,
   delete: AUDIT_ACTIONS.LXC_DELETED,
   clone: AUDIT_ACTIONS.LXC_CLONED,
+  migrate: AUDIT_ACTIONS.LXC_MIGRATED,
   snapshot: AUDIT_ACTIONS.LXC_SNAPSHOT_CREATED,
   "snapshot-delete": AUDIT_ACTIONS.LXC_SNAPSHOT_DELETED,
   "snapshot-rollback": AUDIT_ACTIONS.LXC_SNAPSHOT_RESTORED,
@@ -70,7 +76,9 @@ export const GET = apiRoute("lxc.view", async (req, session, params) => {
       client.lxc.config(params.node, vmid),
       client.lxc.snapshots(params.node, vmid).catch(() => []),
     ]);
-    return { status, config, snapshots };
+    const ips = parseGuestConfigIps(config);
+    rememberGuestIpCache(client, "lxc", params.node, vmid, ips);
+    return { status, config, snapshots, ips };
   });
   return json(data);
 });
@@ -120,6 +128,14 @@ export const POST = apiRoute("lxc.view", async (req, session, params) => {
           if (body.newid) await assertGuestIdentityFree(body.newid);
           result = await client.lxc.clone(node, vmid, { newid: body.newid, hostname: body.hostname });
           break;
+        case "migrate": {
+          const target = body.target?.trim() ?? "";
+          if (!target) throw new ValidationError("Ziel-Node fehlt");
+          if (target === node) throw new ValidationError("Ziel-Node ist der aktuelle Node");
+          const live = await client.lxc.status(node, vmid).catch(() => null);
+          result = await client.lxc.migrate(node, vmid, lxcMigrateParams(target, guestIsRunning(String(live?.status ?? ""))));
+          break;
+        }
         case "snapshot":
           result = await client.lxc.createSnapshot(node, vmid, body.snapname ?? `snap-${Date.now()}`, body.description);
           break;

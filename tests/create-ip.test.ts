@@ -7,6 +7,7 @@ import {
   ipv4Host,
   networksForHost,
   parseGuestConfigIps,
+  parseAgentNetworkIps,
   parseGuestIpSettings,
 } from "@/lib/create-ip";
 
@@ -42,5 +43,22 @@ describe("guest IP settings and config parse", () => {
     expect(parseGuestConfigIps({ ipconfig0: "ip=192.168.1.50/24,gw=192.168.1.1" })).toEqual(["192.168.1.50"]);
     expect(parseGuestConfigIps({ net0: "name=eth0,ip=dhcp" })).toEqual([]);
     expect(ipv4Host("10.0.0.8/24")).toBe("10.0.0.8");
+  });
+
+  it("reads QEMU agent interfaces and skips loopback", () => {
+    expect(
+      parseAgentNetworkIps({
+        result: [
+          { name: "lo", "ip-addresses": [{ "ip-address": "127.0.0.1", "ip-address-type": "ipv4" }] },
+          {
+            name: "eth0",
+            "ip-addresses": [
+              { "ip-address": "192.168.178.10", "ip-address-type": "ipv4" },
+              { "ip-address": "fe80::1", "ip-address-type": "ipv6" },
+            ],
+          },
+        ],
+      }),
+    ).toEqual(["192.168.178.10"]);
   });
 });

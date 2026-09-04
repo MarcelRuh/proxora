@@ -70,6 +70,8 @@ describe("RBAC", () => {
     expect(permissionForGuestAction("vm", "shutdown")).toBe("vm.shutdown");
     expect(permissionForGuestAction("lxc", "snapshot")).toBe("lxc.snapshot.create");
     expect(permissionForGuestAction("lxc", "resize")).toBe("lxc.config");
+    expect(permissionForGuestAction("vm", "migrate")).toBe("vm.migrate");
+    expect(permissionForGuestAction("lxc", "migrate")).toBe("lxc.migrate");
   });
 
   it("denies missing permission lists", () => {
