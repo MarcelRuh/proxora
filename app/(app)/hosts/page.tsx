@@ -13,7 +13,7 @@ import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { QueryGate } from "@/components/layout/query-gate";
 import { useI18n } from "@/components/i18n/locale-provider";
-import { useCan } from "@/components/auth/session-user";
+import { useCan, useCanAny } from "@/components/auth/session-user";
 import { HostEditorDialog } from "@/components/hosts/host-editor";
 import { HostMaintenanceButton } from "@/components/hosts/host-maintenance";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
@@ -22,7 +22,7 @@ export default function HostsPage() {
   const { t } = useI18n();
   const canCreate = useCan("hosts.create");
   const canDelete = useCan("hosts.delete");
-  const canEdit = useCan("hosts.update") || useCan("hosts.credentials");
+  const canEdit = useCanAny(["hosts.update", "hosts.credentials"]);
   const canConsole = useCan("hosts.console");
   const qc = useQueryClient();
   const { data, isLoading, error, refetch } = useQuery({

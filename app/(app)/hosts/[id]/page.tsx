@@ -13,7 +13,7 @@ import { api } from "@/lib/api";
 import { formatUptime, percentage } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { useState } from "react";
-import { useCan } from "@/components/auth/session-user";
+import { useCan, useCanAny } from "@/components/auth/session-user";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { PublicHost } from "@/lib/types";
 import { HostEditorDialog } from "@/components/hosts/host-editor";
@@ -39,7 +39,7 @@ export default function HostDetailPage() {
   const canConsole = useCan("hosts.console");
   const canReboot = useCan("hosts.reboot");
   const canShutdown = useCan("hosts.shutdown");
-  const canEdit = useCan("hosts.update") || useCan("hosts.credentials");
+  const canEdit = useCanAny(["hosts.update", "hosts.credentials"]);
   const [editOpen, setEditOpen] = useState(false);
   const { data, error, refetch, isPending } = useQuery({
     queryKey: ["host", params.id],
