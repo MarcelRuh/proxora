@@ -60,8 +60,7 @@ export function WireguardSection() {
   const localHosts = (hostData?.hosts ?? []).filter((h) => h.origin !== "PEER");
   const [peerName, setPeerName] = useState("");
   const [peerIp, setPeerIp] = useState("");
-  const [inviteIn, setInviteIn] = useState("");
-  const [inviteOut, setInviteOut] = useState("");
+  const [peerSecret, setPeerSecret] = useState("");
   const [confIn, setConfIn] = useState("");
 
   const iface = wg?.interface;
@@ -186,52 +185,38 @@ export function WireguardSection() {
               <Label>{t("peers.colleagueIp")}</Label>
               <Input placeholder="10.89.0.1" value={peerIp} onChange={(e) => setPeerIp(e.target.value)} className="font-mono text-sm" />
             </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label>{t("peers.pairingSecret")}</Label>
+              <Input
+                type="password"
+                autoComplete="new-password"
+                placeholder={t("peers.pairingSecretHint")}
+                value={peerSecret}
+                onChange={(e) => setPeerSecret(e.target.value)}
+              />
+            </div>
           </div>
           <Button
             type="button"
-            variant="outline"
             onClick={async () => {
               try {
-                const res = await post({
+                await post({
                   action: "create-peer",
                   name: peerName || "Kollege",
                   address: peerIp,
                   proxoraPort: 3000,
+                  pairingSecret: peerSecret,
                 });
-                setInviteOut(res.invite ?? "");
                 setPeerName("");
                 setPeerIp("");
+                setPeerSecret("");
                 toast.success(t("peers.peerCreated"));
               } catch (e) {
                 toast.error(e instanceof Error ? e.message : t("common.failed"));
               }
             }}
           >
-            {t("peers.createInvite")}
-          </Button>
-          {inviteOut ? (
-            <textarea className="h-24 w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs" readOnly value={inviteOut} />
-          ) : null}
-          <Label className="block">{t("peers.pasteInvite")}</Label>
-          <textarea
-            className="h-24 w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs"
-            value={inviteIn}
-            onChange={(e) => setInviteIn(e.target.value)}
-          />
-          <Button
-            type="button"
-            onClick={async () => {
-              try {
-                const res = await post({ action: "import", invite: inviteIn });
-                setInviteOut(res.invite ?? inviteOut);
-                setInviteIn("");
-                toast.success(t("peers.imported"));
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : t("common.failed"));
-              }
-            }}
-          >
-            {t("peers.importInvite")}
+            {t("peers.addColleague")}
           </Button>
         </CardContent>
       </Card>
@@ -241,10 +226,6 @@ export function WireguardSection() {
           key={peer.id}
           peer={peer}
           localHosts={localHosts}
-          onInvite={async () => {
-            const res = await post({ action: "invite", peerId: peer.id });
-            setInviteOut(res.invite ?? "");
-          }}
           onUpdate={async (patch) => {
             await post({ action: "update-peer", peerId: peer.id, ...patch });
             toast.success(t("peers.peerSaved"));
@@ -281,19 +262,18 @@ function Field({ label, value, onBlur }: { label: string; value: string; onBlur:
 function PeerCard({
   peer,
   localHosts,
-  onInvite,
   onUpdate,
   onShares,
   onDelete,
 }: {
   peer: PeerRow;
   localHosts: PublicHost[];
-  onInvite: () => Promise<void>;
-  onUpdate: (patch: { name?: string; address?: string; proxoraPort?: number }) => Promise<void>;
+  onUpdate: (patch: { name?: string; address?: string; proxoraPort?: number; pairingSecret?: string }) => Promise<void>;
   onShares: (shares: Array<{ hostId: string; level: string }>) => Promise<void>;
   onDelete: () => Promise<void>;
 }) {
   const { t } = useI18n();
+  const [secret, setSecret] = useState("");
   const [levels, setLevels] = useState<Record<string, ShareLevel | "">>(() => {
     const next: Record<string, ShareLevel | ""> = {};
     for (const host of localHosts) {
@@ -315,9 +295,6 @@ function PeerCard({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={() => void onInvite().catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")))}>
-              {t("peers.showInvite")}
-            </Button>
             <Button size="sm" variant="destructive" onClick={() => void onDelete().catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")))}>
               {t("peers.remove")}
             </Button>
@@ -330,6 +307,22 @@ function PeerCard({
             value={String(peer.proxoraPort ?? 3000)}
             onBlur={(v) => void onUpdate({ proxoraPort: Number(v) || 3000 })}
           />
+          <div className="space-y-1 sm:col-span-2">
+            <Label>{t("peers.pairingSecret")}</Label>
+            <Input
+              type="password"
+              autoComplete="new-password"
+              placeholder={peer.paired ? t("peers.pairingSecretSet") : t("peers.pairingSecretHint")}
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              onBlur={() => {
+                if (!secret.trim()) return;
+                void onUpdate({ pairingSecret: secret })
+                  .then(() => setSecret(""))
+                  .catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")));
+              }}
+            />
+          </div>
         </div>
         {localHosts.length ? (
           <div className="space-y-2">

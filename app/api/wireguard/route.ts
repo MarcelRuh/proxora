@@ -41,6 +41,7 @@ export const POST = apiRoute("peers.manage", async (req) => {
       peerId: z.string().optional(),
       address: z.string().optional(),
       proxoraPort: z.number().int().optional(),
+      pairingSecret: z.string().optional(),
       publicKey: z.string().optional(),
       endpoint: z.string().optional(),
       allowedIPs: z.string().optional(),
@@ -51,7 +52,7 @@ export const POST = apiRoute("peers.manage", async (req) => {
   if (body.action === "create-peer") {
     const name = body.name?.trim();
     if (!name) throw new ValidationError("Name required");
-    const created = await createProxoraPeer(name, body.address, body.proxoraPort);
+    const created = await createProxoraPeer(name, body.address, body.proxoraPort, body.pairingSecret);
     return json(created, 201);
   }
   if (body.action === "import") {
@@ -84,6 +85,7 @@ export const POST = apiRoute("peers.manage", async (req) => {
         name: body.name,
         address: body.address,
         proxoraPort: body.proxoraPort,
+        pairingSecret: body.pairingSecret,
       }),
     });
   }

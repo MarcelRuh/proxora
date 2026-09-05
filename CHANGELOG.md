@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.1] – 2026-09-05
+
+### Changed
+
+- Federation pairing is a **shared secret** both sides type (no invite blobs). WireGuard still encrypts the tunnel; the secret authenticates the Proxora API so other clients on the same WG net cannot use shares.
+
 ## [1.4.0] – 2026-09-05
 
 ### Changed

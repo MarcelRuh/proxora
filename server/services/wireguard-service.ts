@@ -209,30 +209,45 @@ function isReachableHost(value: string): boolean {
   return /^[a-zA-Z0-9][a-zA-Z0-9.-]{0,250}$/.test(host);
 }
 
-export async function createProxoraPeer(name: string, address = "", proxoraPort = 3000) {
-  const cfg = await loadWireguardInterface();
+export async function createProxoraPeer(name: string, address = "", proxoraPort = 3000, pairingSecret = "") {
   const host = address.trim();
   if (host && !isReachableHost(host)) throw new ValidationError("Invalid Proxora IP");
   const port = Number.isInteger(proxoraPort) && proxoraPort >= 1 && proxoraPort <= 65535 ? proxoraPort : 3000;
-  const inbound = randomToken(32);
+  const secret = pairingSecret.trim();
+  if (secret.length < 12) throw new ValidationError("Pairing secret must be at least 12 characters");
+  const hash = sha256(secret);
+  const clash = await prisma.wireguardPeer.findUnique({ where: { inboundTokenHash: hash } });
+  if (clash) throw new ValidationError("This pairing secret is already used");
+  const encrypted = encryptSecret(secret);
   const peer = await prisma.wireguardPeer.create({
     data: {
       name: name.trim(),
       kind: WireguardPeerKind.PROXORA,
       address: host,
       proxoraPort: port,
-      inboundTokenHash: sha256(inbound),
-      encryptedInboundToken: encryptSecret(inbound),
+      inboundTokenHash: hash,
+      encryptedInboundToken: encrypted,
+      encryptedOutboundToken: encrypted,
     },
   });
-  return { peer: serializePeer(peer), invite: buildInvite(cfg, inbound) };
+  return { peer: serializePeer(peer) };
 }
 
-export async function updateProxoraPeer(peerId: string, input: { name?: string; address?: string; proxoraPort?: number }) {
+export async function updateProxoraPeer(
+  peerId: string,
+  input: { name?: string; address?: string; proxoraPort?: number; pairingSecret?: string },
+) {
   const peer = await prisma.wireguardPeer.findUnique({ where: { id: peerId } });
   if (!peer) throw new NotFoundError("Peer not found");
   if (peer.kind !== WireguardPeerKind.PROXORA) throw new ValidationError("Only Proxora peers can be updated");
-  const data: { name?: string; address?: string; proxoraPort?: number } = {};
+  const data: {
+    name?: string;
+    address?: string;
+    proxoraPort?: number;
+    inboundTokenHash?: string;
+    encryptedInboundToken?: string;
+    encryptedOutboundToken?: string;
+  } = {};
   if (input.name?.trim()) data.name = input.name.trim();
   if (input.address !== undefined) {
     const host = input.address.trim();
@@ -245,8 +260,19 @@ export async function updateProxoraPeer(peerId: string, input: { name?: string; 
     }
     data.proxoraPort = input.proxoraPort;
   }
+  if (input.pairingSecret !== undefined) {
+    const secret = input.pairingSecret.trim();
+    if (secret.length < 12) throw new ValidationError("Pairing secret must be at least 12 characters");
+    const hash = sha256(secret);
+    const clash = await prisma.wireguardPeer.findUnique({ where: { inboundTokenHash: hash } });
+    if (clash && clash.id !== peerId) throw new ValidationError("This pairing secret is already used");
+    const encrypted = encryptSecret(secret);
+    data.inboundTokenHash = hash;
+    data.encryptedInboundToken = encrypted;
+    data.encryptedOutboundToken = encrypted;
+  }
   const next = await prisma.wireguardPeer.update({ where: { id: peerId }, data });
-  if (data.address !== undefined || data.proxoraPort !== undefined) {
+  if (data.address !== undefined || data.proxoraPort !== undefined || data.encryptedOutboundToken) {
     const hosts = await prisma.host.findMany({ where: { peerId }, select: { id: true } });
     for (const host of hosts) hostClientCache.invalidate(host.id);
   }
