@@ -228,6 +228,9 @@ export async function applySelfUpdate(): Promise<{ ok: boolean; message: string;
   }
   const status = await getSelfUpdateStatus();
   if (!status.enabled) return { ok: false, message: status.message, mode: status.mode };
+  if (!status.updateAvailable) {
+    return { ok: false, message: status.message, mode: status.mode };
+  }
   if (status.sidecar === "missing") {
     return { ok: false, message: status.message, mode: status.mode };
   }

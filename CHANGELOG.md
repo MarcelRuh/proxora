@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.2.2] – 2026-09-05
+
+### Changed
+
+- Proxora self-update cannot be started when no newer version is available.
+
 ## [1.2.1] – 2026-09-05
 
 ### Fixed

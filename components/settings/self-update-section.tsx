@@ -188,25 +188,25 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
                 {t("proxora.check")}
               </Button>
               {canApply ? (
-                <ConfirmAction
-                  title={t("proxora.confirmTitle")}
-                  description={
-                    (status.updateAvailable
-                      ? t("proxora.confirmBody", {
-                          from: status.currentVersion,
-                          to: status.targetVersion ?? t("proxora.latest"),
-                        })
-                      : t("proxora.confirmAnyway")) +
-                    " " +
-                    t("proxora.confirmOverwrite")
-                  }
-                  actionLabel={t("proxora.apply")}
-                  onConfirm={handleApply}
-                >
-                  <Button size="sm" disabled={busy || status.updating || status.sidecar === "missing"}>
-                    {busy || status.updating ? t("proxora.applying") : t("proxora.apply")}
+                status.updateAvailable ? (
+                  <ConfirmAction
+                    title={t("proxora.confirmTitle")}
+                    description={`${t("proxora.confirmBody", {
+                      from: status.currentVersion,
+                      to: status.targetVersion ?? t("proxora.latest"),
+                    })} ${t("proxora.confirmOverwrite")}`}
+                    actionLabel={t("proxora.apply")}
+                    onConfirm={handleApply}
+                  >
+                    <Button size="sm" disabled={busy || status.updating || status.sidecar === "missing"}>
+                      {busy || status.updating ? t("proxora.applying") : t("proxora.apply")}
+                    </Button>
+                  </ConfirmAction>
+                ) : (
+                  <Button size="sm" disabled title={status.message}>
+                    {t("proxora.apply")}
                   </Button>
-                </ConfirmAction>
+                )
               ) : null}
             </div>
             {!compact && status.changelog ? (
