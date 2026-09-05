@@ -12,6 +12,7 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import type { Locale } from "@/lib/i18n/messages";
 import { applyWindowsGuestHardware } from "@/lib/windows-guest";
 import { isWindowsOstype } from "@/lib/iso-images";
+import { MemoryField } from "@/components/guests/memory-field";
 
 const SKIP = new Set(["digest"]);
 
@@ -222,9 +223,20 @@ export function GuestConfigForm({
     <fieldset disabled={readOnly} className="space-y-4 border-0 p-0">
       <Section title={t("config.cpuRam")} description={t("config.cpuRamBody")}>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {cpuKeys.map((key) => (
-            <Field key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} hint={hintFor(key, locale)} />
-          ))}
+          {cpuKeys.map((key) =>
+            key === "memory" ? (
+              <MemoryField
+                key={key}
+                value={Number(form[key]) || 0}
+                onChange={(mib) => setField(key, mib ? String(mib) : "")}
+                label={labelFor(key, locale)}
+                hint={hintFor(key, locale)}
+                inputClassName="font-mono"
+              />
+            ) : (
+              <Field key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} hint={hintFor(key, locale)} />
+            ),
+          )}
         </div>
       </Section>
 

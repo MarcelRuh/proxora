@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.2.5] – 2026-09-05
+
+### Added
+
+- RAM presets (128 MiB–64 GiB) when editing VM and container hardware, matching create.
+
 ## [1.2.4] – 2026-09-05
 
 ### Fixed
