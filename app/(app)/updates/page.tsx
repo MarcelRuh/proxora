@@ -221,32 +221,43 @@ export default function UpdatesPage() {
                     >
                       {checking ? t("updates.checking") : t("updates.checkOne")}
                     </Button>
-                    {(row.updates.length ? row.updates : [{ node: "" }]).map((n) => (
-                      <ConfirmAction
-                        key={n.node || row.host.id}
-                        title={t("updates.upgradeTitle", {
-                          name: row.host.name,
-                          node: n.node ? ` (${n.node})` : "",
-                        })}
-                        description={t("updates.upgradeBody")}
-                        actionLabel={t("updates.upgradeStart")}
-                        destructive
-                        onConfirm={async () => {
-                          const r = await api<{ mode: "console"; node: string }>(`/api/hosts/${row.host.id}/updates`, {
-                            method: "POST",
-                            body: JSON.stringify({
-                              action: "upgrade",
-                              node: n.node || undefined,
-                              confirm: true,
-                            }),
-                          });
-                          setShell({ hostId: row.host.id, node: r.node, name: row.host.name });
-                          toast.success(t("updates.consoleOpened"));
-                        }}
-                      >
-                        <Button size="sm">{t("updates.upgrade", { node: row.updates.length > 1 ? n.node : "" })}</Button>
-                      </ConfirmAction>
-                    ))}
+                    {(row.updates.length ? row.updates : [{ node: "", count: 0, packages: [] }]).map((n) => {
+                      const label = t("updates.upgrade", { node: row.updates.length > 1 ? n.node : "" });
+                      const canUpgrade = !row.error && n.count > 0;
+                      if (!canUpgrade) {
+                        return (
+                          <Button key={n.node || row.host.id} size="sm" disabled>
+                            {label}
+                          </Button>
+                        );
+                      }
+                      return (
+                        <ConfirmAction
+                          key={n.node || row.host.id}
+                          title={t("updates.upgradeTitle", {
+                            name: row.host.name,
+                            node: n.node ? ` (${n.node})` : "",
+                          })}
+                          description={t("updates.upgradeBody")}
+                          actionLabel={t("updates.upgradeStart")}
+                          destructive
+                          onConfirm={async () => {
+                            const r = await api<{ mode: "console"; node: string }>(`/api/hosts/${row.host.id}/updates`, {
+                              method: "POST",
+                              body: JSON.stringify({
+                                action: "upgrade",
+                                node: n.node || undefined,
+                                confirm: true,
+                              }),
+                            });
+                            setShell({ hostId: row.host.id, node: r.node, name: row.host.name });
+                            toast.success(t("updates.consoleOpened"));
+                          }}
+                        >
+                          <Button size="sm">{label}</Button>
+                        </ConfirmAction>
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>

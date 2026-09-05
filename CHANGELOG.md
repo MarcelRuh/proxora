@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.2.3] – 2026-09-05
+
+### Changed
+
+- Host Upgrade is disabled when that node has no pending APT packages.
+
 ## [1.2.2] – 2026-09-05
 
 ### Changed

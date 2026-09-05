@@ -39,6 +39,12 @@ export const POST = apiRoute(["updates.check", "updates.upgrade"], async (req, s
     const { ValidationError } = await import("@/lib/errors");
     throw new ValidationError("Bestätigung für Host-Updates erforderlich");
   }
+  const listed = await listHostUpdates(params.id, session.user, body.node);
+  const pending = listed.updates.reduce((sum, n) => sum + n.count, 0);
+  if (pending === 0) {
+    const { ValidationError } = await import("@/lib/errors");
+    throw new ValidationError("Keine Host-Updates verfügbar");
+  }
   const target = await upgradeConsoleTarget(params.id, session.user, body.node);
   await writeAuditLog({
     userId: session.user.id,
