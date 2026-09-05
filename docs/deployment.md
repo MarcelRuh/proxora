@@ -44,7 +44,7 @@ The wget installer prints username and password again in the final summary box. 
 | `PROXORA_UPDATE_SIGNAL_DIR` | Compose | `/update-signal` shared with `proxora-updater` |
 | `PROXORA_REPO` | no | default `MarcelRuh/proxora` |
 
-WireGuard pairing lives under **Settings → WireGuard**. Proxora is a **client** of your existing WireGuard server VM (public key, `host:51820`, AllowedIPs covering the WG net). Add Proxora as a `[Peer]` on that server using the snippet from settings. Each Proxora needs a unique WG address (e.g. `10.88.0.2/24` vs `10.88.0.3/24`). UDP 51820 is **not** published by Proxora — only the server VM listens. `/dev/net/tun` must be available (`c 10:200` in Compose). Host sharing is decided by the owner; remote hosts appear in a separate group and cannot reboot or re-credential the node.
+WireGuard pairing lives under **Settings → WireGuard**. Import the client `wg0.conf` from your WireGuard server VM, or fill in public key, `host:51820`, and AllowedIPs covering the WG net. Each Proxora needs a unique WG address (e.g. `10.88.0.2/24` vs `10.88.0.3/24`). UDP 51820 is **not** published by Proxora — only the server VM listens. `/dev/net/tun` must be available (`c 10:200` in Compose). Host sharing is decided by the owner; remote hosts appear in a separate group and cannot reboot or re-credential the node.
 
 ## Reverse proxy
 

@@ -6,8 +6,8 @@ import { prisma } from "@/lib/db";
 import { decryptSecret, encryptSecret, randomToken, sha256 } from "@/lib/crypto";
 import { ValidationError, NotFoundError } from "@/lib/errors";
 import { encodeWireguardInvite, parseWireguardInvite } from "@/lib/wireguard-invite";
-import { buildWg0Conf, serverPeerSnippet } from "@/lib/wireguard-conf";
-import { generateWireguardKeypair, interfaceIpv4, isWireguardKey, peerAllowedIps } from "@/lib/wireguard-keys";
+import { buildWg0Conf, parseWgQuickConf, sanitizeClientAllowedIps, serverPeerSnippet } from "@/lib/wireguard-conf";
+import { generateWireguardKeypair, interfaceIpv4, isWireguardKey, peerAllowedIps, publicKeyFromPrivate } from "@/lib/wireguard-keys";
 
 export const WG_SETTING_KEY = "wireguard";
 export const WG_CONFIG_DIR = process.env.WG_CONFIG_DIR ?? "/wireguard";
@@ -22,6 +22,7 @@ export type WireguardInterfaceSettings = {
   serverEndpoint: string;
   allowedIPs: string;
   persistentKeepalive: number;
+  encryptedPresharedKey: string;
 };
 
 const interfacePatchSchema = z.object({
@@ -53,6 +54,7 @@ export function defaultInterfaceSettings(): WireguardInterfaceSettings {
     serverEndpoint: "",
     allowedIPs: "10.88.0.0/24",
     persistentKeepalive: 25,
+    encryptedPresharedKey: "",
   };
 }
 
@@ -97,6 +99,7 @@ export async function loadWireguardInterface(): Promise<WireguardInterfaceSettin
     serverEndpoint,
     allowedIPs,
     persistentKeepalive: Number(rec.persistentKeepalive ?? 25) || 25,
+    encryptedPresharedKey: String(rec.encryptedPresharedKey ?? ""),
   };
 }
 
@@ -133,6 +136,7 @@ export function publicInterface(cfg: WireguardInterfaceSettings) {
     serverEndpoint: cfg.serverEndpoint,
     allowedIPs: cfg.allowedIPs,
     persistentKeepalive: cfg.persistentKeepalive,
+    hasPresharedKey: Boolean(cfg.encryptedPresharedKey),
     serverPeerSnippet: serverPeerSnippet(cfg.publicKey, cfg.address),
   };
 }
@@ -152,12 +156,14 @@ export async function writeWireguardConfig(cfg?: WireguardInterfaceSettings) {
     orderBy: { name: "asc" },
   });
   const peers = [];
+  const psk = settings.encryptedPresharedKey ? decryptSecret(settings.encryptedPresharedKey) : undefined;
   if (settings.serverPublicKey && settings.serverEndpoint) {
     peers.push({
       publicKey: settings.serverPublicKey,
       endpoint: settings.serverEndpoint,
       allowedIPs: settings.allowedIPs || "10.88.0.0/24",
       persistentKeepalive: settings.persistentKeepalive,
+      presharedKey: psk,
     });
   }
   for (const peer of gateways) {
@@ -227,6 +233,40 @@ export async function addGatewayPeer(input: unknown) {
     serverPublicKey: body.publicKey.trim(),
     serverEndpoint: body.endpoint.trim(),
     allowedIPs: body.allowedIPs.trim() || current.allowedIPs,
+  };
+  await saveInterface(next);
+  return publicInterface(next);
+}
+
+export async function importWireguardConf(raw: string) {
+  let parsed;
+  try {
+    parsed = parseWgQuickConf(raw);
+  } catch (e) {
+    throw new ValidationError(e instanceof Error ? e.message : "Invalid WireGuard config");
+  }
+  const peer = parsed.peers.find((p) => p.endpoint) ?? parsed.peers[0];
+  if (!peer?.endpoint) {
+    throw new ValidationError("Client config needs a [Peer] with Endpoint");
+  }
+  let publicKey: string;
+  try {
+    publicKey = publicKeyFromPrivate(parsed.privateKey);
+  } catch {
+    throw new ValidationError("Invalid PrivateKey");
+  }
+  const current = await loadWireguardInterface();
+  const next: WireguardInterfaceSettings = {
+    ...current,
+    enabled: true,
+    address: parsed.address,
+    publicKey,
+    encryptedPrivateKey: encryptSecret(parsed.privateKey),
+    serverPublicKey: peer.publicKey,
+    serverEndpoint: peer.endpoint,
+    allowedIPs: sanitizeClientAllowedIps(peer.allowedIPs, parsed.address),
+    persistentKeepalive: peer.persistentKeepalive ?? 25,
+    encryptedPresharedKey: peer.presharedKey ? encryptSecret(peer.presharedKey) : "",
   };
   await saveInterface(next);
   return publicInterface(next);

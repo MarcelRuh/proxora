@@ -6,6 +6,7 @@ import {
   addGatewayPeer,
   createProxoraPeer,
   deletePeer,
+  importWireguardConf,
   importWireguardInvite,
   inviteForPeer,
   listPeersWithShares,
@@ -32,9 +33,10 @@ export const PATCH = apiRoute("peers.manage", async (req) => {
 export const POST = apiRoute("peers.manage", async (req) => {
   const body = z
     .object({
-      action: z.enum(["create-peer", "import", "gateway", "invite", "shares", "delete-peer"]),
+      action: z.enum(["create-peer", "import", "import-conf", "gateway", "invite", "shares", "delete-peer"]),
       name: z.string().optional(),
       invite: z.string().optional(),
+      config: z.string().optional(),
       peerId: z.string().optional(),
       publicKey: z.string().optional(),
       endpoint: z.string().optional(),
@@ -52,6 +54,11 @@ export const POST = apiRoute("peers.manage", async (req) => {
   if (body.action === "import") {
     if (!body.invite) throw new ValidationError("Invite required");
     return json(await importWireguardInvite(body.invite));
+  }
+  if (body.action === "import-conf") {
+    const config = body.config?.trim() ?? "";
+    if (config.length < 20 || config.length > 64_000) throw new ValidationError("WireGuard config required");
+    return json({ interface: await importWireguardConf(config) });
   }
   if (body.action === "gateway") {
     return json({

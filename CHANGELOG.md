@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.3.2] – 2026-09-05
+
+### Added
+
+- Import a WireGuard client `wg0.conf` (file or paste) under Settings. PrivateKey, Address, server peer, AllowedIPs, keepalive, and PresharedKey are applied; DNS and `0.0.0.0/0` are ignored so the container keeps LAN/DNS.
+
 ## [1.3.1] – 2026-09-05
 
 ### Changed

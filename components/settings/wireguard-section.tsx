@@ -36,6 +36,7 @@ type WgPayload = {
     serverEndpoint: string;
     allowedIPs: string;
     persistentKeepalive: number;
+    hasPresharedKey: boolean;
     serverPeerSnippet: string;
   };
   peers: PeerRow[];
@@ -59,6 +60,7 @@ export function WireguardSection() {
   const [peerName, setPeerName] = useState("");
   const [inviteIn, setInviteIn] = useState("");
   const [inviteOut, setInviteOut] = useState("");
+  const [confIn, setConfIn] = useState("");
 
   const iface = wg?.interface;
   const peers = (wg?.peers ?? []).filter((p) => p.kind === "PROXORA");
@@ -100,8 +102,55 @@ export function WireguardSection() {
             </div>
 
             <div className="space-y-3 rounded-lg border border-border p-3">
+              <p className="text-sm font-medium">{t("peers.importConfTitle")}</p>
+              <p className="text-xs text-muted-foreground">{t("peers.importConfBody")}</p>
+              <input
+                type="file"
+                accept=".conf,.txt,text/plain"
+                className="block text-sm file:mr-2 file:rounded-md file:border file:border-input file:bg-transparent file:px-3 file:py-1"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  void file.text().then(async (text) => {
+                    setConfIn(text);
+                    try {
+                      await post({ action: "import-conf", config: text });
+                      setConfIn("");
+                      toast.success(t("peers.importConfDone"));
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : t("common.failed"));
+                    }
+                  });
+                }}
+              />
+              <textarea
+                className="h-28 w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs"
+                placeholder={t("peers.importConfPaste")}
+                value={confIn}
+                onChange={(e) => setConfIn(e.target.value)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    await post({ action: "import-conf", config: confIn });
+                    setConfIn("");
+                    toast.success(t("peers.importConfDone"));
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : t("common.failed"));
+                  }
+                }}
+              >
+                {t("peers.importConfButton")}
+              </Button>
+            </div>
+
+            <div className="space-y-3 rounded-lg border border-border p-3">
               <p className="text-sm font-medium">{t("peers.gatewayTitle")}</p>
               <p className="text-xs text-muted-foreground">{t("peers.gatewayBody")}</p>
+              {iface.hasPresharedKey ? <p className="text-xs text-muted-foreground">{t("peers.hasPresharedKey")}</p> : null}
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field
                   label={t("peers.serverEndpoint")}

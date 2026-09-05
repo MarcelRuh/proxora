@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { encodeWireguardInvite, parseWireguardInvite } from "@/lib/wireguard-invite";
-import { buildWg0Conf, serverPeerSnippet } from "@/lib/wireguard-conf";
-import { generateWireguardKeypair, isWireguardKey } from "@/lib/wireguard-keys";
+import { buildWg0Conf, parseWgQuickConf, sanitizeClientAllowedIps, serverPeerSnippet } from "@/lib/wireguard-conf";
+import { generateWireguardKeypair, isWireguardKey, publicKeyFromPrivate } from "@/lib/wireguard-keys";
 import { federationActionLevel, shareAllows } from "@/lib/federation-access";
 
 describe("wireguard keys", () => {
@@ -10,6 +10,11 @@ describe("wireguard keys", () => {
     expect(isWireguardKey(pair.privateKey)).toBe(true);
     expect(isWireguardKey(pair.publicKey)).toBe(true);
     expect(pair.privateKey).not.toBe(pair.publicKey);
+  });
+
+  it("derives the matching public key from a private key", () => {
+    const pair = generateWireguardKeypair();
+    expect(publicKeyFromPrivate(pair.privateKey)).toBe(pair.publicKey);
   });
 });
 
@@ -61,6 +66,68 @@ describe("wireguard client conf", () => {
     expect(serverPeerSnippet(keys.publicKey, "10.88.0.2/24")).toBe(
       `[Peer]\nPublicKey = ${keys.publicKey}\nAllowedIPs = 10.88.0.2/32\n`,
     );
+  });
+});
+
+describe("wireguard conf import", () => {
+  it("parses a wg-quick client file", () => {
+    const client = generateWireguardKeypair();
+    const server = generateWireguardKeypair();
+    const psk = generateWireguardKeypair().privateKey;
+    const parsed = parseWgQuickConf(`
+# comment
+[Interface]
+PrivateKey = ${client.privateKey}
+Address = 10.88.0.2/24, fd00::2/64
+DNS = 1.1.1.1
+ListenPort = 51820
+
+[Peer]
+PublicKey = ${server.publicKey}
+PresharedKey = ${psk}
+Endpoint = 192.168.10.50:51820
+AllowedIPs = 10.88.0.0/24, 192.168.0.0/16
+PersistentKeepalive = 25
+`);
+    expect(parsed.privateKey).toBe(client.privateKey);
+    expect(parsed.address).toBe("10.88.0.2/24");
+    expect(parsed.peers).toHaveLength(1);
+    expect(parsed.peers[0]).toMatchObject({
+      publicKey: server.publicKey,
+      presharedKey: psk,
+      endpoint: "192.168.10.50:51820",
+      allowedIPs: "10.88.0.0/24, 192.168.0.0/16",
+      persistentKeepalive: 25,
+    });
+  });
+
+  it("rejects configs without a peer or ipv4 address", () => {
+    const client = generateWireguardKeypair();
+    expect(() => parseWgQuickConf(`[Interface]\nPrivateKey = ${client.privateKey}\n`)).toThrow(/Address|Peer/);
+    expect(() => parseWgQuickConf("not a conf")).toThrow(/Interface/);
+  });
+
+  it("writes PresharedKey into the generated conf", () => {
+    const server = generateWireguardKeypair();
+    const psk = generateWireguardKeypair().privateKey;
+    const conf = buildWg0Conf({
+      privateKey: "x",
+      address: "10.88.0.2/24",
+      peers: [
+        {
+          publicKey: server.publicKey,
+          endpoint: "wg:51820",
+          allowedIPs: "10.88.0.0/24",
+          presharedKey: psk,
+        },
+      ],
+    });
+    expect(conf).toContain(`PresharedKey = ${psk}`);
+  });
+
+  it("drops full-tunnel AllowedIPs so Docker DNS still works", () => {
+    expect(sanitizeClientAllowedIps("0.0.0.0/0, ::/0", "10.88.0.2/24")).toBe("10.88.0.0/24");
+    expect(sanitizeClientAllowedIps("10.88.0.0/24, 0.0.0.0/0", "10.88.0.2/24")).toBe("10.88.0.0/24");
   });
 });
 
