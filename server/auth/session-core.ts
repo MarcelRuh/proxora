@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { randomToken, sha256 } from "@/lib/crypto";
 import type { GuestScope } from "@/lib/guest-scope";
 import { parseGuestKind, canAccessGuest, canAccessHost } from "@/lib/guest-scope";
+import { sanitizePermissions } from "@/lib/permissions";
 import { ensureSystemRoles } from "@/server/services/role-sync";
 
 export { canAccessGuest, canAccessHost, filterGuestsForUser } from "@/lib/guest-scope";
@@ -21,6 +22,7 @@ export type SessionUser = {
   };
   allowedHostIds: string[] | null;
   allowedGuests: GuestScope[] | null;
+  hostPermissions: Record<string, string[] | null> | null;
 };
 
 export type AuthSession = {
@@ -90,6 +92,14 @@ export async function getSessionFromToken(token: string | undefined | null): Pro
   if (hostFromAccess.length > 0) allowedHostIds = [...new Set(hostFromAccess)];
   else if (hostFromGuests.length > 0) allowedHostIds = [...new Set(hostFromGuests)];
 
+  const hostPermissions: Record<string, string[] | null> = {};
+  for (const row of record.user.hostAccess) {
+    hostPermissions[row.hostId] = row.override ? sanitizePermissions(row.permissions) : null;
+  }
+  for (const hostId of hostFromGuests) {
+    if (!(hostId in hostPermissions)) hostPermissions[hostId] = null;
+  }
+
   return {
     id: record.id,
     user: {
@@ -104,6 +114,7 @@ export async function getSessionFromToken(token: string | undefined | null): Pro
       },
       allowedHostIds,
       allowedGuests: guests.length ? guests : null,
+      hostPermissions: Object.keys(hostPermissions).length ? hostPermissions : null,
     },
   };
 }

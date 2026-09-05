@@ -241,6 +241,62 @@ export function hasAnyPermission(
   return required.some((p) => expanded.has(p));
 }
 
+const HOST_SCOPED_GROUP_IDS = new Set<PermissionGroupId>(["hosts", "vm", "lxc", "storage", "backup", "updates"]);
+
+/** Proxora-wide actions that never attach to a single host. */
+export function isHostScopedPermission(id: Permission): boolean {
+  if (id === "hosts.create" || id === "proxora.update") return false;
+  if (id === "tasks.view" || id === "tasks.cancel") return true;
+  const meta = PERMISSION_CATALOG.find((p) => p.id === id);
+  return Boolean(meta && HOST_SCOPED_GROUP_IDS.has(meta.group));
+}
+
+export function hostGrantCatalog(): PermissionMeta[] {
+  return PERMISSION_CATALOG.filter((p) => isHostScopedPermission(p.id));
+}
+
+export function hostScopedFromRole(granted: readonly string[] | undefined): Permission[] {
+  return hostGrantCatalog()
+    .map((p) => p.id)
+    .filter((id) => hasPermission(granted, id));
+}
+
+export type PermissionHolder = {
+  role?: { permissions?: readonly string[] };
+  hostPermissions?: Record<string, string[] | null> | null;
+};
+
+/**
+ * Host-scoped checks use a per-host override when set; otherwise the role.
+ * Global checks (users, settings, …) always use the role.
+ * Without a host id, a host-scoped permission is granted if the role or any override has it.
+ */
+export function userHasPermission(
+  holder: PermissionHolder | null | undefined,
+  required: Permission,
+  hostId?: string | null,
+): boolean {
+  const role = holder?.role?.permissions;
+  if (!isHostScopedPermission(required)) return hasPermission(role, required);
+  if (hostId) {
+    const override = holder?.hostPermissions?.[hostId];
+    if (override) return hasPermission(override, required);
+    return hasPermission(role, required);
+  }
+  if (hasPermission(role, required)) return true;
+  const map = holder?.hostPermissions;
+  if (!map) return false;
+  return Object.values(map).some((granted) => Boolean(granted && hasPermission(granted, required)));
+}
+
+export function userHasAnyPermission(
+  holder: PermissionHolder | null | undefined,
+  required: readonly Permission[],
+  hostId?: string | null,
+): boolean {
+  return required.some((p) => userHasPermission(holder, p, hostId));
+}
+
 export const ROLE_PRESETS: Record<
   "super-admin" | "administrator" | "operator" | "viewer",
   { name: string; description: string; permissions: Permission[] }

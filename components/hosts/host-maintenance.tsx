@@ -16,7 +16,7 @@ export function HostMaintenanceButton({
   onDone: () => void;
 }) {
   const { t } = useI18n();
-  const canEdit = useCan("hosts.update");
+  const canEdit = useCan("hosts.update", host.id);
   if (!canEdit) return null;
 
   const inMaintenance = host.connectionState === "MAINTENANCE";

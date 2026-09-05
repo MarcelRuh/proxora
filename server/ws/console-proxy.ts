@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/db";
 import { SESSION_COOKIE } from "@/lib/env";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
-import { hasPermission } from "@/lib/permissions";
+import { userHasPermission } from "@/lib/permissions";
 import { getSessionFromToken, assertGuestAccess, canAccessHost } from "@/server/auth/session-core";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { clientForHost } from "@/server/services/host-service";
@@ -65,8 +65,14 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
   }
 
   const permission =
-    kind === "node" ? "hosts.console" : kind === "vm" ? "vm.console" : "lxc.console";
-  if (!hasPermission(session.user.role.permissions, permission)) {
+    cmd === "upgrade"
+      ? "updates.upgrade"
+      : kind === "node"
+        ? "hosts.console"
+        : kind === "vm"
+          ? "vm.console"
+          : "lxc.console";
+  if (!userHasPermission(session.user, permission, hostId)) {
     browser.close(4403, "Forbidden");
     return;
   }

@@ -36,10 +36,10 @@ export default function HostDetailPage() {
   const { t } = useI18n();
   const params = useParams<{ id: string }>();
   const qc = useQueryClient();
-  const canConsole = useCan("hosts.console");
-  const canReboot = useCan("hosts.reboot");
-  const canShutdown = useCan("hosts.shutdown");
-  const canEdit = useCanAny(["hosts.update", "hosts.credentials"]);
+  const canConsole = useCan("hosts.console", params.id);
+  const canReboot = useCan("hosts.reboot", params.id);
+  const canShutdown = useCan("hosts.shutdown", params.id);
+  const canEdit = useCanAny(["hosts.update", "hosts.credentials"], params.id);
   const [editOpen, setEditOpen] = useState(false);
   const { data, error, refetch, isPending } = useQuery({
     queryKey: ["host", params.id],

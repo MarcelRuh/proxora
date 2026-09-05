@@ -46,28 +46,29 @@ function num(value: unknown): number {
 
 export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const { t } = useI18n();
-  const can = {
-    start: useCan(kind === "vm" ? "vm.start" : "lxc.start"),
-    shutdown: useCan(kind === "vm" ? "vm.shutdown" : "lxc.shutdown"),
-    stop: useCan(kind === "vm" ? "vm.force-stop" : "lxc.force-stop"),
-    snapshotCreate: useCan(kind === "vm" ? "vm.snapshot.create" : "lxc.snapshot.create"),
-    snapshotDelete: useCan(kind === "vm" ? "vm.snapshot.delete" : "lxc.snapshot.delete"),
-    snapshotRollback: useCan(kind === "vm" ? "vm.snapshot.rollback" : "lxc.snapshot.rollback"),
-    reboot: useCan(kind === "vm" ? "vm.reboot" : "lxc.reboot"),
-    pause: useCan("vm.pause"),
-    resume: useCan("vm.resume"),
-    reset: useCan("vm.reset"),
-    clone: useCan(kind === "vm" ? "vm.clone" : "lxc.clone"),
-    migrate: useCan(kind === "vm" ? "vm.migrate" : "lxc.migrate"),
-    delete: useCan(kind === "vm" ? "vm.delete" : "lxc.delete"),
-    console: useCan(kind === "vm" ? "vm.console" : "lxc.console"),
-    config: useCan(kind === "vm" ? "vm.config" : "lxc.config"),
-    backup: useCan("backup.run"),
-    restore: useCan("backup.restore"),
-  };
   const router = useRouter();
   const qc = useQueryClient();
   const params = useParams<{ hostId: string; node: string; vmid: string }>();
+  const hostId = params.hostId;
+  const can = {
+    start: useCan(kind === "vm" ? "vm.start" : "lxc.start", hostId),
+    shutdown: useCan(kind === "vm" ? "vm.shutdown" : "lxc.shutdown", hostId),
+    stop: useCan(kind === "vm" ? "vm.force-stop" : "lxc.force-stop", hostId),
+    snapshotCreate: useCan(kind === "vm" ? "vm.snapshot.create" : "lxc.snapshot.create", hostId),
+    snapshotDelete: useCan(kind === "vm" ? "vm.snapshot.delete" : "lxc.snapshot.delete", hostId),
+    snapshotRollback: useCan(kind === "vm" ? "vm.snapshot.rollback" : "lxc.snapshot.rollback", hostId),
+    reboot: useCan(kind === "vm" ? "vm.reboot" : "lxc.reboot", hostId),
+    pause: useCan("vm.pause", hostId),
+    resume: useCan("vm.resume", hostId),
+    reset: useCan("vm.reset", hostId),
+    clone: useCan(kind === "vm" ? "vm.clone" : "lxc.clone", hostId),
+    migrate: useCan(kind === "vm" ? "vm.migrate" : "lxc.migrate", hostId),
+    delete: useCan(kind === "vm" ? "vm.delete" : "lxc.delete", hostId),
+    console: useCan(kind === "vm" ? "vm.console" : "lxc.console", hostId),
+    config: useCan(kind === "vm" ? "vm.config" : "lxc.config", hostId),
+    backup: useCan("backup.run", hostId),
+    restore: useCan("backup.restore", hostId),
+  };
   const search = useSearchParams();
   const listPath = kind === "vm" ? "/vms" : "/containers";
   const kindLabel = kind === "vm" ? "VM" : "LXC";

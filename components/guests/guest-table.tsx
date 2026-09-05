@@ -21,7 +21,8 @@ import { formatGuestIps } from "@/lib/guest-ip-display";
 import { formatUptime } from "@/lib/utils";
 import type { Guest } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
-import { useCan } from "@/components/auth/session-user";
+import { useSessionUser } from "@/components/auth/session-user";
+import { userHasPermission, type Permission } from "@/lib/permissions";
 
 export const GuestTable = memo(function GuestTable({
   kind,
@@ -36,26 +37,7 @@ export const GuestTable = memo(function GuestTable({
 }) {
   const { t } = useI18n();
   const mixed = kind === "all";
-  const can = {
-    vm: {
-      start: useCan("vm.start"),
-      shutdown: useCan("vm.shutdown"),
-      reboot: useCan("vm.reboot"),
-      stop: useCan("vm.force-stop"),
-      console: useCan("vm.console"),
-      snapshot: useCan("vm.snapshot.create"),
-      delete: useCan("vm.delete"),
-    },
-    lxc: {
-      start: useCan("lxc.start"),
-      shutdown: useCan("lxc.shutdown"),
-      reboot: useCan("lxc.reboot"),
-      stop: useCan("lxc.force-stop"),
-      console: useCan("lxc.console"),
-      snapshot: useCan("lxc.snapshot.create"),
-      delete: useCan("lxc.delete"),
-    },
-  };
+  const user = useSessionUser();
   const qc = useQueryClient();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -119,11 +101,12 @@ export const GuestTable = memo(function GuestTable({
   }
 
   function canBulk(g: Guest, action: BulkGuestAction): boolean {
-    const row = rowKind(g);
-    if (action === "start") return can[row].start;
-    if (action === "shutdown") return can[row].shutdown;
-    if (action === "reboot") return can[row].reboot;
-    if (action === "stop") return can[row].stop;
+    const hid = g.hostId ?? hostId ?? "";
+    const prefix = rowKind(g) === "vm" ? "vm" : "lxc";
+    if (action === "start") return userHasPermission(user, `${prefix}.start` as Permission, hid);
+    if (action === "shutdown") return userHasPermission(user, `${prefix}.shutdown` as Permission, hid);
+    if (action === "reboot") return userHasPermission(user, `${prefix}.reboot` as Permission, hid);
+    if (action === "stop") return userHasPermission(user, `${prefix}.force-stop` as Permission, hid);
     return false;
   }
 
@@ -287,7 +270,16 @@ export const GuestTable = memo(function GuestTable({
               filtered.map((g) => {
                 const hid = g.hostId ?? hostId ?? "";
                 const row = rowKind(g);
-                const perms = can[row];
+                const prefix = row === "vm" ? "vm" : "lxc";
+                const perms = {
+                  start: userHasPermission(user, `${prefix}.start` as Permission, hid),
+                  shutdown: userHasPermission(user, `${prefix}.shutdown` as Permission, hid),
+                  reboot: userHasPermission(user, `${prefix}.reboot` as Permission, hid),
+                  stop: userHasPermission(user, `${prefix}.force-stop` as Permission, hid),
+                  console: userHasPermission(user, `${prefix}.console` as Permission, hid),
+                  snapshot: userHasPermission(user, `${prefix}.snapshot.create` as Permission, hid),
+                  delete: userHasPermission(user, `${prefix}.delete` as Permission, hid),
+                };
                 const kindLabel = row === "vm" ? "VM" : "LXC";
                 const detailBase = row === "vm" ? "vms" : "containers";
                 const rowTags = parseGuestTags(g.tags);

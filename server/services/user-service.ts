@@ -12,12 +12,18 @@ const guestScopeSchema = z.object({
   vmid: z.number().int().positive(),
 });
 
+const hostGrantSchema = z.object({
+  hostId: z.string().min(1),
+  permissions: z.array(z.string()).nullable().optional(),
+});
+
 export const createUserSchema = z.object({
   username: z.string().min(2).max(40).regex(/^[a-zA-Z0-9._-]+$/),
   email: z.string().email(),
   password: z.string().min(10).max(200),
   roleId: z.string().min(1),
   hostIds: z.array(z.string()).optional(),
+  hosts: z.array(hostGrantSchema).optional(),
   guests: z.array(guestScopeSchema).optional(),
 });
 
@@ -27,6 +33,7 @@ export const updateUserSchema = z.object({
   roleId: z.string().min(1).optional(),
   status: z.enum(["ACTIVE", "DISABLED"]).optional(),
   hostIds: z.array(z.string()).optional(),
+  hosts: z.array(hostGrantSchema).optional(),
   guests: z.array(guestScopeSchema).optional(),
 });
 
@@ -55,16 +62,55 @@ function toGuestScope(rows: Array<{ hostId: string; kind: string; vmid: number }
   });
 }
 
+export type HostGrantDto = { hostId: string; permissions: string[] | null };
+
+function toHostGrants(rows: Array<{ hostId: string; permissions: string[]; override: boolean }>): HostGrantDto[] {
+  return rows.map((h) => ({
+    hostId: h.hostId,
+    permissions: h.override ? sanitizePermissions(h.permissions) : null,
+  }));
+}
+
+function hostRowsFromInput(
+  hosts?: Array<{ hostId: string; permissions?: string[] | null }>,
+  hostIds?: string[],
+): Array<{ hostId: string; override: boolean; permissions: string[] }> {
+  if (hosts?.length) {
+    return hosts.map((h) => ({
+      hostId: h.hostId,
+      override: h.permissions != null,
+      permissions: h.permissions ? sanitizePermissions(h.permissions) : [],
+    }));
+  }
+  if (hostIds?.length) {
+    return hostIds.map((hostId) => ({ hostId, override: false, permissions: [] }));
+  }
+  return [];
+}
+
+function withScope<
+  T extends {
+    passwordHash: string;
+    totpSecret: string | null;
+    hostAccess: Array<{ hostId: string; permissions: string[]; override: boolean }>;
+    guestAccess: Array<{ hostId: string; kind: string; vmid: number }>;
+  },
+>(user: T) {
+  const hosts = toHostGrants(user.hostAccess);
+  return {
+    ...sanitizeUser(user),
+    hostIds: hosts.map((h) => h.hostId),
+    hosts,
+    guests: toGuestScope(user.guestAccess),
+  };
+}
+
 export async function listUsers() {
   const users = await prisma.user.findMany({
     include: { role: true, hostAccess: true, guestAccess: true },
     orderBy: { username: "asc" },
   });
-  return users.map((u) => ({
-    ...sanitizeUser(u),
-    hostIds: u.hostAccess.map((h) => h.hostId),
-    guests: toGuestScope(u.guestAccess),
-  }));
+  return users.map((u) => withScope(u));
 }
 
 export async function createUser(input: z.infer<typeof createUserSchema>) {
@@ -74,26 +120,21 @@ export async function createUser(input: z.infer<typeof createUserSchema>) {
   if (existing) throw new ConflictError("Username or email already exists");
   const role = await prisma.role.findUnique({ where: { id: input.roleId } });
   if (!role) throw new ValidationError("Role not found");
+  const hostRows = hostRowsFromInput(input.hosts, input.hostIds);
   const user = await prisma.user.create({
     data: {
       username: input.username,
       email: input.email,
       passwordHash: await hashPassword(input.password),
       roleId: input.roleId,
-      hostAccess: input.hostIds?.length
-        ? { create: input.hostIds.map((hostId) => ({ hostId })) }
-        : undefined,
+      hostAccess: hostRows.length ? { create: hostRows } : undefined,
       guestAccess: input.guests?.length
         ? { create: input.guests.map((g) => ({ hostId: g.hostId, kind: g.kind, vmid: g.vmid })) }
         : undefined,
     },
     include: { role: true, hostAccess: true, guestAccess: true },
   });
-  return {
-    ...sanitizeUser(user),
-    hostIds: user.hostAccess.map((h) => h.hostId),
-    guests: toGuestScope(user.guestAccess),
-  };
+  return withScope(user);
 }
 
 export async function updateUser(id: string, input: z.infer<typeof updateUserSchema>) {
@@ -109,11 +150,12 @@ export async function updateUser(id: string, input: z.infer<typeof updateUserSch
     data,
   });
   if (input.password) await destroyUserSessions(id);
-  if (input.hostIds) {
+  if (input.hosts || input.hostIds) {
+    const hostRows = hostRowsFromInput(input.hosts, input.hostIds);
     await prisma.userHostAccess.deleteMany({ where: { userId: id } });
-    if (input.hostIds.length) {
+    if (hostRows.length) {
       await prisma.userHostAccess.createMany({
-        data: input.hostIds.map((hostId) => ({ userId: id, hostId })),
+        data: hostRows.map((row) => ({ userId: id, ...row })),
       });
     }
   }
@@ -129,11 +171,7 @@ export async function updateUser(id: string, input: z.infer<typeof updateUserSch
     where: { id },
     include: { role: true, hostAccess: true, guestAccess: true },
   });
-  return {
-    ...sanitizeUser(fresh),
-    hostIds: fresh.hostAccess.map((h) => h.hostId),
-    guests: toGuestScope(fresh.guestAccess),
-  };
+  return withScope(fresh);
 }
 
 export async function deleteUser(id: string, actorId: string) {

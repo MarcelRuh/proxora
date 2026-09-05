@@ -59,8 +59,8 @@ export function HostEditorDialog({
   onSaved: () => void;
 }) {
   const { t } = useI18n();
-  const canUpdate = useCan("hosts.update");
-  const canCreds = useCan("hosts.credentials");
+  const canUpdate = useCan("hosts.update", host?.id);
+  const canCreds = useCan("hosts.credentials", host?.id);
   const [form, setForm] = useState<HostFormState>(emptyHostForm);
   const [test, setTest] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

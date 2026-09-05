@@ -1,7 +1,7 @@
 import { cookies, headers } from "next/headers";
 import { SESSION_COOKIE } from "@/lib/env";
 import { ForbiddenError, UnauthorizedError } from "@/lib/errors";
-import { hasAnyPermission, hasPermission, type Permission } from "@/lib/permissions";
+import { userHasPermission, type Permission } from "@/lib/permissions";
 import {
   getSessionFromToken,
   type AuthSession,
@@ -36,7 +36,7 @@ export async function requireSession(): Promise<AuthSession> {
 
 export async function requirePermission(permission: Permission): Promise<AuthSession> {
   const session = await requireSession();
-  if (!hasPermission(session.user.role.permissions, permission)) {
+  if (!userHasPermission(session.user, permission)) {
     throw new ForbiddenError();
   }
   return session;

@@ -7,6 +7,8 @@ import {
   permissionForGuestAction,
   ROLE_PRESETS,
   sanitizePermissions,
+  userHasPermission,
+  userHasAnyPermission,
 } from "@/lib/permissions";
 import { canAccessGuest, canAccessHost, filterGuestsForUser, type AccessScope } from "@/lib/guest-scope";
 
@@ -77,6 +79,35 @@ describe("RBAC", () => {
   it("denies missing permission lists", () => {
     expect(hasPermission(undefined, "hosts.view")).toBe(false);
     expect(hasPermission([], "hosts.view")).toBe(false);
+  });
+
+  it("grants extra host rights without putting them on the role", () => {
+    const holder = {
+      role: { permissions: ["hosts.view", "vm.view"] },
+      hostPermissions: { h1: ["hosts.view", "updates.view", "updates.upgrade"] },
+    };
+    expect(userHasPermission(holder, "updates.upgrade", "h1")).toBe(true);
+    expect(userHasPermission(holder, "updates.upgrade", "h2")).toBe(false);
+    expect(userHasPermission(holder, "updates.upgrade")).toBe(true);
+    expect(userHasPermission(holder, "vm.delete", "h1")).toBe(false);
+  });
+
+  it("inherits the role when a host has no override", () => {
+    const holder = {
+      role: { permissions: ["hosts.view", "updates.upgrade"] },
+      hostPermissions: { h1: null },
+    };
+    expect(userHasPermission(holder, "updates.upgrade", "h1")).toBe(true);
+    expect(userHasAnyPermission(holder, ["updates.check", "updates.upgrade"], "h1")).toBe(true);
+  });
+
+  it("keeps global rights on the role even with a host override", () => {
+    const holder = {
+      role: { permissions: ["users.view", "hosts.view"] },
+      hostPermissions: { h1: ["updates.upgrade"] },
+    };
+    expect(userHasPermission(holder, "users.view", "h1")).toBe(true);
+    expect(userHasPermission(holder, "hosts.create", "h1")).toBe(false);
   });
 });
 

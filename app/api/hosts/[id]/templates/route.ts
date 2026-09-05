@@ -10,7 +10,7 @@ import { parseBackupVolid } from "@/lib/backup";
 import { isVztmplContentVolid, mergeTemplateCatalog, normalizeAplTemplate, vztmplVolid } from "@/lib/lxc-templates";
 import { collectVztmplVolumes } from "@/server/services/lxc-template-catalog";
 import { collectVolumeUsers } from "@/server/services/volume-usage";
-import { hasPermission } from "@/lib/permissions";
+import { userHasPermission } from "@/lib/permissions";
 
 export const GET = apiRoute("lxc.create", async (req, session, params) => {
   const nodeParam = new URL(req.url).searchParams.get("node")?.trim() || undefined;
@@ -59,7 +59,7 @@ export const POST = apiRoute(["lxc.create", "storage.delete"], async (req, sessi
   const raw = await req.json();
   const action = raw && typeof raw === "object" && "action" in raw && raw.action === "delete" ? "delete" : "download";
   if (action === "delete") {
-    if (!hasPermission(session.user.role.permissions, "storage.delete")) throw new ForbiddenError();
+    if (!userHasPermission(session.user, "storage.delete", params.id)) throw new ForbiddenError();
     const body = deleteSchema.parse(raw);
     const parsed = parseBackupVolid(body.volid);
     if (!parsed.storage || !parsed.volume || !isVztmplContentVolid(body.volid)) {
@@ -80,7 +80,7 @@ export const POST = apiRoute(["lxc.create", "storage.delete"], async (req, sessi
     return json({ ok: true, volid: body.volid });
   }
 
-  if (!hasPermission(session.user.role.permissions, "lxc.create")) throw new ForbiddenError();
+  if (!userHasPermission(session.user, "lxc.create", params.id)) throw new ForbiddenError();
   const body = downloadSchema.parse(raw);
   const result = await withHostClient(params.id, session.user, async (client, host) => {
     const upid = await client.nodes.downloadAppliance(body.node, body.storage, body.template);

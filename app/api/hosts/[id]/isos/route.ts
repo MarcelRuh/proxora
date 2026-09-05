@@ -10,7 +10,7 @@ import { parseBackupVolid } from "@/lib/backup";
 import { filenameFromUrl, isHttpUrl, isoVolid, isIsoContentVolid, mergeIsoCatalog } from "@/lib/iso-images";
 import { collectIsoVolumes } from "@/server/services/lxc-template-catalog";
 import { collectVolumeUsers } from "@/server/services/volume-usage";
-import { hasPermission } from "@/lib/permissions";
+import { userHasPermission } from "@/lib/permissions";
 
 export const GET = apiRoute("vm.create", async (req, session, params) => {
   const nodeParam = new URL(req.url).searchParams.get("node")?.trim() || undefined;
@@ -54,7 +54,7 @@ export const POST = apiRoute(["vm.create", "storage.delete"], async (req, sessio
   const raw = await req.json();
   const action = raw && typeof raw === "object" && "action" in raw && raw.action === "delete" ? "delete" : "download";
   if (action === "delete") {
-    if (!hasPermission(session.user.role.permissions, "storage.delete")) throw new ForbiddenError();
+    if (!userHasPermission(session.user, "storage.delete", params.id)) throw new ForbiddenError();
     const body = deleteSchema.parse(raw);
     const parsed = parseBackupVolid(body.volid);
     if (!parsed.storage || !parsed.volume || !isIsoContentVolid(body.volid)) {
@@ -75,7 +75,7 @@ export const POST = apiRoute(["vm.create", "storage.delete"], async (req, sessio
     return json({ ok: true, volid: body.volid });
   }
 
-  if (!hasPermission(session.user.role.permissions, "vm.create")) throw new ForbiddenError();
+  if (!userHasPermission(session.user, "vm.create", params.id)) throw new ForbiddenError();
   const body = downloadSchema.parse(raw);
   if (!isHttpUrl(body.url)) throw new ValidationError("Nur http(s)-URLs sind erlaubt");
   const filename = (body.filename?.trim() || filenameFromUrl(body.url)).trim();

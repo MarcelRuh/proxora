@@ -31,7 +31,7 @@ import { useAptSummary } from "@/components/layout/apt-update-alert";
 import { UiAtmosphere } from "@/components/layout/ui-atmosphere";
 import { BrandMark } from "@/components/layout/brand-mark";
 import type { SessionUser } from "@/lib/types";
-import { hasAnyPermission, hasPermission } from "@/lib/permissions";
+import { userHasAnyPermission, userHasPermission } from "@/lib/permissions";
 import type { Permission } from "@/lib/permissions";
 import { APP_NAME, APP_VERSION } from "@/lib/version";
 import { useQuery } from "@tanstack/react-query";
@@ -112,7 +112,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
           </div>
         </div>
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-          {NAV.filter((item) => hasAnyPermission(user.role.permissions, item.anyOf)).map((item) => (
+          {NAV.filter((item) => userHasAnyPermission(user, item.anyOf)).map((item) => (
             <NavLink
               key={item.href}
               href={item.href}
@@ -124,7 +124,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
                   : pathname === item.href || pathname.startsWith(`${item.href}/`)
               }
               badge={
-                item.href === "/updates" && hasPermission(user.role.permissions, "updates.view") ? (
+                item.href === "/updates" && userHasPermission(user, "updates.view") ? (
                   <UpdatesBadge />
                 ) : item.href === "/proxora" ? (
                   <ProxoraBadge />
@@ -142,7 +142,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             {t("nav.search")}
             <kbd className="ml-auto text-[10px] text-sidebar-muted">⌘K</kbd>
           </button>
-          {hasAnyPermission(user.role.permissions, ["proxora.update", "updates.view"]) ? <SidebarVersion /> : null}
+          {userHasAnyPermission(user, ["proxora.update", "updates.view"]) ? <SidebarVersion /> : null}
           <UiThemeSelect />
           <LocaleSwitch className="px-1" />
           <p className="px-1 text-[10px] text-sidebar-muted">

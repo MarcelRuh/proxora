@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmAction } from "@/components/confirm-action";
-import { UserScopeFields } from "@/components/access/user-scope-fields";
+import { UserScopeFields, type HostGrant } from "@/components/access/user-scope-fields";
 import { AccessPreviewCard } from "@/components/access/access-preview";
 import { buildAccessPreview } from "@/lib/access-preview";
 import { api } from "@/lib/api";
@@ -29,6 +29,7 @@ type UserRow = {
   totpEnabled: boolean;
   role: { name: string; id: string };
   hostIds: string[];
+  hosts: HostGrant[];
   guests: GuestScope[];
 };
 
@@ -39,7 +40,7 @@ const emptyForm = {
   email: "",
   password: "",
   roleId: "",
-  hostIds: [] as string[],
+  hosts: [] as HostGrant[],
   guests: [] as GuestScope[],
 };
 
@@ -59,7 +60,7 @@ export default function UsersPage() {
   const [editForm, setEditForm] = useState({
     roleId: "",
     status: "ACTIVE",
-    hostIds: [] as string[],
+    hosts: [] as HostGrant[],
     guests: [] as GuestScope[],
   });
 
@@ -136,7 +137,11 @@ export default function UsersPage() {
                   <td className="text-xs text-muted-foreground">
                     {u.hostIds.length === 0 && (u.guests?.length ?? 0) === 0
                       ? t("users.allHosts")
-                      : t("users.scopeSummary", { hosts: u.hostIds.length, guests: u.guests?.length ?? 0 })}
+                      : t("users.scopeSummary", {
+                          hosts: u.hostIds.length,
+                          guests: u.guests?.length ?? 0,
+                          custom: (u.hosts ?? []).filter((h) => h.permissions).length,
+                        })}
                   </td>
                   <td className="text-right">
                     <div className="flex justify-end gap-1">
@@ -149,7 +154,9 @@ export default function UsersPage() {
                             setEditForm({
                               roleId: u.role.id,
                               status: u.status,
-                              hostIds: u.hostIds ?? [],
+                              hosts: u.hosts?.length
+                                ? u.hosts
+                                : (u.hostIds ?? []).map((hostId) => ({ hostId, permissions: null })),
                               guests: u.guests ?? [],
                             });
                           }}
@@ -184,7 +191,7 @@ export default function UsersPage() {
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{t("users.add")}</DialogTitle>
           </DialogHeader>
@@ -199,9 +206,10 @@ export default function UsersPage() {
             />
             <RoleSelect roles={roles?.roles ?? []} value={form.roleId} onChange={(roleId) => setForm({ ...form, roleId })} />
             <UserScopeFields
-              hostIds={form.hostIds}
+              hosts={form.hosts}
               guests={form.guests}
-              onHostIds={(hostIds) => setForm({ ...form, hostIds })}
+              rolePermissions={roles?.roles.find((r) => r.id === form.roleId)?.permissions}
+              onHosts={(hosts) => setForm({ ...form, hosts })}
               onGuests={(guests) => setForm({ ...form, guests })}
               onGuestNames={setGuestNames}
             />
@@ -209,9 +217,9 @@ export default function UsersPage() {
               preview={buildAccessPreview({
                 roleName: roles?.roles.find((r) => r.id === form.roleId)?.name ?? "",
                 permissions: roles?.roles.find((r) => r.id === form.roleId)?.permissions,
-                hostIds: form.hostIds,
+                hosts: form.hosts,
                 guests: form.guests,
-                hosts: hosts?.hosts ?? [],
+                hostList: hosts?.hosts ?? [],
                 guestNames,
               })}
             />
@@ -223,7 +231,7 @@ export default function UsersPage() {
       </Dialog>
 
       <Dialog open={Boolean(editing)} onOpenChange={(next) => !next && setEditing(null)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editing ? t("users.editTitle", { name: editing.username }) : ""}</DialogTitle>
           </DialogHeader>
@@ -241,9 +249,10 @@ export default function UsersPage() {
               </select>
             </label>
             <UserScopeFields
-              hostIds={editForm.hostIds}
+              hosts={editForm.hosts}
               guests={editForm.guests}
-              onHostIds={(hostIds) => setEditForm({ ...editForm, hostIds })}
+              rolePermissions={roles?.roles.find((r) => r.id === editForm.roleId)?.permissions}
+              onHosts={(hosts) => setEditForm({ ...editForm, hosts })}
               onGuests={(guests) => setEditForm({ ...editForm, guests })}
               onGuestNames={setGuestNames}
             />
@@ -251,9 +260,9 @@ export default function UsersPage() {
               preview={buildAccessPreview({
                 roleName: roles?.roles.find((r) => r.id === editForm.roleId)?.name ?? editing?.role.name ?? "",
                 permissions: roles?.roles.find((r) => r.id === editForm.roleId)?.permissions,
-                hostIds: editForm.hostIds,
+                hosts: editForm.hosts,
                 guests: editForm.guests,
-                hosts: hosts?.hosts ?? [],
+                hostList: hosts?.hosts ?? [],
                 guestNames,
               })}
             />

@@ -6,7 +6,7 @@ import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient, assertLocalHost } from "@/server/services/host-service";
 import { filterGuestsForUser } from "@/server/auth/session-core";
-import { hasPermission } from "@/lib/permissions";
+import { userHasPermission } from "@/lib/permissions";
 import { ForbiddenError } from "@/lib/errors";
 
 const actionSchema = z.object({
@@ -47,7 +47,7 @@ export const GET = apiRoute("hosts.view", async (_req, session, params) => {
 export const POST = apiRoute(["hosts.reboot", "hosts.shutdown"], async (req, session, params) => {
   const body = actionSchema.parse(await req.json());
   const needed = body.action === "reboot" ? "hosts.reboot" : "hosts.shutdown";
-  if (!hasPermission(session.user.role.permissions, needed)) throw new ForbiddenError();
+  if (!userHasPermission(session.user, needed, params.id)) throw new ForbiddenError();
   const upid = await withHostClient(params.id, session.user, async (client, host) => {
     assertLocalHost(host);
     if (body.action === "reboot") return client.nodes.reboot(body.node);

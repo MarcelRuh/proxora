@@ -30,8 +30,8 @@ export function GuestDeleteDialog({
   children: React.ReactNode;
 }) {
   const { t, locale } = useI18n();
-  const canViewBackups = useCan("backup.view");
-  const canDeleteBackups = useCan("backup.delete");
+  const canViewBackups = useCan("backup.view", hostId);
+  const canDeleteBackups = useCan("backup.delete", hostId);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());

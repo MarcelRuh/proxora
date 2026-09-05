@@ -14,6 +14,8 @@ import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { QueryGate } from "@/components/layout/query-gate";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { useSessionUser } from "@/components/auth/session-user";
+import { userHasPermission } from "@/lib/permissions";
 
 type AptPackage = { Package: string; Version?: string; OldVersion?: string };
 type HostUpdates = {
@@ -25,6 +27,7 @@ type HostUpdates = {
 
 export default function UpdatesPage() {
   const { t, locale } = useI18n();
+  const user = useSessionUser();
   const qc = useQueryClient();
   const [shell, setShell] = useState<{ hostId: string; node: string; name: string } | null>(null);
   const recheckTimer = useRef<number>(0);
@@ -107,7 +110,7 @@ export default function UpdatesPage() {
 
   const checkAll = useMutation({
     mutationFn: async () => {
-      const ids = hosts?.hosts.map((h) => h.id) ?? [];
+      const ids = (hosts?.hosts ?? []).filter((h) => userHasPermission(user, "updates.check", h.id)).map((h) => h.id);
       const results = await Promise.allSettled(
         ids.map(async (id) => {
           const data = await api<{ version: string | null; updates: HostUpdates["updates"] }>(
@@ -185,6 +188,8 @@ export default function UpdatesPage() {
           {(details ?? []).map((row) => {
             const count = row.updates.reduce((acc, n) => acc + n.count, 0);
             const checking = checkOne.isPending && checkOne.variables?.hostId === row.host.id;
+            const canCheck = userHasPermission(user, "updates.check", row.host.id);
+            const canUpgradeHost = userHasPermission(user, "updates.upgrade", row.host.id);
             const checkedAt = row.host.aptCheckedAt
               ? new Date(row.host.aptCheckedAt).toLocaleString(locale === "en" ? "en-GB" : "de-DE")
               : null;
@@ -216,14 +221,14 @@ export default function UpdatesPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={checking || checkAll.isPending}
+                      disabled={checking || checkAll.isPending || !canCheck}
                       onClick={() => recheckHost(row.host.id)}
                     >
                       {checking ? t("updates.checking") : t("updates.checkOne")}
                     </Button>
                     {(row.updates.length ? row.updates : [{ node: "", count: 0, packages: [] }]).map((n) => {
                       const label = t("updates.upgrade", { node: row.updates.length > 1 ? n.node : "" });
-                      const canUpgrade = !row.error && n.count > 0;
+                      const canUpgrade = canUpgradeHost && !row.error && n.count > 0;
                       if (!canUpgrade) {
                         return (
                           <Button key={n.node || row.host.id} size="sm" disabled>

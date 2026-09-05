@@ -2,7 +2,7 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 import type { SessionUser } from "@/lib/types";
-import { hasAnyPermission, hasPermission, type Permission } from "@/lib/permissions";
+import { userHasAnyPermission, userHasPermission, type Permission } from "@/lib/permissions";
 
 const SessionUserContext = createContext<SessionUser | null>(null);
 
@@ -16,12 +16,12 @@ export function useSessionUser(): SessionUser {
   return user;
 }
 
-export function useCan(permission: Permission): boolean {
+export function useCan(permission: Permission, hostId?: string | null): boolean {
   const user = useContext(SessionUserContext);
-  return hasPermission(user?.role.permissions, permission);
+  return userHasPermission(user, permission, hostId);
 }
 
-export function useCanAny(permissions: Permission[]): boolean {
+export function useCanAny(permissions: Permission[], hostId?: string | null): boolean {
   const user = useContext(SessionUserContext);
-  return hasAnyPermission(user?.role.permissions, permissions);
+  return userHasAnyPermission(user, permissions, hostId);
 }

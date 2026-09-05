@@ -1,4 +1,4 @@
-import { hasPermission, type Permission } from "@/lib/permissions";
+import { userHasPermission, type Permission } from "@/lib/permissions";
 import type { GuestScope } from "@/lib/guest-scope";
 import { guestScopeKey } from "@/lib/guest-scope";
 
@@ -6,6 +6,8 @@ export const PREVIEW_ACTIONS: Permission[] = [
   "hosts.reboot",
   "hosts.shutdown",
   "hosts.console",
+  "updates.check",
+  "updates.upgrade",
   "vm.start",
   "vm.shutdown",
   "vm.force-stop",
@@ -35,21 +37,31 @@ export type AccessPreview = {
   guestMode: "all" | "listed";
   guests: Array<{ hostName: string; kind: "vm" | "lxc"; vmid: number; name: string | null }>;
   actions: Permission[];
+  hostOverrides: Array<{ hostName: string; count: number }>;
 };
 
 export function buildAccessPreview(input: {
   roleName: string;
   permissions: readonly string[] | undefined;
-  hostIds: string[];
+  hosts?: Array<{ hostId: string; permissions: string[] | null }>;
+  hostIds?: string[];
   guests: GuestScope[];
-  hosts: Array<{ id: string; name: string }>;
+  hostList: Array<{ id: string; name: string }>;
+  /** @deprecated use hostList */
+  hostsLegacy?: Array<{ id: string; name: string }>;
   guestNames?: Record<string, string>;
 }): AccessPreview {
-  const hostMap = new Map(input.hosts.map((h) => [h.id, h.name]));
+  const catalog = input.hostList ?? input.hostsLegacy ?? [];
+  const hostMap = new Map(catalog.map((h) => [h.id, h.name]));
+  const grants = input.hosts ?? (input.hostIds ?? []).map((hostId) => ({ hostId, permissions: null as string[] | null }));
+  const holder = {
+    role: { permissions: input.permissions },
+    hostPermissions: Object.fromEntries(grants.map((g) => [g.hostId, g.permissions])),
+  };
   return {
     roleName: input.roleName,
-    hostMode: input.hostIds.length ? "listed" : "all",
-    hostNames: input.hostIds.map((id) => hostMap.get(id) ?? id),
+    hostMode: grants.length ? "listed" : "all",
+    hostNames: grants.map((g) => hostMap.get(g.hostId) ?? g.hostId),
     guestMode: input.guests.length ? "listed" : "all",
     guests: input.guests.map((g) => ({
       hostName: hostMap.get(g.hostId) ?? g.hostId,
@@ -57,6 +69,9 @@ export function buildAccessPreview(input: {
       vmid: g.vmid,
       name: input.guestNames?.[guestScopeKey(g)] ?? null,
     })),
-    actions: PREVIEW_ACTIONS.filter((p) => hasPermission(input.permissions, p)),
+    actions: PREVIEW_ACTIONS.filter((p) => userHasPermission(holder, p)),
+    hostOverrides: grants
+      .filter((g) => g.permissions)
+      .map((g) => ({ hostName: hostMap.get(g.hostId) ?? g.hostId, count: g.permissions?.length ?? 0 })),
   };
 }

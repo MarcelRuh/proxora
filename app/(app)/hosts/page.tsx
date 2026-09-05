@@ -13,7 +13,8 @@ import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { QueryGate } from "@/components/layout/query-gate";
 import { useI18n } from "@/components/i18n/locale-provider";
-import { useCan, useCanAny } from "@/components/auth/session-user";
+import { useCan, useSessionUser } from "@/components/auth/session-user";
+import { userHasPermission } from "@/lib/permissions";
 import { HostEditorDialog } from "@/components/hosts/host-editor";
 import { HostMaintenanceButton } from "@/components/hosts/host-maintenance";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
@@ -21,9 +22,6 @@ import { EmptyState, Skeleton } from "@/components/ui/misc";
 export default function HostsPage() {
   const { t } = useI18n();
   const canCreate = useCan("hosts.create");
-  const canDelete = useCan("hosts.delete");
-  const canEdit = useCanAny(["hosts.update", "hosts.credentials"]);
-  const canConsole = useCan("hosts.console");
   const qc = useQueryClient();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["hosts"],
@@ -59,9 +57,6 @@ export default function HostsPage() {
             <HostSection
               title={t("peers.localGroup")}
               hosts={data.hosts.filter((h) => h.origin !== "PEER")}
-              canConsole={canConsole}
-              canEdit={canEdit}
-              canDelete={canDelete}
               onEdit={setEditing}
               onRefresh={refresh}
             />
@@ -71,9 +66,6 @@ export default function HostsPage() {
                 title={t("peers.peerGroup", { name: owner })}
                 hosts={hosts}
                 remote
-                canConsole={false}
-                canEdit={false}
-                canDelete={false}
                 onEdit={setEditing}
                 onRefresh={refresh}
               />
@@ -116,28 +108,28 @@ function HostSection({
   title,
   hosts,
   remote,
-  canConsole,
-  canEdit,
-  canDelete,
   onEdit,
   onRefresh,
 }: {
   title: string;
   hosts: PublicHost[];
   remote?: boolean;
-  canConsole: boolean;
-  canEdit: boolean;
-  canDelete: boolean;
   onEdit: (host: PublicHost) => void;
   onRefresh: () => void;
 }) {
   const { t } = useI18n();
+  const user = useSessionUser();
   if (!hosts.length) return null;
   return (
     <div className="space-y-3">
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{title}</h2>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {hosts.map((host) => (
+        {hosts.map((host) => {
+          const canConsole = !remote && userHasPermission(user, "hosts.console", host.id);
+          const canEdit = !remote && userHasPermission(user, "hosts.update", host.id);
+          const canCreds = !remote && userHasPermission(user, "hosts.credentials", host.id);
+          const canDelete = !remote && userHasPermission(user, "hosts.delete", host.id);
+          return (
           <Card key={host.id}>
             <CardHeader className="flex flex-row items-start justify-between">
               <div>
@@ -160,7 +152,7 @@ function HostSection({
                     <Link href={`/hosts/${host.id}/console`}>{t("hosts.terminal")}</Link>
                   </Button>
                 ) : null}
-                {canEdit ? (
+                {canEdit || canCreds ? (
                   <Button size="sm" variant="outline" onClick={() => onEdit(host)}>
                     {t("hosts.edit")}
                   </Button>
@@ -201,7 +193,8 @@ function HostSection({
               </div>
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

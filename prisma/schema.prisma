@@ -139,10 +139,12 @@ model Host {
 }
 
 model UserHostAccess {
-  userId String
-  hostId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  host   Host @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  userId      String
+  hostId      String
+  permissions String[] @default([])
+  override    Boolean  @default(false)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  host        Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
 
   @@id([userId, hostId])
 }

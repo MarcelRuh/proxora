@@ -3,7 +3,7 @@ import { json } from "@/server/http/respond";
 import { clientIp } from "@/server/auth/session";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
-import { hasPermission } from "@/lib/permissions";
+import { userHasPermission } from "@/lib/permissions";
 import { ForbiddenError } from "@/lib/errors";
 import { prisma } from "@/lib/db";
 import {
@@ -30,8 +30,8 @@ export const PATCH = apiRoute(["hosts.update", "hosts.credentials"], async (req,
     body.url !== undefined ||
     body.notes !== undefined ||
     body.allowInsecureTls !== undefined;
-  if (creds && !hasPermission(session.user.role.permissions, "hosts.credentials")) throw new ForbiddenError();
-  if (meta && !hasPermission(session.user.role.permissions, "hosts.update")) throw new ForbiddenError();
+  if (creds && !userHasPermission(session.user, "hosts.credentials", params.id)) throw new ForbiddenError();
+  if (meta && !userHasPermission(session.user, "hosts.update", params.id)) throw new ForbiddenError();
   const host = await updateHost(params.id, body, session.user);
   await writeAuditLog({
     userId: session.user.id,

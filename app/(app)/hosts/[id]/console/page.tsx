@@ -24,7 +24,7 @@ export default function HostConsolePage() {
   const params = useParams<{ id: string }>();
   const search = useSearchParams();
   const router = useRouter();
-  const canConsole = useCan("hosts.console");
+  const canConsole = useCan("hosts.console", params.id);
   const requested = search.get("node");
   const { data: meta, isLoading: metaLoading, error: metaError, refetch: refetchMeta } = useQuery({
     queryKey: ["host-meta", params.id],

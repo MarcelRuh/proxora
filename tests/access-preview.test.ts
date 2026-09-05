@@ -6,9 +6,9 @@ describe("access preview", () => {
     const preview = buildAccessPreview({
       roleName: "Operator",
       permissions: ["vm.view", "vm.start", "vm.shutdown"],
-      hostIds: [],
+      hosts: [],
       guests: [],
-      hosts: [{ id: "h1", name: "lab" }],
+      hostList: [{ id: "h1", name: "lab" }],
     });
     expect(preview.hostMode).toBe("all");
     expect(preview.guestMode).toBe("all");
@@ -21,10 +21,22 @@ describe("access preview", () => {
       permissions: ["vm.start"],
       hostIds: ["h1"],
       guests: [{ hostId: "h1", kind: "vm", vmid: 105 }],
-      hosts: [{ id: "h1", name: "lab" }],
+      hostList: [{ id: "h1", name: "lab" }],
       guestNames: { "h1:vm:105": "web" },
     });
     expect(preview.hostNames).toEqual(["lab"]);
     expect(preview.guests[0]).toMatchObject({ vmid: 105, name: "web", hostName: "lab" });
+  });
+
+  it("surfaces host overrides in the preview", () => {
+    const preview = buildAccessPreview({
+      roleName: "Viewer",
+      permissions: ["hosts.view"],
+      hosts: [{ hostId: "h1", permissions: ["hosts.view", "updates.upgrade"] }],
+      guests: [],
+      hostList: [{ id: "h1", name: "lab" }],
+    });
+    expect(preview.actions).toContain("updates.upgrade");
+    expect(preview.hostOverrides).toEqual([{ hostName: "lab", count: 2 }]);
   });
 });

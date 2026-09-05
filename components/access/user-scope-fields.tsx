@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
@@ -8,17 +8,27 @@ import type { Guest } from "@/lib/types";
 import type { GuestScope } from "@/lib/guest-scope";
 import { guestScopeKey } from "@/lib/guest-scope";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { Button } from "@/components/ui/button";
+import { RolePermissionPicker } from "@/components/access/role-permission-picker";
+import { hostGrantCatalog, hostScopedFromRole } from "@/lib/permissions";
+
+export type HostGrant = {
+  hostId: string;
+  permissions: string[] | null;
+};
 
 export function UserScopeFields({
-  hostIds,
+  hosts: grants,
   guests,
-  onHostIds,
+  rolePermissions,
+  onHosts,
   onGuests,
   onGuestNames,
 }: {
-  hostIds: string[];
+  hosts: HostGrant[];
   guests: GuestScope[];
-  onHostIds: (next: string[]) => void;
+  rolePermissions?: readonly string[];
+  onHosts: (next: HostGrant[]) => void;
   onGuests: (next: GuestScope[]) => void;
   onGuestNames?: (names: Record<string, string>) => void;
 }) {
@@ -27,8 +37,10 @@ export function UserScopeFields({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
   });
-  const hosts = data?.hosts ?? [];
-  const listed = hostIds.length ? hosts.filter((h) => hostIds.includes(h.id)) : hosts;
+  const allHosts = data?.hosts ?? [];
+  const hostIds = grants.map((g) => g.hostId);
+  const listed = hostIds.length ? allHosts.filter((h) => hostIds.includes(h.id)) : allHosts;
+  const [openHost, setOpenHost] = useState<string | null>(null);
   const { data: inventory } = useQuery({
     queryKey: ["scope-guests", listed.map((h) => h.id)],
     enabled: listed.length > 0,
@@ -49,17 +61,42 @@ export function UserScopeFields({
     if (inventory) onGuestNames?.(guestNameMap(inventory));
   }, [inventory]);
 
+  function grantFor(id: string): HostGrant | undefined {
+    return grants.find((g) => g.hostId === id);
+  }
+
   function toggleHost(id: string, on: boolean) {
-    const next = on ? [...hostIds, id] : hostIds.filter((x) => x !== id);
-    onHostIds(next);
-    if (!on) onGuests(guests.filter((g) => g.hostId !== id));
+    if (on) {
+      onHosts([...grants, { hostId: id, permissions: null }]);
+      return;
+    }
+    onHosts(grants.filter((g) => g.hostId !== id));
+    onGuests(guests.filter((g) => g.hostId !== id));
+    if (openHost === id) setOpenHost(null);
+  }
+
+  function setOverride(id: string, on: boolean) {
+    onHosts(
+      grants.map((g) =>
+        g.hostId === id
+          ? { hostId: id, permissions: on ? hostScopedFromRole(rolePermissions) : null }
+          : g,
+      ),
+    );
+    setOpenHost(on ? id : null);
+  }
+
+  function setHostPerms(id: string, permissions: string[]) {
+    onHosts(grants.map((g) => (g.hostId === id ? { hostId: id, permissions } : g)));
   }
 
   function toggleGuest(scope: GuestScope, on: boolean) {
     if (on) {
       if (guests.some((g) => guestScopeKey(g) === guestScopeKey(scope))) return;
       onGuests([...guests, scope]);
-      if (hostIds.length && !hostIds.includes(scope.hostId)) onHostIds([...hostIds, scope.hostId]);
+      if (grants.length && !hostIds.includes(scope.hostId)) {
+        onHosts([...grants, { hostId: scope.hostId, permissions: null }]);
+      }
       return;
     }
     onGuests(guests.filter((g) => guestScopeKey(g) !== guestScopeKey(scope)));
@@ -70,13 +107,46 @@ export function UserScopeFields({
       <div>
         <p className="mb-1 font-medium">{t("users.hosts")}</p>
         <p className="mb-2 text-xs text-muted-foreground">{t("users.hostsHint")}</p>
-        <div className="grid gap-1.5">
-          {hosts.map((h) => (
-            <label key={h.id} className="flex items-center gap-2">
-              <input type="checkbox" checked={hostIds.includes(h.id)} onChange={(e) => toggleHost(h.id, e.target.checked)} />
-              {h.name}
-            </label>
-          ))}
+        <div className="grid gap-2">
+          {allHosts.map((h) => {
+            const grant = grantFor(h.id);
+            const checked = Boolean(grant);
+            const custom = Boolean(grant && grant.permissions);
+            const expanded = openHost === h.id && custom;
+            return (
+              <div key={h.id} className="rounded-[4px] border border-border p-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex min-w-0 flex-1 items-center gap-2">
+                    <input type="checkbox" checked={checked} onChange={(e) => toggleHost(h.id, e.target.checked)} />
+                    <span className="truncate">{h.name}</span>
+                  </label>
+                  {checked ? (
+                    <Button type="button" size="sm" variant="outline" onClick={() => setOverride(h.id, !custom)}>
+                      {custom ? t("users.hostInherit") : t("users.hostCustomize")}
+                    </Button>
+                  ) : null}
+                </div>
+                {checked && custom ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("users.hostOverrideMeta", { n: grant?.permissions?.length ?? 0 })}
+                  </p>
+                ) : null}
+                {expanded ? (
+                  <div className="mt-3 border-t border-border pt-3">
+                    <RolePermissionPicker
+                      catalog={hostGrantCatalog()}
+                      value={grant?.permissions ?? []}
+                      onChange={(permissions) => setHostPerms(h.id, permissions)}
+                    />
+                  </div>
+                ) : custom && checked ? (
+                  <Button type="button" size="sm" variant="ghost" className="mt-1" onClick={() => setOpenHost(h.id)}>
+                    {t("users.hostEditPerms")}
+                  </Button>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       </div>
       <div>

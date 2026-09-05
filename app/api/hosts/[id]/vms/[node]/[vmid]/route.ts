@@ -6,7 +6,7 @@ import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { pickGuestName } from "@/server/notifications/guest-name";
-import { hasPermission, permissionForGuestAction } from "@/lib/permissions";
+import { permissionForGuestAction, userHasPermission } from "@/lib/permissions";
 import { ForbiddenError, ValidationError } from "@/lib/errors";
 import { isResizeDiskKey } from "@/lib/proxmox-disk";
 import { assertGuestAccess } from "@/server/auth/session-core";
@@ -116,7 +116,7 @@ export const GET = apiRoute("vm.view", async (req, session, params) => {
 export const POST = apiRoute("vm.view", async (req, session, params) => {
   const body = actionSchema.parse(await req.json());
   const needed = permissionFor(body.action);
-  if (!hasPermission(session.user.role.permissions, needed)) {
+  if (!userHasPermission(session.user, needed, params.id)) {
     throw new ForbiddenError();
   }
   if (["delete", "reset"].includes(body.action) && body.confirm !== true) {
@@ -167,7 +167,7 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
           node,
           vmid,
           backupVolids: body.backupVolids,
-          canDeleteBackups: hasPermission(session.user.role.permissions, "backup.delete"),
+          canDeleteBackups: userHasPermission(session.user, "backup.delete", params.id),
         });
         break;
       case "clone":

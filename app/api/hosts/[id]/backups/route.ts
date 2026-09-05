@@ -12,7 +12,7 @@ import { jobBody, listHostBackups, restoreBackup, runBackupJob } from "@/server/
 import { ValidationError } from "@/lib/errors";
 import { lookupGuestName } from "@/server/notifications/guest-name";
 import { notifyTopic } from "@/server/notifications/dispatch";
-import { backupPermissionForAction, hasPermission } from "@/lib/permissions";
+import { backupPermissionForAction, userHasPermission } from "@/lib/permissions";
 import { ForbiddenError } from "@/lib/errors";
 import { TASK_TIMEOUT, isUpid, waitUpid } from "@/server/proxmox/task-wait";
 import { durationLabel } from "@/lib/duration";
@@ -68,7 +68,7 @@ export const POST = apiRoute(
   ["backup.run", "backup.restore", "backup.delete", "backup.job.create", "backup.job.update", "backup.job.delete"],
   async (req, session, params) => {
   const body = schema.parse(await req.json());
-  if (!hasPermission(session.user.role.permissions, backupPermissionForAction(body.action))) {
+  if (!userHasPermission(session.user, backupPermissionForAction(body.action), params.id)) {
     throw new ForbiddenError();
   }
   let hostName = "";

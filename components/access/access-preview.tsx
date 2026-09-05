@@ -35,6 +35,13 @@ export function AccessPreviewCard({ preview }: { preview: AccessPreview }) {
         <span className="text-muted-foreground"> · {where}</span>
       </p>
       <p className="mt-1 text-muted-foreground">{actions}</p>
+      {preview.hostOverrides.length ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t("users.previewOverrides", {
+            names: preview.hostOverrides.map((h) => `${h.hostName} (${h.count})`).join(", "),
+          })}
+        </p>
+      ) : null}
     </div>
   );
 }

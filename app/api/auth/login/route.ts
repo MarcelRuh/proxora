@@ -98,7 +98,7 @@ async function finishLogin(
     username: string;
     email: string;
     role: { slug: string; name: string; permissions: string[] };
-    hostAccess: Array<{ hostId: string }>;
+    hostAccess: Array<{ hostId: string; permissions?: string[]; override?: boolean }>;
     guestAccess: Array<{ hostId: string; kind: string; vmid: number }>;
   },
   ip: string | undefined,
@@ -126,6 +126,11 @@ async function finishLogin(
       role: { slug: user.role.slug, name: user.role.name, permissions: user.role.permissions },
       allowedHostIds: user.hostAccess.length ? user.hostAccess.map((h) => h.hostId) : null,
       allowedGuests: guests.length ? guests : null,
+      hostPermissions: user.hostAccess.length
+        ? Object.fromEntries(
+            user.hostAccess.map((h) => [h.hostId, h.override ? h.permissions ?? [] : null]),
+          )
+        : null,
     },
   });
 }

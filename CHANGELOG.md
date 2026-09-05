@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.6] – 2026-09-05
+
+### Changed
+
+- User host access can override the role with the same permission checkboxes (including host updates). Uncustomized hosts still inherit the role.
+
 ## [1.4.5] – 2026-09-05
 
 ### Fixed
