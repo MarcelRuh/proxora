@@ -5,6 +5,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { decryptSecret, encryptSecret, randomToken, sha256 } from "@/lib/crypto";
 import { ValidationError, NotFoundError } from "@/lib/errors";
+import { sanitizePermissions, type Permission } from "@/lib/permissions";
+import { permissionsForShareLevel, shareLevelFromPermissions, type ShareLevel } from "@/lib/federation-access";
 import { encodeWireguardInvite, parseWireguardInvite } from "@/lib/wireguard-invite";
 import { buildWg0Conf, ensureIpInAllowedIps, parseWgQuickConf, sanitizeClientAllowedIps, serverPeerSnippet } from "@/lib/wireguard-conf";
 import { generateWireguardKeypair, interfaceIpv4, isWireguardKey, peerAllowedIps, publicKeyFromPrivate } from "@/lib/wireguard-keys";
@@ -430,11 +432,18 @@ export async function listPeersWithShares() {
   });
   return peers.map((p) => ({
     ...serializePeer(p),
-    shares: p.shares.map((s) => ({ hostId: s.hostId, level: s.level.toLowerCase() })),
+    shares: p.shares.map((s) => ({
+      hostId: s.hostId,
+      level: s.level.toLowerCase(),
+      permissions: s.permissions.length ? s.permissions : null,
+    })),
   }));
 }
 
-export async function setPeerShares(peerId: string, shares: Array<{ hostId: string; level: string }>) {
+export async function setPeerShares(
+  peerId: string,
+  shares: Array<{ hostId: string; level: string; permissions?: string[] | null }>,
+) {
   const peer = await prisma.wireguardPeer.findUnique({ where: { id: peerId } });
   if (!peer) throw new NotFoundError("Peer not found");
   if (peer.kind !== WireguardPeerKind.PROXORA) throw new ValidationError("Only Proxora peers can receive host shares");
@@ -446,12 +455,21 @@ export async function setPeerShares(peerId: string, shares: Array<{ hostId: stri
   const localHosts = await prisma.host.findMany({ where: { origin: "LOCAL" }, select: { id: true } });
   const localIds = new Set(localHosts.map((h) => h.id));
   const next = shares
-    .map((s) => ({ hostId: s.hostId, level: levels[s.level.toLowerCase()] }))
-    .filter((s): s is { hostId: string; level: PeerShareLevel } => Boolean(s.level) && localIds.has(s.hostId));
+    .map((s) => {
+      let perms: Permission[] = s.permissions ? sanitizePermissions(s.permissions) : [];
+      const levelName = (s.level.toLowerCase() || (perms.length ? shareLevelFromPermissions(perms) : "")) as ShareLevel | "";
+      const level = levels[levelName];
+      if (level && perms.length) {
+        const defaults = permissionsForShareLevel(levelName as ShareLevel);
+        if (perms.length === defaults.length && defaults.every((p) => perms.includes(p))) perms = [];
+      }
+      return { hostId: s.hostId, level, permissions: perms };
+    })
+    .filter((s): s is { hostId: string; level: PeerShareLevel; permissions: Permission[] } => Boolean(s.level) && localIds.has(s.hostId));
   await prisma.$transaction([
     prisma.hostShare.deleteMany({ where: { peerId } }),
     ...next.map((s) =>
-      prisma.hostShare.create({ data: { peerId, hostId: s.hostId, level: s.level } }),
+      prisma.hostShare.create({ data: { peerId, hostId: s.hostId, level: s.level, permissions: s.permissions } }),
     ),
   ]);
   return listPeersWithShares();

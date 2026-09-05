@@ -3,7 +3,15 @@ import { prisma } from "@/lib/db";
 import { encryptSecret } from "@/lib/crypto";
 import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from "@/lib/errors";
 import { networksForHost, parseGuestIpNetworks } from "@/lib/create-ip";
-import { federationActionLevel, parseShareLevel, shareAllows, type ShareLevel } from "@/lib/federation-access";
+import { sanitizePermissions } from "@/lib/permissions";
+import {
+  effectiveSharePermissions,
+  federationPermission,
+  parseShareLevel,
+  shareHasPermission,
+  shareLevelFromPermissions,
+  type ShareLevel,
+} from "@/lib/federation-access";
 import { logger } from "@/lib/logger";
 import {
   cachePeerHostNetworks,
@@ -47,18 +55,25 @@ export async function listSharedHostsForPeer(peer: WireguardPeer) {
       connectionState: s.host.connectionState,
       proxmoxVersion: s.host.proxmoxVersion,
       shareLevel: prismaLevel(s.level),
+      permissions: effectiveSharePermissions(prismaLevel(s.level), s.permissions),
       networks: networksForHost(settings, s.host.id),
     }));
 }
 
-export async function assertSharedHost(peer: WireguardPeer, remoteHostId: string, method: string, path: string) {
+export async function assertSharedHost(
+  peer: WireguardPeer,
+  remoteHostId: string,
+  method: string,
+  path: string,
+  extra?: { query?: Record<string, string>; body?: Record<string, unknown> | null },
+) {
   const share = await prisma.hostShare.findUnique({
     where: { peerId_hostId: { peerId: peer.id, hostId: remoteHostId } },
     include: { host: true },
   });
   if (!share || share.host.origin !== HostOrigin.LOCAL) throw new NotFoundError("Host not shared");
-  const needed = federationActionLevel(method, path);
-  if (!shareAllows(prismaLevel(share.level), needed)) {
+  const needed = federationPermission(method, path, extra);
+  if (needed === "deny" || !shareHasPermission(prismaLevel(share.level), share.permissions, needed)) {
     throw new ForbiddenError("This host is not shared at that level");
   }
   return share.host;
@@ -93,6 +108,7 @@ export async function syncPeerHosts() {
           connectionState?: string;
           proxmoxVersion?: string | null;
           shareLevel?: string;
+          permissions?: unknown;
           networks?: unknown;
         }>;
       };
@@ -108,7 +124,8 @@ export async function syncPeerHosts() {
       }
       if (removedIds.length) await forgetPeerHostNetworks(removedIds);
       for (const item of remote) {
-        const shareLevel = parseShareLevel(item.shareLevel);
+        const perms = Array.isArray(item.permissions) ? sanitizePermissions(item.permissions) : [];
+        const shareLevel = parseShareLevel(item.shareLevel) ?? (perms.length ? shareLevelFromPermissions(perms) : null);
         if (!shareLevel) continue;
         const level = shareLevel.toUpperCase() as PeerShareLevel;
         const url = `federation://${peer.id}/${item.id}`;
@@ -126,12 +143,14 @@ export async function syncPeerHosts() {
             peerId: peer.id,
             remoteHostId: item.id,
             peerShareLevel: level,
+            peerSharePermissions: perms,
             connectionState: item.connectionState === "ONLINE" ? "ONLINE" : "CONNECTING",
             proxmoxVersion: item.proxmoxVersion ?? null,
           },
           update: {
             name: item.name,
             peerShareLevel: level,
+            peerSharePermissions: perms,
             proxmoxVersion: item.proxmoxVersion ?? undefined,
             connectionState: item.connectionState === "ONLINE" ? "ONLINE" : undefined,
           },

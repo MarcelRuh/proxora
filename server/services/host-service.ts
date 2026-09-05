@@ -66,6 +66,7 @@ export function toPublicHost(
     peerId: host.peerId,
     peerName: host.peer?.name ?? null,
     shareLevel: host.peerShareLevel ? host.peerShareLevel.toLowerCase() : null,
+    sharePermissions: host.origin === HostOrigin.PEER && host.peerSharePermissions.length ? host.peerSharePermissions : null,
   };
 }
 

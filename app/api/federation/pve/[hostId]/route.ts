@@ -14,11 +14,14 @@ export async function POST(request: Request, ctx: { params: Promise<{ hostId: st
     const peer = await requireFederationPeer(request);
     const { hostId } = await ctx.params;
     const payload = bodySchema.parse(await request.json());
-    const host = await assertSharedHost(peer, hostId, payload.method, payload.path);
     const query: Record<string, string> = {};
     for (const [key, value] of Object.entries(payload.query ?? {})) {
       query[key] = String(value);
     }
+    const host = await assertSharedHost(peer, hostId, payload.method, payload.path, {
+      query,
+      body: payload.body ?? null,
+    });
     const data = await proxyPveRequest(
       host,
       payload.method,

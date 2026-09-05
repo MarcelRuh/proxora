@@ -45,7 +45,15 @@ export const POST = apiRoute("peers.manage", async (req) => {
       publicKey: z.string().optional(),
       endpoint: z.string().optional(),
       allowedIPs: z.string().optional(),
-      shares: z.array(z.object({ hostId: z.string(), level: z.string() })).optional(),
+      shares: z
+        .array(
+          z.object({
+            hostId: z.string(),
+            level: z.string(),
+            permissions: z.array(z.string()).nullable().optional(),
+          }),
+        )
+        .optional(),
     })
     .parse(await req.json());
 

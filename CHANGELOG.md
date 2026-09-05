@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.7] – 2026-09-05
+
+### Changed
+
+- WireGuard host shares can override the view/control/create level with the same permission checkboxes as user host access (including host updates). Empty custom lists still inherit the share level.
+
 ## [1.4.6] – 2026-09-05
 
 ### Changed

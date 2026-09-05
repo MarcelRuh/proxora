@@ -10,8 +10,9 @@ import { api } from "@/lib/api";
 import { useCan } from "@/components/auth/session-user";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { PublicHost } from "@/lib/types";
-
-type ShareLevel = "view" | "control" | "create";
+import { RolePermissionPicker } from "@/components/access/role-permission-picker";
+import { hostGrantCatalog } from "@/lib/permissions";
+import { permissionsForShareLevel, type ShareLevel } from "@/lib/federation-access";
 
 type PeerRow = {
   id: string;
@@ -24,7 +25,7 @@ type PeerRow = {
   allowedIPs: string;
   paired: boolean;
   lastSeenAt: string | null;
-  shares: Array<{ hostId: string; level: string }>;
+  shares: Array<{ hostId: string; level: string; permissions?: string[] | null }>;
 };
 
 type WgPayload = {
@@ -269,11 +270,12 @@ function PeerCard({
   peer: PeerRow;
   localHosts: PublicHost[];
   onUpdate: (patch: { name?: string; address?: string; proxoraPort?: number; pairingSecret?: string }) => Promise<void>;
-  onShares: (shares: Array<{ hostId: string; level: string }>) => Promise<void>;
+  onShares: (shares: Array<{ hostId: string; level: string; permissions?: string[] | null }>) => Promise<void>;
   onDelete: () => Promise<void>;
 }) {
   const { t } = useI18n();
   const [secret, setSecret] = useState("");
+  const [openHost, setOpenHost] = useState<string | null>(null);
   const [levels, setLevels] = useState<Record<string, ShareLevel | "">>(() => {
     const next: Record<string, ShareLevel | ""> = {};
     for (const host of localHosts) {
@@ -282,6 +284,27 @@ function PeerCard({
     }
     return next;
   });
+  const [overrides, setOverrides] = useState<Record<string, string[] | null>>(() => {
+    const next: Record<string, string[] | null> = {};
+    for (const host of localHosts) {
+      const share = peer.shares.find((s) => s.hostId === host.id);
+      next[host.id] = share?.permissions?.length ? share.permissions : null;
+    }
+    return next;
+  });
+
+  function setLevel(hostId: string, level: ShareLevel | "") {
+    setLevels((prev) => ({ ...prev, [hostId]: level }));
+    setOverrides((prev) => ({ ...prev, [hostId]: null }));
+    if (openHost === hostId) setOpenHost(null);
+  }
+
+  function setCustomize(hostId: string, on: boolean) {
+    const level = levels[hostId];
+    if (!level) return;
+    setOverrides((prev) => ({ ...prev, [hostId]: on ? permissionsForShareLevel(level) : null }));
+    setOpenHost(on ? hostId : null);
+  }
 
   return (
     <Card>
@@ -327,21 +350,54 @@ function PeerCard({
         {localHosts.length ? (
           <div className="space-y-2">
             <p className="text-xs font-medium">{t("peers.shareHosts")}</p>
-            {localHosts.map((host) => (
-              <label key={host.id} className="flex items-center justify-between gap-2 text-sm">
-                <span>{host.name}</span>
-                <select
-                  className="h-8 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
-                  value={levels[host.id] ?? ""}
-                  onChange={(e) => setLevels((prev) => ({ ...prev, [host.id]: e.target.value as ShareLevel | "" }))}
-                >
-                  <option value="">{t("peers.shareNone")}</option>
-                  <option value="view">{t("peers.shareView")}</option>
-                  <option value="control">{t("peers.shareControl")}</option>
-                  <option value="create">{t("peers.shareCreate")}</option>
-                </select>
-              </label>
-            ))}
+            <p className="text-xs text-muted-foreground">{t("peers.shareHint")}</p>
+            {localHosts.map((host) => {
+              const level = levels[host.id] ?? "";
+              const custom = Boolean(overrides[host.id]);
+              const expanded = openHost === host.id && custom;
+              return (
+                <div key={host.id} className="rounded-[4px] border border-border p-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-sm">{host.name}</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        className="h-8 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+                        value={level}
+                        onChange={(e) => setLevel(host.id, e.target.value as ShareLevel | "")}
+                      >
+                        <option value="">{t("peers.shareNone")}</option>
+                        <option value="view">{t("peers.shareView")}</option>
+                        <option value="control">{t("peers.shareControl")}</option>
+                        <option value="create">{t("peers.shareCreate")}</option>
+                      </select>
+                      {level ? (
+                        <Button type="button" size="sm" variant="outline" onClick={() => setCustomize(host.id, !custom)}>
+                          {custom ? t("peers.shareInherit") : t("peers.shareCustomize")}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                  {custom && level ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t("peers.shareOverrideMeta", { n: overrides[host.id]?.length ?? 0 })}
+                    </p>
+                  ) : null}
+                  {expanded ? (
+                    <div className="mt-3 border-t border-border pt-3">
+                      <RolePermissionPicker
+                        catalog={hostGrantCatalog()}
+                        value={overrides[host.id] ?? []}
+                        onChange={(permissions) => setOverrides((prev) => ({ ...prev, [host.id]: permissions }))}
+                      />
+                    </div>
+                  ) : custom && level ? (
+                    <Button type="button" size="sm" variant="ghost" className="mt-1" onClick={() => setOpenHost(host.id)}>
+                      {t("peers.shareEditPerms")}
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })}
             <Button
               size="sm"
               type="button"
@@ -349,7 +405,11 @@ function PeerCard({
                 void onShares(
                   Object.entries(levels)
                     .filter(([, level]) => level)
-                    .map(([hostId, level]) => ({ hostId, level: level as string })),
+                    .map(([hostId, level]) => ({
+                      hostId,
+                      level: level as string,
+                      permissions: overrides[hostId] ?? null,
+                    })),
                 ).catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")))
               }
             >

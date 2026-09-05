@@ -125,6 +125,7 @@ model Host {
   peer             WireguardPeer?      @relation(fields: [peerId], references: [id], onDelete: Cascade)
   remoteHostId     String?
   peerShareLevel   PeerShareLevel?
+  peerSharePermissions String[]          @default([])
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   userAccess       UserHostAccess[]
@@ -255,12 +256,13 @@ model WireguardPeer {
 }
 
 model HostShare {
-  id     String         @id @default(cuid())
-  peerId String
-  hostId String
-  level  PeerShareLevel
-  peer   WireguardPeer  @relation(fields: [peerId], references: [id], onDelete: Cascade)
-  host   Host           @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  id          String         @id @default(cuid())
+  peerId      String
+  hostId      String
+  level       PeerShareLevel
+  permissions String[]       @default([])
+  peer        WireguardPeer  @relation(fields: [peerId], references: [id], onDelete: Cascade)
+  host        Host           @relation(fields: [hostId], references: [id], onDelete: Cascade)
 
   @@unique([peerId, hostId])
   @@index([hostId])

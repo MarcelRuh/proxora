@@ -27,12 +27,12 @@ export async function handleFederationWebsocket(browser: WebSocket, req: Incomin
     browser.close(4400, "Invalid federation websocket");
     return;
   }
-  const host = await assertSharedHost(peer, remoteHostId, "GET", path);
   const query: Record<string, string> = {};
   url.searchParams.forEach((value, key) => {
     if (key === "remoteHostId" || key === "path") return;
     query[key] = value;
   });
+  const host = await assertSharedHost(peer, remoteHostId, "GET", path, { query });
   const proxmox = await clientForHost(host);
   const wsUrl = proxmox.http.websocketUrl(path, query);
   const headers = await proxmox.http.authHeaders();

@@ -16,6 +16,7 @@ import { QueryGate } from "@/components/layout/query-gate";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useSessionUser } from "@/components/auth/session-user";
 import { userHasPermission } from "@/lib/permissions";
+import { peerHostAllowsPermission } from "@/lib/federation-access";
 
 type AptPackage = { Package: string; Version?: string; OldVersion?: string };
 type HostUpdates = {
@@ -110,7 +111,9 @@ export default function UpdatesPage() {
 
   const checkAll = useMutation({
     mutationFn: async () => {
-      const ids = (hosts?.hosts ?? []).filter((h) => userHasPermission(user, "updates.check", h.id)).map((h) => h.id);
+      const ids = (hosts?.hosts ?? [])
+        .filter((h) => userHasPermission(user, "updates.check", h.id) && peerHostAllowsPermission(h, "updates.check"))
+        .map((h) => h.id);
       const results = await Promise.allSettled(
         ids.map(async (id) => {
           const data = await api<{ version: string | null; updates: HostUpdates["updates"] }>(
@@ -188,8 +191,11 @@ export default function UpdatesPage() {
           {(details ?? []).map((row) => {
             const count = row.updates.reduce((acc, n) => acc + n.count, 0);
             const checking = checkOne.isPending && checkOne.variables?.hostId === row.host.id;
-            const canCheck = userHasPermission(user, "updates.check", row.host.id);
-            const canUpgradeHost = userHasPermission(user, "updates.upgrade", row.host.id);
+            const canCheck =
+              userHasPermission(user, "updates.check", row.host.id) && peerHostAllowsPermission(row.host, "updates.check");
+            const canUpgradeHost =
+              userHasPermission(user, "updates.upgrade", row.host.id) &&
+              peerHostAllowsPermission(row.host, "updates.upgrade");
             const checkedAt = row.host.aptCheckedAt
               ? new Date(row.host.aptCheckedAt).toLocaleString(locale === "en" ? "en-GB" : "de-DE")
               : null;

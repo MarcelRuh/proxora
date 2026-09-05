@@ -21,6 +21,7 @@ export type PublicHost = {
   peerId?: string | null;
   peerName?: string | null;
   shareLevel?: string | null;
+  sharePermissions?: string[] | null;
 };
 
 export type Guest = {

@@ -2,13 +2,14 @@
 
 import type { PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { peerHostAllowsPermission } from "@/lib/federation-access";
 
 const selectClass =
   "mt-1 h-9 w-full rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm";
 
 export function hostAllowsCreate(host: PublicHost): boolean {
   if (host.origin !== "PEER") return true;
-  return host.shareLevel === "create";
+  return peerHostAllowsPermission(host, ["vm.create", "lxc.create"]);
 }
 
 export function HostSelect({

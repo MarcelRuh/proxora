@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { encodeWireguardInvite, parseWireguardInvite } from "@/lib/wireguard-invite";
 import { buildWg0Conf, parseWgQuickConf, sanitizeClientAllowedIps, serverPeerSnippet, ensureIpInAllowedIps, cidrContainsIpv4 } from "@/lib/wireguard-conf";
 import { generateWireguardKeypair, isWireguardKey, publicKeyFromPrivate } from "@/lib/wireguard-keys";
-import { federationActionLevel, shareAllows } from "@/lib/federation-access";
+import { federationActionLevel, federationPermission, peerHostAllowsPermission, shareAllows, shareHasPermission } from "@/lib/federation-access";
 
 describe("wireguard keys", () => {
   it("generates 32-byte keypairs", () => {
@@ -178,11 +178,33 @@ describe("federation share levels", () => {
     expect(federationActionLevel("GET", "/nodes/pve/qemu")).toBe("view");
     expect(federationActionLevel("POST", "/nodes/pve/qemu")).toBe("create");
     expect(federationActionLevel("POST", "/nodes/pve/qemu/100/status/start")).toBe("control");
-    expect(federationActionLevel("POST", "/nodes/pve/status/reboot")).toBe("deny");
+    expect(federationActionLevel("POST", "/nodes/pve/status", { body: { command: "reboot" } })).toBe("control");
     expect(federationActionLevel("POST", "/nodes/pve/termproxy")).toBe("deny");
+    expect(federationActionLevel("POST", "/nodes/pve/termproxy", { body: { cmd: "upgrade" } })).toBe("deny");
+    expect(federationActionLevel("GET", "/nodes/pve/apt/update")).toBe("view");
+    expect(federationActionLevel("POST", "/nodes/pve/apt/update")).toBe("deny");
     expect(federationActionLevel("POST", "/nodes/pve/qemu/100/termproxy")).toBe("control");
     expect(shareAllows("view", "control")).toBe(false);
     expect(shareAllows("create", "control")).toBe(true);
     expect(shareAllows("control", "deny")).toBe(false);
+  });
+
+  it("grants host upgrades only via custom share permissions", () => {
+    expect(federationPermission("POST", "/nodes/pve/apt/update")).toBe("updates.check");
+    expect(federationPermission("POST", "/nodes/pve/termproxy", { body: { cmd: "upgrade" } })).toBe("updates.upgrade");
+    expect(federationPermission("POST", "/nodes/pve/status", { body: { command: "reboot" } })).toBe("hosts.reboot");
+    expect(shareHasPermission("control", null, "updates.upgrade")).toBe(false);
+    expect(shareHasPermission("create", null, "hosts.console")).toBe(false);
+    expect(shareHasPermission("view", null, "updates.view")).toBe(true);
+    expect(shareHasPermission("control", ["hosts.view", "updates.view", "updates.check", "updates.upgrade"], "updates.upgrade")).toBe(true);
+    expect(shareHasPermission("control", ["hosts.view", "updates.upgrade"], ["hosts.console", "updates.upgrade"])).toBe(true);
+    expect(
+      peerHostAllowsPermission(
+        { origin: "PEER", shareLevel: "control", sharePermissions: ["hosts.view", "updates.upgrade"] },
+        "updates.upgrade",
+      ),
+    ).toBe(true);
+    expect(peerHostAllowsPermission({ origin: "PEER", shareLevel: "control", sharePermissions: null }, "updates.upgrade")).toBe(false);
+    expect(peerHostAllowsPermission({ origin: "LOCAL", shareLevel: null }, "updates.upgrade")).toBe(true);
   });
 });
