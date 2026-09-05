@@ -91,9 +91,8 @@ export class ProxmoxClient {
     return this.cluster.resources(type) as unknown as Promise<ProxmoxResource[]>;
   }
 
-  async listInventory(): Promise<{ nodes: ProxmoxResource[]; vms: GuestListItem[]; containers: GuestListItem[] }> {
-    const split = splitResources(await this.listResources());
-    return { nodes: split.nodes, vms: split.vms, containers: split.containers };
+  async listInventory(): Promise<ClusterInventory> {
+    return splitResources(await this.listResources());
   }
 
   async listGuests(): Promise<{ vms: GuestListItem[]; containers: GuestListItem[] }> {
@@ -113,11 +112,27 @@ export class ProxmoxClient {
   }
 }
 
-function splitResources(resources: ProxmoxResource[]) {
+export type ClusterStorageItem = { storage: string; type: string; node?: string };
+
+export type ClusterInventory = {
+  nodes: ProxmoxResource[];
+  vms: GuestListItem[];
+  containers: GuestListItem[];
+  storage: ClusterStorageItem[];
+};
+
+function splitResources(resources: ProxmoxResource[]): ClusterInventory {
   return {
     nodes: resources.filter((r) => r.type === "node"),
     vms: resources.filter((r) => r.type === "qemu").map((r) => mapGuest(r)),
     containers: resources.filter((r) => r.type === "lxc").map((r) => mapGuest(r)),
+    storage: resources
+      .filter((r) => r.type === "storage")
+      .map((r) => ({
+        storage: String(r.storage ?? r.id?.replace(/^storage\//, "") ?? ""),
+        type: String(r.plugintype ?? "storage"),
+        node: r.node,
+      })),
   };
 }
 

@@ -16,6 +16,7 @@ import {
   setPeerShares,
   updateProxoraPeer,
 } from "@/server/services/wireguard-service";
+import { requestPeerSync } from "@/server/services/peer-sync";
 
 export const GET = apiRoute("peers.manage", async () => {
   const cfg = await loadWireguardInterface();
@@ -61,11 +62,14 @@ export const POST = apiRoute("peers.manage", async (req) => {
     const name = body.name?.trim();
     if (!name) throw new ValidationError("Name required");
     const created = await createProxoraPeer(name, body.address, body.proxoraPort, body.pairingSecret);
+    requestPeerSync();
     return json(created, 201);
   }
   if (body.action === "import") {
     if (!body.invite) throw new ValidationError("Invite required");
-    return json(await importWireguardInvite(body.invite));
+    const imported = await importWireguardInvite(body.invite);
+    requestPeerSync();
+    return json(imported);
   }
   if (body.action === "import-conf") {
     const config = body.config?.trim() ?? "";
@@ -99,7 +103,9 @@ export const POST = apiRoute("peers.manage", async (req) => {
   }
   if (body.action === "shares") {
     if (!body.peerId) throw new ValidationError("peerId required");
-    return json({ peers: await setPeerShares(body.peerId, body.shares ?? []) });
+    const peers = await setPeerShares(body.peerId, body.shares ?? []);
+    requestPeerSync();
+    return json({ peers });
   }
   if (body.action === "delete-peer") {
     if (!body.peerId) throw new ValidationError("peerId required");

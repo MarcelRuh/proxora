@@ -18,6 +18,7 @@ import { notifyGuestTaskFailed } from "@/server/notifications/guest-task-fail";
 import { isQemuAgentEnabled, vmDiskFromAgent } from "@/server/services/guest-disk";
 import { rememberGuestIpCache } from "@/server/services/guest-ip-cache";
 import { parseAgentNetworkIps, parseGuestConfigIps } from "@/lib/create-ip";
+import { invalidateInventoryCache } from "@/server/services/inventory-cache";
 import { guestIsRunning, qemuMigrateParams } from "@/lib/guest-migrate";
 import { shutdownThenDeleteGuest } from "@/server/services/guest-delete";
 
@@ -234,6 +235,7 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
     }
     throw error;
   }
+  invalidateInventoryCache(params.id);
   await writeAuditLog({
     userId: session.user.id,
     ip: await clientIp(),

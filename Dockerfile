@@ -30,15 +30,14 @@ ENV PORT=3000
 ENV LISTEN_HOST=0.0.0.0
 ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
 RUN apt-get update && apt-get install -y --no-install-recommends openssl libssl3 ca-certificates wget && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
+COPY prisma ./prisma
+RUN npm ci --omit=dev && npx prisma generate
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/server ./server
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/package.json ./
 COPY --from=builder /app/next.config.ts ./
 COPY --from=builder /app/tsconfig.json ./
 COPY docker/entrypoint.sh /entrypoint.sh

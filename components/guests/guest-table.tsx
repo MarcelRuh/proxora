@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, memo } from "react";
+import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { Play, Square, RotateCcw, Terminal, Camera, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -19,10 +19,12 @@ import { guestHasTag, parseGuestTags, uniqueGuestTags } from "@/lib/guest-tags";
 import { bulkActionFits, guestRowKey, type BulkGuestAction } from "@/lib/guest-bulk";
 import { uniqueGuestIps } from "@/lib/guest-ip-display";
 import { formatUptime } from "@/lib/utils";
+import { GUEST_ROW_ESTIMATE_PX, GUEST_TABLE_VIRTUALIZE_AFTER, windowRows } from "@/lib/table-window";
 import type { Guest } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useSessionUser } from "@/components/auth/session-user";
 import { userHasPermission, type Permission } from "@/lib/permissions";
+import { invalidateDashboardQueries } from "@/components/dashboard/use-dashboard";
 
 export const GuestTable = memo(function GuestTable({
   kind,
@@ -79,6 +81,31 @@ export const GuestTable = memo(function GuestTable({
     return sortGuests(matched, sort);
   }, [items, q, status, tag, hostFilter, hostId, sort]);
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewH, setViewH] = useState(560);
+  const virtualize = filtered.length > GUEST_TABLE_VIRTUALIZE_AFTER;
+
+  useEffect(() => {
+    if (!virtualize) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => setScrollTop(el.scrollTop);
+    const ro = new ResizeObserver(() => setViewH(el.clientHeight));
+    el.addEventListener("scroll", onScroll, { passive: true });
+    ro.observe(el);
+    setViewH(el.clientHeight);
+    setScrollTop(el.scrollTop);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+    };
+  }, [virtualize]);
+
+  const win = virtualize
+    ? windowRows(filtered, scrollTop, viewH, GUEST_ROW_ESTIMATE_PX)
+    : { start: 0, end: filtered.length, padTop: 0, padBottom: 0, slice: filtered };
+
   const visibleKeys = filtered.map((g) => rowKey(g));
   const selectedVisible = visibleKeys.filter((key) => selected.has(key));
   const allVisibleSelected = filtered.length > 0 && selectedVisible.length === filtered.length;
@@ -100,7 +127,7 @@ export const GuestTable = memo(function GuestTable({
             ? t("guest.deleted", { kind: row === "vm" ? "VM" : "LXC", id: vmid })
             : t("common.taskDone"),
       );
-      await qc.invalidateQueries({ queryKey: ["dashboard"] });
+      await invalidateDashboardQueries(qc);
     } catch (err) {
       if (action !== "delete") {
         toast.error(err instanceof Error ? err.message : t("common.failed"));
@@ -153,7 +180,7 @@ export const GuestTable = memo(function GuestTable({
     setBusyId(null);
     setSelected(new Set());
     toast.success(t("table.bulkDone", { ok, fail }));
-    await qc.invalidateQueries({ queryKey: ["dashboard"] });
+    await invalidateDashboardQueries(qc);
   }
 
   const colCount = mixed ? 12 : 11;
@@ -238,7 +265,14 @@ export const GuestTable = memo(function GuestTable({
           </Button>
         </div>
       ) : null}
-      <div className="overflow-x-auto rounded-[4px] border border-border">
+      <div
+        ref={scrollRef}
+        className={
+          virtualize
+            ? "max-h-[min(70vh,720px)] overflow-auto rounded-[4px] border border-border"
+            : "overflow-x-auto rounded-[4px] border border-border"
+        }
+      >
         <table className={`w-full text-left text-sm ${mixed ? "min-w-[1080px]" : "min-w-[860px]"}`}>
           <thead className="font-[family-name:var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
             <tr>
@@ -293,7 +327,13 @@ export const GuestTable = memo(function GuestTable({
                 </td>
               </tr>
             ) : (
-              filtered.map((g) => {
+              <>
+                {win.padTop > 0 ? (
+                  <tr aria-hidden>
+                    <td colSpan={colCount} style={{ height: win.padTop, padding: 0, border: 0 }} />
+                  </tr>
+                ) : null}
+                {win.slice.map((g) => {
                 const hid = g.hostId ?? hostId ?? "";
                 const row = rowKind(g);
                 const prefix = row === "vm" ? "vm" : "lxc";
@@ -458,7 +498,13 @@ export const GuestTable = memo(function GuestTable({
                     </td>
                   </tr>
                 );
-              })
+              })}
+                {win.padBottom > 0 ? (
+                  <tr aria-hidden>
+                    <td colSpan={colCount} style={{ height: win.padBottom, padding: 0, border: 0 }} />
+                  </tr>
+                ) : null}
+              </>
             )}
           </tbody>
         </table>

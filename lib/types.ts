@@ -86,9 +86,10 @@ export type Dashboard = {
   };
   virtualization: { vms: number; lxc: number; running: number; stopped: number; paused: number };
   resources: { cpu: number; memUsed: number; memTotal: number; diskUsed: number; diskTotal: number };
-  guests: {
-    vms: Array<Omit<Guest, "kind">>;
-    containers: Array<Omit<Guest, "kind">>;
-  };
+};
+
+export type DashboardGuests = {
+  vms: Array<Omit<Guest, "kind">>;
+  containers: Array<Omit<Guest, "kind">>;
 };
 

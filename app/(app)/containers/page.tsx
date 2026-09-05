@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { GuestTable } from "@/components/guests/guest-table";
-import { dashboardGuests, useDashboard } from "@/components/dashboard/use-dashboard";
+import { dashboardGuests, useDashboardGuests } from "@/components/dashboard/use-dashboard";
 import { PageHeader } from "@/components/layout/page-header";
 import { QueryGate } from "@/components/layout/query-gate";
 import { useI18n } from "@/components/i18n/locale-provider";
@@ -12,7 +12,7 @@ import { useCan } from "@/components/auth/session-user";
 export default function ContainersPage() {
   const { t } = useI18n();
   const canCreate = useCan("lxc.create");
-  const { data, isLoading, error, refetch } = useDashboard();
+  const { data, isLoading, error, refetch } = useDashboardGuests("lxc");
 
   return (
     <div className="space-y-4">

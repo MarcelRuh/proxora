@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { uniqueNonEmpty } from "@/lib/cluster-metrics";
 import { bytesToSize, formatPercent, formatUptime, percentage } from "@/lib/utils";
 import { useAptSummary } from "@/components/layout/apt-update-alert";
-import { useDashboard } from "@/components/dashboard/use-dashboard";
+import { useDashboard, useDashboardGuests } from "@/components/dashboard/use-dashboard";
 import { GuestTable } from "@/components/guests/guest-table";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { Guest } from "@/lib/types";
@@ -17,6 +17,7 @@ import type { Guest } from "@/lib/types";
 export default function DashboardPage() {
   const { t } = useI18n();
   const { data, isLoading, error, refetch, isFetching } = useDashboard();
+  const guestsQ = useDashboardGuests("all");
   const apt = useAptSummary();
 
   if (isLoading) {
@@ -33,7 +34,13 @@ export default function DashboardPage() {
       <div className="proxora-panel p-6">
         <p className="font-medium">{t("dashboard.loadError")}</p>
         <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : t("guest.status.unknown")}</p>
-        <button className="mt-3 text-sm text-primary" onClick={() => void refetch()}>
+        <button
+          className="mt-3 text-sm text-primary"
+          onClick={() => {
+            void refetch();
+            void guestsQ.refetch();
+          }}
+        >
           {t("common.retry")}
         </button>
       </div>
@@ -41,13 +48,14 @@ export default function DashboardPage() {
   }
 
   const guests: Guest[] = [
-    ...(data.guests?.vms ?? []).map((g) => ({ ...g, kind: "vm" as const })),
-    ...(data.guests?.containers ?? []).map((g) => ({ ...g, kind: "lxc" as const })),
+    ...(guestsQ.data?.vms ?? []).map((g) => ({ ...g, kind: "vm" as const })),
+    ...(guestsQ.data?.containers ?? []).map((g) => ({ ...g, kind: "lxc" as const })),
   ].sort((a, b) => a.vmid - b.vmid || a.name.localeCompare(b.name));
 
-  const running = guests.filter((g) => g.status === "running").length;
-  const stopped = guests.filter((g) => g.status === "stopped").length;
-  const bad = guests.filter((g) => g.status !== "running" && g.status !== "stopped").length;
+  const totalGuests = data.virtualization.vms + data.virtualization.lxc;
+  const running = data.virtualization.running;
+  const stopped = data.virtualization.stopped;
+  const bad = Math.max(0, totalGuests - running - stopped);
   const allOnline = data.hosts.total > 0 && data.hosts.online === data.hosts.total;
   const cpuCores = data.hosts.items.reduce((acc, h) => acc + (h.cpuCores ?? 0), 0);
   const versions = uniqueNonEmpty(data.hosts.items.map((h) => h.proxmoxVersion));
@@ -62,7 +70,15 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-3 text-xs uppercase tracking-wider">
             <LiveClock />
-          <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={isFetching}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              void refetch();
+              void guestsQ.refetch();
+            }}
+            disabled={isFetching || guestsQ.isFetching}
+          >
             {t("common.refresh")}
           </Button>
         </div>
@@ -75,7 +91,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <CountStat label={t("dashboard.total")} value={guests.length} />
+        <CountStat label={t("dashboard.total")} value={totalGuests} />
         <CountStat label={t("dashboard.running")} value={running} />
         <CountStat label={t("dashboard.stopped")} value={stopped} />
         <CountStat label={t("dashboard.error")} value={bad} />
@@ -186,13 +202,15 @@ export default function DashboardPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <p className="proxora-section">{t("dashboard.guests")}</p>
-          <span className="text-xs text-muted-foreground">{guests.length}</span>
+          <span className="text-xs text-muted-foreground">{totalGuests}</span>
         </CardHeader>
         <CardContent className="space-y-3">
           {unavailable.length > 0 ? (
             <p className="text-sm text-warning">{t("dashboard.guestsHidden", { n: unavailable.length })}</p>
           ) : null}
-          {guests.length === 0 ? (
+          {guestsQ.isLoading && !guestsQ.data ? (
+            <GuestTable kind="all" items={[]} loading />
+          ) : guests.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("dashboard.noGuests")}</p>
           ) : (
             <GuestTable kind="all" items={guests} />

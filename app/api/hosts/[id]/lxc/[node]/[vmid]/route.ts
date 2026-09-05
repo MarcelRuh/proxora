@@ -18,6 +18,7 @@ import { parseGuestConfigIps } from "@/lib/create-ip";
 import { rememberGuestIpCache } from "@/server/services/guest-ip-cache";
 import { durationLabel } from "@/lib/duration";
 import { notifyGuestTaskFailed } from "@/server/notifications/guest-task-fail";
+import { invalidateInventoryCache } from "@/server/services/inventory-cache";
 import { shutdownThenDeleteGuest } from "@/server/services/guest-delete";
 
 export const maxDuration = 800;
@@ -196,6 +197,7 @@ export const POST = apiRoute("lxc.view", async (req, session, params) => {
     }
     throw error;
   }
+  invalidateInventoryCache(params.id);
   await writeAuditLog({
     userId: session.user.id,
     ip: await clientIp(),

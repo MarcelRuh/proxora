@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.10] – 2026-09-05
+
+### Changed
+
+- Dashboard overview no longer waits on the full guest list or IP probes; guests load from `/api/dashboard/guests`. Search, dashboard, and host status share a 10s per-host inventory cache from one `cluster/resources` call.
+- Guest tables virtualize when more than 48 rows are visible. Peer sync runs every 60s and is kicked immediately after pairing or share changes.
+- Docker runtime image installs production dependencies only (`npm ci --omit=dev`).
+
 ## [1.4.9] – 2026-09-05
 
 ### Fixed

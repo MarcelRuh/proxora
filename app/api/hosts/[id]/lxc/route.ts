@@ -13,6 +13,7 @@ import { durationLabel } from "@/lib/duration";
 import { ipv4Host } from "@/lib/create-ip";
 import { assertGuestIdentityFree } from "@/server/services/guest-ips";
 import type { LxcCreateParams } from "@/server/proxmox/lxc";
+import { invalidateInventoryCache } from "@/server/services/inventory-cache";
 
 export const maxDuration = 800;
 
@@ -129,5 +130,6 @@ export const POST = apiRoute("lxc.create", async (req, session, params) => {
     host: hostName,
     node: body.node,
   });
+  invalidateInventoryCache(params.id);
   return json({ upid, started, startError, node: body.node, vmid: body.vmid }, 201);
 });

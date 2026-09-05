@@ -29,6 +29,7 @@ import { PageSkeleton } from "@/components/layout/page-skeleton";
 import { QueryGate } from "@/components/layout/query-gate";
 import { vmHasGraphics } from "@/lib/guest-console";
 import { parseGuestConfigIps } from "@/lib/create-ip";
+import { invalidateDashboardQueries } from "@/components/dashboard/use-dashboard";
 
 type GuestPayload = {
   status: Record<string, unknown>;
@@ -105,7 +106,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     await api(path, { method: "POST", body: JSON.stringify({ action: name, ...extra }) });
     if (name === "delete") {
       toast.success(t("guest.deleted", { kind: kindLabel, id: params.vmid }));
-      await qc.invalidateQueries({ queryKey: ["dashboard"] });
+      await invalidateDashboardQueries(qc);
       router.push(listPath);
       return;
     }
@@ -120,7 +121,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     );
     void refetch();
     void qc.invalidateQueries({ queryKey: ["guest-live", kind, params.hostId, params.node, params.vmid] });
-    void qc.invalidateQueries({ queryKey: ["dashboard"] });
+    invalidateDashboardQueries(qc);
   }
 
   const status = live?.status ?? data?.status ?? {};

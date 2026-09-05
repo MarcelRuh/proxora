@@ -15,6 +15,7 @@ import { ostypeFromIso, vmCdromDisks, windowsVmFirmware } from "@/lib/iso-images
 import { diskExtras, vmDiskSpec } from "@/lib/vm-storage";
 import { withNetFirewall } from "@/lib/windows-guest";
 import type { VmCreateParams } from "@/server/proxmox/vms";
+import { invalidateInventoryCache } from "@/server/services/inventory-cache";
 
 export const maxDuration = 800;
 
@@ -181,5 +182,6 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     host: hostName,
     node: body.node,
   });
+  invalidateInventoryCache(params.id);
   return json({ upid, started, startError, node: body.node, vmid: body.vmid }, 201);
 });

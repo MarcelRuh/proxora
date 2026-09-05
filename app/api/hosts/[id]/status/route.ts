@@ -8,6 +8,7 @@ import { withHostClient, assertLocalHost } from "@/server/services/host-service"
 import { filterGuestsForUser } from "@/server/auth/session-core";
 import { userHasPermission } from "@/lib/permissions";
 import { ForbiddenError } from "@/lib/errors";
+import { loadHostInventory } from "@/server/services/inventory-cache";
 
 const actionSchema = z.object({
   action: z.enum(["reboot", "shutdown"]),
@@ -18,7 +19,7 @@ const actionSchema = z.object({
 export const GET = apiRoute("hosts.view", async (_req, session, params) => {
   const data = await withHostClient(params.id, session.user, async (client, host) => {
     const [inv, storage] = await Promise.all([
-      client.listInventory(),
+      loadHostInventory(client, params.id),
       client.storage.list().catch(() => []),
     ]);
     const details = inv.nodes

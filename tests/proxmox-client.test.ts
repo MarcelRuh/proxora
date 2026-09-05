@@ -105,6 +105,7 @@ describe("ProxmoxClient", () => {
     expect(inv.nodes).toHaveLength(2);
     expect(inv.vms).toHaveLength(1);
     expect(inv.containers).toHaveLength(1);
+    expect(inv.storage).toEqual([{ storage: "local", type: "storage", node: undefined }]);
     expect(inv.containers[0]?.cpus).toBe(2);
     const urls = vi.mocked(undiciFetch).mock.calls.map(([url]) => String(url));
     expect(urls).toHaveLength(1);
