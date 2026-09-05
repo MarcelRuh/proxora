@@ -7,6 +7,7 @@ import {
   ipv4Host,
   networksForHost,
   parseGuestConfigIps,
+  resolveGuestNetworks,
   parseAgentNetworkIps,
   parseGuestIpSettings,
   shouldSyncGuestIp,
@@ -43,6 +44,15 @@ describe("guest IP settings and config parse", () => {
     });
     expect(networksForHost(settings, "h1")[0]?.id).toBe("10.1.0.0");
     expect(networksForHost(settings, "other")[0]?.id).toBe("10.0.0.0");
+  });
+
+  it("prefers colleague networks over local defaults", () => {
+    const settings = parseGuestIpSettings({
+      defaults: [{ id: "192.168.178.0", prefix: 24, gateway: "192.168.178.1" }],
+    });
+    const peer = [{ id: "10.20.0.0", prefix: 24, gateway: "10.20.0.1" }];
+    expect(resolveGuestNetworks(settings, "peer-host", peer)[0]?.id).toBe("10.20.0.0");
+    expect(resolveGuestNetworks(settings, "peer-host", [])[0]?.id).toBe("192.168.178.0");
   });
 
   it("reads IPs from LXC net0 and QEMU ipconfig0", () => {

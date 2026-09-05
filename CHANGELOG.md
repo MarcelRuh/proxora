@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.5] – 2026-09-05
+
+### Fixed
+
+- Guest-network settings keep focus while typing (row keys no longer follow the CIDR).
+
+### Changed
+
+- Creating a VM/CT on a colleague host uses the networks that colleague configured. Local settings only apply to your own hosts.
+
 ## [1.4.4] – 2026-09-05
 
 ### Changed

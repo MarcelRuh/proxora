@@ -2,8 +2,14 @@ import { HostOrigin, PeerShareLevel, WireguardPeerKind, type Host } from "@prism
 import { prisma } from "@/lib/db";
 import { encryptSecret } from "@/lib/crypto";
 import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from "@/lib/errors";
+import { networksForHost, parseGuestIpNetworks } from "@/lib/create-ip";
 import { federationActionLevel, parseShareLevel, shareAllows, type ShareLevel } from "@/lib/federation-access";
 import { logger } from "@/lib/logger";
+import {
+  cachePeerHostNetworks,
+  forgetPeerHostNetworks,
+  loadGuestIpSettings,
+} from "@/server/services/guest-ip-settings";
 import { findPeerByInboundToken, outboundToken, peerHttpBase } from "@/server/services/wireguard-service";
 import { clientForHost } from "@/server/services/host-service";
 import type { WireguardPeer } from "@prisma/client";
@@ -28,6 +34,7 @@ function prismaLevel(level: PeerShareLevel): ShareLevel {
 }
 
 export async function listSharedHostsForPeer(peer: WireguardPeer) {
+  const settings = await loadGuestIpSettings();
   const shares = await prisma.hostShare.findMany({
     where: { peerId: peer.id },
     include: { host: true },
@@ -40,6 +47,7 @@ export async function listSharedHostsForPeer(peer: WireguardPeer) {
       connectionState: s.host.connectionState,
       proxmoxVersion: s.host.proxmoxVersion,
       shareLevel: prismaLevel(s.level),
+      networks: networksForHost(settings, s.host.id),
     }));
 }
 
@@ -78,21 +86,33 @@ export async function syncPeerHosts() {
         signal: AbortSignal.timeout(12_000),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as { hosts?: Array<{ id: string; name: string; connectionState?: string; proxmoxVersion?: string | null; shareLevel?: string }> };
+      const json = (await res.json()) as {
+        hosts?: Array<{
+          id: string;
+          name: string;
+          connectionState?: string;
+          proxmoxVersion?: string | null;
+          shareLevel?: string;
+          networks?: unknown;
+        }>;
+      };
       const remote = json.hosts ?? [];
       const remoteIds = new Set(remote.map((h) => h.id));
       const existing = await prisma.host.findMany({ where: { peerId: peer.id, origin: HostOrigin.PEER } });
+      const removedIds: string[] = [];
       for (const row of existing) {
         if (row.remoteHostId && !remoteIds.has(row.remoteHostId)) {
+          removedIds.push(row.id);
           await prisma.host.delete({ where: { id: row.id } });
         }
       }
+      if (removedIds.length) await forgetPeerHostNetworks(removedIds);
       for (const item of remote) {
         const shareLevel = parseShareLevel(item.shareLevel);
         if (!shareLevel) continue;
         const level = shareLevel.toUpperCase() as PeerShareLevel;
         const url = `federation://${peer.id}/${item.id}`;
-        await prisma.host.upsert({
+        const host = await prisma.host.upsert({
           where: { peerId_remoteHostId: { peerId: peer.id, remoteHostId: item.id } },
           create: {
             name: item.name,
@@ -116,6 +136,8 @@ export async function syncPeerHosts() {
             connectionState: item.connectionState === "ONLINE" ? "ONLINE" : undefined,
           },
         });
+        const nets = parseGuestIpNetworks(item.networks);
+        if (nets.length) await cachePeerHostNetworks(host.id, nets);
       }
       await prisma.wireguardPeer.update({ where: { id: peer.id }, data: { lastSeenAt: new Date() } });
     } catch (error) {

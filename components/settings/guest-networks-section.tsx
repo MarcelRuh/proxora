@@ -28,11 +28,13 @@ function NetworkList({
   return (
     <div className="space-y-2">
       {value.map((net, i) => (
-        <div key={`${net.id}-${i}`} className="grid gap-2 sm:grid-cols-[1fr_5rem_1fr_auto]">
+        <div key={`net-${i}`} className="grid gap-2 sm:grid-cols-[1fr_5rem_1fr_auto]">
           <div className="space-y-1">
             <Label>{t("create.network")}</Label>
             <Input
               value={net.id}
+              autoComplete="off"
+              spellCheck={false}
               onChange={(e) => {
                 const next = [...value];
                 next[i] = { ...net, id: e.target.value };
@@ -43,10 +45,14 @@ function NetworkList({
           <div className="space-y-1">
             <Label>/{t("settings.netPrefix")}</Label>
             <Input
-              value={String(net.prefix)}
+              inputMode="numeric"
+              autoComplete="off"
+              value={net.prefix > 0 ? String(net.prefix) : ""}
               onChange={(e) => {
+                const raw = e.target.value.trim();
+                const prefix = raw === "" ? 0 : Number(raw);
                 const next = [...value];
-                next[i] = { ...net, prefix: Number(e.target.value) || 24 };
+                next[i] = { ...net, prefix: Number.isFinite(prefix) ? prefix : 0 };
                 onChange(next);
               }}
             />
@@ -55,6 +61,8 @@ function NetworkList({
             <Label>{t("create.gateway")}</Label>
             <Input
               value={net.gateway}
+              autoComplete="off"
+              spellCheck={false}
               onChange={(e) => {
                 const next = [...value];
                 next[i] = { ...net, gateway: e.target.value };
@@ -90,8 +98,10 @@ export function GuestNetworksSection() {
   const form = draft ?? parsed;
   const [hostId, setHostId] = useState("");
   const [busy, setBusy] = useState(false);
+  const localHosts = (hosts?.hosts ?? []).filter((h) => h.origin !== "PEER");
+  const activeHostId = !hosts || localHosts.some((h) => h.id === hostId) ? hostId : "";
 
-  const override = hostId ? (form.byHost[hostId] ?? []) : [];
+  const override = activeHostId ? (form.byHost[activeHostId] ?? []) : [];
 
   async function save(next: GuestIpSettings) {
     setBusy(true);
@@ -120,20 +130,20 @@ export function GuestNetworksSection() {
           <p className="font-medium">{t("settings.hostNetworks")}</p>
           <select
             className="h-9 w-full max-w-md rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
-            value={hostId}
+            value={activeHostId}
             onChange={(e) => setHostId(e.target.value)}
           >
             <option value="">{t("common.chooseHost")}</option>
-            {(hosts?.hosts ?? []).map((h) => (
+            {localHosts.map((h) => (
               <option key={h.id} value={h.id}>
                 {h.name}
               </option>
             ))}
           </select>
-          {hostId ? (
+          {activeHostId ? (
             <NetworkList
               value={override.length ? override : form.defaults.map((n) => ({ ...n }))}
-              onChange={(list) => setDraft({ ...form, byHost: { ...form.byHost, [hostId]: list } })}
+              onChange={(list) => setDraft({ ...form, byHost: { ...form.byHost, [activeHostId]: list } })}
             />
           ) : null}
         </div>

@@ -69,6 +69,16 @@ export function networksForHost(settings: GuestIpSettings, hostId: string): Gues
   return settings.byHost[hostId]?.length ? settings.byHost[hostId]! : settings.defaults;
 }
 
+/** Colleague (PEER) nets from their Proxora win; otherwise local defaults/overrides. */
+export function resolveGuestNetworks(
+  settings: GuestIpSettings,
+  hostId: string,
+  peerNetworks?: GuestIpNetwork[] | null,
+): GuestIpNetwork[] {
+  if (peerNetworks?.length) return peerNetworks;
+  return networksForHost(settings, hostId);
+}
+
 export function guestIpNetwork(id: string, networks: GuestIpNetwork[] = GUEST_IP_NETWORKS): GuestIpNetwork {
   return networks.find((n) => n.id === id) ?? networks[0] ?? GUEST_IP_NETWORKS[0]!;
 }
