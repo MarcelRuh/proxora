@@ -9,28 +9,40 @@ import { ForbiddenError, ValidationError } from "@/lib/errors";
 import { parseBackupVolid } from "@/lib/backup";
 import { filenameFromUrl, isHttpUrl, isoVolid, isIsoContentVolid, mergeIsoCatalog } from "@/lib/iso-images";
 import { collectIsoVolumes } from "@/server/services/lxc-template-catalog";
+import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
+import { clearVolumeListCache } from "@/server/services/storage-content";
 import { collectVolumeUsers } from "@/server/services/volume-usage";
 import { userHasPermission } from "@/lib/permissions";
 
 export const GET = apiRoute("vm.create", async (req, session, params) => {
-  const nodeParam = new URL(req.url).searchParams.get("node")?.trim() || undefined;
+  const url = new URL(req.url);
+  const nodeParam = url.searchParams.get("node")?.trim() || undefined;
+  const usageOnly = url.searchParams.get("usage") === "1";
   const data = await withHostClient(params.id, session.user, async (client) => {
-    const nodes = await client.nodes.list();
-    const selected = nodeParam ?? nodes[0]?.node;
+    const inv = await loadHostInventory(client, params.id);
+    const nodeNames = inventoryNodeNames(inv);
+    const selected = nodeParam ?? nodeNames[0] ?? "";
     if (!selected) {
       return { nodes: [], node: "", storages: [], installed: [] as string[], catalog: [], usedBy: {} };
     }
-    const nodeNames = nodes.map((n) => n.node);
     const volumes = await collectIsoVolumes(client, nodeNames);
-    const catalog = mergeIsoCatalog(volumes.volids);
-    const usedBy = await collectVolumeUsers(client, params.id, volumes.volids);
+    if (usageOnly) {
+      return {
+        nodes: nodeNames,
+        node: selected,
+        storages: volumes.storages,
+        installed: volumes.volids,
+        catalog: [],
+        usedBy: await collectVolumeUsers(client, params.id, volumes.volids, { kind: "vm" }),
+      };
+    }
     return {
       nodes: nodeNames,
       node: selected,
       storages: volumes.storages,
       installed: volumes.volids,
-      catalog,
-      usedBy,
+      catalog: mergeIsoCatalog(volumes.volids),
+      usedBy: {},
     };
   });
   return json(data);
@@ -62,6 +74,7 @@ export const POST = apiRoute(["vm.create", "storage.delete"], async (req, sessio
     }
     await withHostClient(params.id, session.user, async (client, host) => {
       await client.storage.deleteContent(body.node, parsed.storage, parsed.volume);
+      clearVolumeListCache(client);
       await writeAuditLog({
         userId: session.user.id,
         ip: await clientIp(),
@@ -88,6 +101,7 @@ export const POST = apiRoute(["vm.create", "storage.delete"], async (req, sessio
       filename,
     });
     if (!upid) throw new ValidationError("Proxmox hat keinen Download-Task zurückgegeben");
+    clearVolumeListCache(client);
     await writeAuditLog({
       userId: session.user.id,
       ip: await clientIp(),

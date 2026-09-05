@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,7 @@ export function IsoImagePanel({ hostId }: { hostId: string }) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const settledRef = useRef(false);
 
+  const qc = useQueryClient();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["iso-images", hostId, node],
     enabled: Boolean(hostId),
@@ -66,6 +67,14 @@ export function IsoImagePanel({ hostId }: { hostId: string }) {
       const q = node ? `?node=${encodeURIComponent(node)}` : "";
       return api<CatalogPayload>(`/api/hosts/${hostId}/isos${q}`);
     },
+    staleTime: 20_000,
+  });
+
+  const { data: usage } = useQuery({
+    queryKey: ["iso-images-usage", hostId],
+    enabled: Boolean(hostId) && Boolean(data),
+    queryFn: () => api<Pick<CatalogPayload, "usedBy">>(`/api/hosts/${hostId}/isos?usage=1`),
+    staleTime: 60_000,
   });
 
   useEffect(() => {
@@ -82,7 +91,14 @@ export function IsoImagePanel({ hostId }: { hostId: string }) {
     return [];
   }
 
-  const usedBy = data?.usedBy ?? {};
+  const usedBy = usage?.usedBy ?? {};
+
+  function refreshCatalog() {
+    return Promise.all([
+      refetch(),
+      qc.invalidateQueries({ queryKey: ["iso-images-usage", hostId] }),
+    ]);
+  }
   const rows = data?.catalog ?? [];
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -144,7 +160,7 @@ export function IsoImagePanel({ hostId }: { hostId: string }) {
       setFinished(true);
       setBusy(false);
       toast.success(job.kind === "update" ? t("iso.updateDone") : t("iso.downloadDone"));
-      void refetch();
+      void refreshCatalog();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task]);
@@ -233,7 +249,7 @@ export function IsoImagePanel({ hostId }: { hostId: string }) {
         });
       }
       toast.success(t("iso.deleted"));
-      await refetch();
+      await refreshCatalog();
     } finally {
       setBusy(false);
     }
@@ -278,7 +294,7 @@ export function IsoImagePanel({ hostId }: { hostId: string }) {
           <option value="installed">{t("tmpl.installed")}</option>
           <option value="available">{t("tmpl.available")}</option>
         </select>
-        <Button variant="outline" onClick={() => void refetch()} disabled={isLoading || busy}>
+        <Button variant="outline" onClick={() => void refreshCatalog()} disabled={isLoading || busy}>
           {t("common.refresh")}
         </Button>
       </div>

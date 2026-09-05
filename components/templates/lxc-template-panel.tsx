@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,7 @@ export function LxcTemplatePanel({ hostId }: { hostId: string }) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const settledRef = useRef(false);
 
+  const qc = useQueryClient();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["lxc-templates", hostId, node],
     enabled: Boolean(hostId),
@@ -62,6 +63,14 @@ export function LxcTemplatePanel({ hostId }: { hostId: string }) {
       const q = node ? `?node=${encodeURIComponent(node)}` : "";
       return api<CatalogPayload>(`/api/hosts/${hostId}/templates${q}`);
     },
+    staleTime: 20_000,
+  });
+
+  const { data: usage } = useQuery({
+    queryKey: ["lxc-templates-usage", hostId],
+    enabled: Boolean(hostId) && Boolean(data),
+    queryFn: () => api<Pick<CatalogPayload, "usedBy">>(`/api/hosts/${hostId}/templates?usage=1`),
+    staleTime: 60_000,
   });
 
   useEffect(() => {
@@ -73,7 +82,14 @@ export function LxcTemplatePanel({ hostId }: { hostId: string }) {
   }, [data]);
 
   const packages = useMemo(() => groupTemplatePackages(data?.catalog ?? []), [data?.catalog]);
-  const usedBy = data?.usedBy ?? {};
+  const usedBy = usage?.usedBy ?? {};
+
+  function refreshCatalog() {
+    return Promise.all([
+      refetch(),
+      qc.invalidateQueries({ queryKey: ["lxc-templates-usage", hostId] }),
+    ]);
+  }
 
   function volidsFor(row: TemplatePackageRow): string[] {
     if (row.installedVolids.length) return row.installedVolids;
@@ -143,7 +159,7 @@ export function LxcTemplatePanel({ hostId }: { hostId: string }) {
       setFinished(true);
       setBusy(false);
       toast.success(job.kind === "update" ? t("tmpl.updateDone") : t("tmpl.downloadDone"));
-      void refetch();
+      void refreshCatalog();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task]);
@@ -203,7 +219,7 @@ export function LxcTemplatePanel({ hostId }: { hostId: string }) {
         });
       }
       toast.success(t("tmpl.deleted"));
-      await refetch();
+      await refreshCatalog();
     } finally {
       setBusy(false);
     }
@@ -258,7 +274,7 @@ export function LxcTemplatePanel({ hostId }: { hostId: string }) {
             ))}
           </select>
         ) : null}
-        <Button variant="outline" onClick={() => void refetch()} disabled={isLoading || busy}>
+        <Button variant="outline" onClick={() => void refreshCatalog()} disabled={isLoading || busy}>
           {t("common.refresh")}
         </Button>
       </div>

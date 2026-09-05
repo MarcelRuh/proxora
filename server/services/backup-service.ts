@@ -14,7 +14,8 @@ import { withHostClient } from "@/server/services/host-service";
 import type { SessionUser } from "@/server/auth/session";
 import { filterGuestsForUser } from "@/server/auth/session-core";
 import type { ProxmoxClient } from "@/server/proxmox/client";
-import { loadHostInventory } from "@/server/services/inventory-cache";
+import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
+import { listStorageContentRows } from "@/server/services/storage-content";
 
 export type BackupGuest = { vmid: number; name: string; kind: "vm" | "lxc"; node: string; status: string };
 
@@ -32,14 +33,17 @@ export type BackupFile = {
 
 export async function listHostBackups(hostId: string, user: SessionUser) {
   return withHostClient(hostId, user, async (client) => {
-    const [inv, jobsRaw, storage] = await Promise.all([
+    const [inv, jobsRaw] = await Promise.all([
       loadHostInventory(client, hostId),
       client.backup.jobs().catch(() => [] as Array<Record<string, unknown>>),
-      client.storage.list().catch(() => []),
     ]);
     const vms = inv.vms;
     const containers = inv.containers;
-    const nodeNames = inv.nodes.map((n) => n.node).filter((n): n is string => Boolean(n));
+    const nodeNames = inventoryNodeNames(inv);
+    const fromInv = inv.storage.filter((s) => s.content);
+    const storage = fromInv.length
+      ? fromInv.map((s) => ({ storage: s.storage, content: s.content }))
+      : await client.storage.list().catch(() => []);
     const primary = nodeNames[0] ?? "";
     const backupStorages = [...new Set(storage.filter((s) => (s.content ?? "").includes("backup")).map((s) => s.storage))];
     const diskStorages = [
@@ -85,37 +89,26 @@ export async function listHostBackups(hostId: string, user: SessionUser) {
 export async function listHostBackupFiles(hostId: string, user: SessionUser) {
   return withHostClient(hostId, user, async (client) => {
     const inv = await loadHostInventory(client, hostId);
-    const nodeNames = inv.nodes.map((n) => n.node).filter((n): n is string => Boolean(n));
-    const storageLists = await Promise.all(
-      nodeNames.map(async (node) => ({
-        node,
-        storage: await client.storage.list(node).catch(() => []),
-      })),
-    );
+    const nodeNames = inventoryNodeNames(inv);
+    const rows = await listStorageContentRows(client, nodeNames, "backup");
     const files: BackupFile[] = [];
     const seen = new Set<string>();
-    for (const row of storageLists) {
-      const backupStores = row.storage.filter((s) => (s.content ?? "").includes("backup"));
-      const contents = await Promise.all(
-        backupStores.map((s) => client.storage.content(row.node, s.storage, "backup").catch(() => [])),
-      );
-      for (const item of contents.flat()) {
-        const volid = String(item.volid ?? "");
-        if (!volid || seen.has(volid)) continue;
-        seen.add(volid);
-        const parsed = parseBackupVolid(volid);
-        files.push({
-          volid,
-          node: row.node,
-          storage: parsed.storage || String(item.storage ?? ""),
-          vmid: parsed.vmid ?? (Number(item.vmid) || null),
-          kind: parsed.kind,
-          size: Number(item.size ?? 0) || 0,
-          ctime: backupCtimeMs(item.ctime),
-          notes: item.notes ? String(item.notes) : undefined,
-          format: item.format ? String(item.format) : undefined,
-        });
-      }
+    for (const { node, storage, row } of rows) {
+      const volid = String(row.volid ?? "");
+      if (!volid || seen.has(volid)) continue;
+      seen.add(volid);
+      const parsed = parseBackupVolid(volid);
+      files.push({
+        volid,
+        node,
+        storage: parsed.storage || String(row.storage ?? storage),
+        vmid: parsed.vmid ?? (Number(row.vmid) || null),
+        kind: parsed.kind,
+        size: Number(row.size ?? 0) || 0,
+        ctime: backupCtimeMs(row.ctime),
+        notes: row.notes ? String(row.notes) : undefined,
+        format: row.format ? String(row.format) : undefined,
+      });
     }
     files.sort((a, b) => b.ctime - a.ctime);
     const allowedVmids =
@@ -154,13 +147,13 @@ export function jobBody(input: {
   });
 }
 
-export async function runBackupJob(client: ProxmoxClient, jobId: string, nodeHint?: string) {
+export async function runBackupJob(client: ProxmoxClient, hostId: string, jobId: string, nodeHint?: string) {
   const jobs = await client.backup.jobs();
   const raw = (Array.isArray(jobs) ? jobs : []).find((j) => String(j.id) === jobId);
   if (!raw) throw new Error("Backup-Job nicht gefunden");
   const job = normalizeBackupJob(raw);
-  const nodes = await client.nodes.list();
-  const node = nodeHint || job.node || nodes[0]?.node;
+  const names = inventoryNodeNames(await loadHostInventory(client, hostId));
+  const node = nodeHint || job.node || names[0];
   if (!node) throw new Error("Kein Node für das Backup");
   const upid = await client.backup.start(node, compactProxmoxBody({ "job-id": jobId, vmid: job.all ? undefined : job.vmid }));
   return { upid, job, node };

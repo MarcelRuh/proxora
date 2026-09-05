@@ -14,6 +14,9 @@ export async function globalSearch(user: SessionUser, query: string) {
 
   const guestHits = await Promise.all(
     hosts.map(async (host) => {
+      if (host.connectionState === "OFFLINE" || host.connectionState === "MAINTENANCE") {
+        return { vms: [], containers: [], storage: [] };
+      }
       try {
         return await withHostClient(host.id, user, async (client) => {
           const inv = await loadHostInventory(client, host.id);

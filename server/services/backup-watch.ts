@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { clientForHost } from "@/server/services/host-service";
+import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
 import type { ProxmoxTask } from "@/server/proxmox/types";
 
 export const BACKUP_WATCH_INTERVAL_MS = 60_000;
@@ -34,9 +35,9 @@ export async function scanFailedBackupTasks(): Promise<number> {
     if (host.connectionState === "OFFLINE" || host.connectionState === "MAINTENANCE") continue;
     try {
       const client = await clientForHost(host);
-      const nodes = await client.nodes.list();
+      const names = inventoryNodeNames(await loadHostInventory(client, host.id));
       const lists = await Promise.all(
-        nodes.map((n) => client.tasks.list(n.node, { source: "all", limit: 80 }).catch(() => [] as ProxmoxTask[])),
+        names.map((node) => client.tasks.list(node, { source: "all", limit: 80 }).catch(() => [] as ProxmoxTask[])),
       );
       for (const task of lists.flat()) {
         if (!failedTaskKind(task) || !task.upid) continue;

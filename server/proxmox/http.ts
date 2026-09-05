@@ -66,7 +66,7 @@ export class ProxmoxHttpClient {
         rejectUnauthorized: !config.allowInsecureTls,
       },
       keepAliveTimeout: 30_000,
-      connections: 8,
+      connections: config.federation ? 4 : 8,
     });
   }
 

@@ -97,6 +97,7 @@ export interface ProxmoxStorage {
   storage: string;
   type: string;
   content?: string;
+  nodes?: string;
   active?: number;
   enabled?: number;
   shared?: number;

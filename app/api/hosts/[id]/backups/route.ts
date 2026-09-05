@@ -92,7 +92,7 @@ export const POST = apiRoute(
         await client.backup.deleteJob(body.id);
         return { id: body.id };
       case "run-job": {
-        const started = await runBackupJob(client, body.id, body.node);
+        const started = await runBackupJob(client, params.id, body.id, body.node);
         notifyName = started.job.all ? "Alle Gäste" : started.job.vmid || started.job.id;
         notifyId = started.job.all ? started.job.id : started.job.vmid || started.job.id;
         notifyNode = started.node;

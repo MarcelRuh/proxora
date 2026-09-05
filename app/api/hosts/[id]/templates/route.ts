@@ -9,34 +9,45 @@ import { ForbiddenError, ValidationError } from "@/lib/errors";
 import { parseBackupVolid } from "@/lib/backup";
 import { isVztmplContentVolid, mergeTemplateCatalog, normalizeAplTemplate, vztmplVolid } from "@/lib/lxc-templates";
 import { collectVztmplVolumes } from "@/server/services/lxc-template-catalog";
+import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
+import { clearVolumeListCache } from "@/server/services/storage-content";
 import { collectVolumeUsers } from "@/server/services/volume-usage";
 import { userHasPermission } from "@/lib/permissions";
 
 export const GET = apiRoute("lxc.create", async (req, session, params) => {
-  const nodeParam = new URL(req.url).searchParams.get("node")?.trim() || undefined;
+  const url = new URL(req.url);
+  const nodeParam = url.searchParams.get("node")?.trim() || undefined;
+  const usageOnly = url.searchParams.get("usage") === "1";
   const data = await withHostClient(params.id, session.user, async (client) => {
-    const nodes = await client.nodes.list();
-    const selected = nodeParam ?? nodes[0]?.node;
+    const inv = await loadHostInventory(client, params.id);
+    const nodeNames = inventoryNodeNames(inv);
+    const selected = nodeParam ?? nodeNames[0] ?? "";
     if (!selected) {
       return { nodes: [], node: "", storages: [], installed: [] as string[], catalog: [], usedBy: {} };
     }
-    const nodeNames = nodes.map((n) => n.node);
-    const [catalogRaw, volumes] = await Promise.all([
-      client.nodes.aplinfo(selected).catch(() => [] as Array<Record<string, unknown>>),
-      collectVztmplVolumes(client, nodeNames),
-    ]);
+    const volumes = await collectVztmplVolumes(client, nodeNames);
+    if (usageOnly) {
+      return {
+        nodes: nodeNames,
+        node: selected,
+        storages: volumes.storages,
+        installed: volumes.volids,
+        catalog: [],
+        usedBy: await collectVolumeUsers(client, params.id, volumes.volids, { kind: "lxc" }),
+      };
+    }
+    const catalogRaw = await client.nodes.aplinfo(selected).catch(() => [] as Array<Record<string, unknown>>);
     const catalog = mergeTemplateCatalog(
       catalogRaw.map((row) => normalizeAplTemplate(row)).filter((row): row is NonNullable<typeof row> => Boolean(row)),
       volumes.volids,
     );
-    const usedBy = await collectVolumeUsers(client, params.id, volumes.volids);
     return {
       nodes: nodeNames,
       node: selected,
       storages: volumes.storages,
       installed: volumes.volids,
       catalog,
-      usedBy,
+      usedBy: {},
     };
   });
   return json(data);
@@ -67,6 +78,7 @@ export const POST = apiRoute(["lxc.create", "storage.delete"], async (req, sessi
     }
     await withHostClient(params.id, session.user, async (client, host) => {
       await client.storage.deleteContent(body.node, parsed.storage, parsed.volume);
+      clearVolumeListCache(client);
       await writeAuditLog({
         userId: session.user.id,
         ip: await clientIp(),
@@ -85,6 +97,7 @@ export const POST = apiRoute(["lxc.create", "storage.delete"], async (req, sessi
   const result = await withHostClient(params.id, session.user, async (client, host) => {
     const upid = await client.nodes.downloadAppliance(body.node, body.storage, body.template);
     if (!upid) throw new ValidationError("Proxmox hat keinen Download-Task zurückgegeben");
+    clearVolumeListCache(client);
     await writeAuditLog({
       userId: session.user.id,
       ip: await clientIp(),

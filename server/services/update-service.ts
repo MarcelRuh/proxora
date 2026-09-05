@@ -2,6 +2,8 @@ import { prisma } from "@/lib/db";
 import type { SessionUser } from "@/server/auth/session";
 import { notifyAptUpdates, persistAptSnapshot } from "@/server/services/apt-refresh";
 import { withHostClient } from "@/server/services/host-service";
+import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
+import type { ProxmoxClient } from "@/server/proxmox/client";
 
 export type NodeUpdates = {
   node: string;
@@ -9,8 +11,9 @@ export type NodeUpdates = {
   count: number;
 };
 
-async function nodesFor(client: { nodes: { list: () => Promise<Array<{ node: string }>> } }, node?: string) {
-  const nodes = await client.nodes.list();
+async function nodesFor(client: ProxmoxClient, hostId: string, node?: string) {
+  const names = inventoryNodeNames(await loadHostInventory(client, hostId));
+  const nodes = names.map((n) => ({ node: n }));
   return node ? nodes.filter((n) => n.node === node) : nodes;
 }
 
@@ -30,7 +33,7 @@ async function storeSnapshot(
 
 export async function listHostUpdates(hostId: string, user: SessionUser, node?: string) {
   return withHostClient(hostId, user, async (client, host) => {
-    const nodes = await nodesFor(client, node);
+    const nodes = await nodesFor(client, hostId, node);
     const updates: NodeUpdates[] = await Promise.all(
       nodes.map(async (n) => {
         const packages = await client.updates.list(n.node);
@@ -43,7 +46,7 @@ export async function listHostUpdates(hostId: string, user: SessionUser, node?: 
 
 export async function refreshHostUpdates(hostId: string, user: SessionUser, node?: string) {
   return withHostClient(hostId, user, async (client, host) => {
-    const nodes = await nodesFor(client, node);
+    const nodes = await nodesFor(client, hostId, node);
     if (nodes.length === 0) throw new Error("Kein Node gefunden");
     const updates: NodeUpdates[] = [];
     for (const n of nodes) {
@@ -70,7 +73,7 @@ export async function refreshHostUpdates(hostId: string, user: SessionUser, node
 
 export async function upgradeConsoleTarget(hostId: string, user: SessionUser, node?: string) {
   return withHostClient(hostId, user, async (client) => {
-    const nodes = await nodesFor(client, node);
+    const nodes = await nodesFor(client, hostId, node);
     const target = nodes[0]?.node;
     if (!target) throw new Error("Kein Node gefunden");
     return { mode: "console" as const, node: target };

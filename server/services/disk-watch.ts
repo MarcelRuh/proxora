@@ -89,8 +89,9 @@ export async function scanDiskUsage(): Promise<number> {
 
       const runningVms = guests.vms.filter((guest) => !guest.template && guest.vmid && guest.status === "running" && guest.node);
       let i = 0;
+      const agentConcurrency = host.origin === "PEER" ? 2 : 4;
       await Promise.all(
-        Array.from({ length: Math.min(4, runningVms.length) }, async () => {
+        Array.from({ length: Math.min(agentConcurrency, runningVms.length) }, async () => {
           while (i < runningVms.length) {
             const guest = runningVms[i++];
             if (!guest?.node || !guest.vmid) break;

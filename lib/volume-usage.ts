@@ -1,4 +1,5 @@
 import { volidFilename } from "@/lib/lxc-templates";
+import { parseBackupVolid } from "@/lib/backup";
 
 export type VolumeUser = {
   kind: "vm" | "lxc";
@@ -6,6 +7,16 @@ export type VolumeUser = {
   name: string;
   node: string;
 };
+
+/** VMID encoded in a backup, disk, or PBS volid; null for ISO/template files. */
+export function vmidFromVolid(volid: string): number | null {
+  const parsed = parseBackupVolid(volid);
+  if (parsed.vmid != null) return parsed.vmid;
+  const disk = /(?:^|\/|:)(?:vm|base|subvol)-(\d+)-(?:disk|cloudinit|state|efidisk|tpmstate)/i.exec(volid);
+  if (!disk) return null;
+  const id = Number(disk[1]);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
 
 const UNUSED_KEY = /^unused\d+$/i;
 

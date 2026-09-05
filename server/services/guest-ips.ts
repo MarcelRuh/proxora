@@ -49,7 +49,7 @@ export async function collectUsedGuestIps(
   }
 
   let i = 0;
-  const workers = Array.from({ length: Math.min(6, missing.length) }, async () => {
+  const workers = Array.from({ length: Math.min(4, missing.length) }, async () => {
     while (i < missing.length) {
       const g = missing[i++];
       if (!g?.node || !g.vmid) continue;

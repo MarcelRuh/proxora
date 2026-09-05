@@ -4,7 +4,9 @@ import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { Dashboard, DashboardGuests, Guest } from "@/lib/types";
 
-export const DASHBOARD_POLL_MS = 45_000;
+export const DASHBOARD_OVERVIEW_POLL_MS = 90_000;
+export const DASHBOARD_GUESTS_POLL_MS = 45_000;
+export const DASHBOARD_POLL_MS = DASHBOARD_GUESTS_POLL_MS;
 
 export function invalidateDashboardQueries(qc: QueryClient) {
   return Promise.all([
@@ -34,8 +36,8 @@ export function useDashboard() {
   return useQuery({
     queryKey: ["dashboard"],
     queryFn: () => api<Dashboard>("/api/dashboard"),
-    refetchInterval: DASHBOARD_POLL_MS,
-    staleTime: 30_000,
+    refetchInterval: DASHBOARD_OVERVIEW_POLL_MS,
+    staleTime: 60_000,
     placeholderData: (previous) => previous,
   });
 }
@@ -44,8 +46,8 @@ export function useDashboardGuests(kind: "vm" | "lxc" | "all" = "all") {
   return useQuery({
     queryKey: ["dashboard-guests", kind],
     queryFn: () => api<DashboardGuests>(`/api/dashboard/guests?kind=${kind}`),
-    refetchInterval: DASHBOARD_POLL_MS,
-    staleTime: 15_000,
+    refetchInterval: DASHBOARD_GUESTS_POLL_MS,
+    staleTime: 30_000,
     placeholderData: (previous) => previous,
   });
 }

@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { summarizeZfsPool } from "@/server/proxmox/zfs-health";
 import { clientForHost } from "@/server/services/host-service";
+import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
 import { applyZfsWatchState, parseZfsWatchState, ZFS_WATCH_STATE_KEY, zfsPoolKey } from "@/lib/zfs-alerts";
 import type { Prisma } from "@prisma/client";
 
@@ -37,13 +38,13 @@ export async function scanZfsHealth(): Promise<number> {
     if (host.connectionState === "OFFLINE" || host.connectionState === "MAINTENANCE") continue;
     try {
       const client = await clientForHost(host);
-      const nodes = await client.nodes.list();
-      for (const n of nodes) {
-        const pools = await client.zfs.pools(n.node).catch(() => []);
+      const names = inventoryNodeNames(await loadHostInventory(client, host.id));
+      for (const node of names) {
+        const pools = await client.zfs.pools(node).catch(() => []);
         for (const pool of pools) {
-          const detail = await client.zfs.poolDetail(n.node, pool.name).catch(() => null);
+          const detail = await client.zfs.poolDetail(node, pool.name).catch(() => null);
           const summary = summarizeZfsPool(detail, pool.health);
-          const key = zfsPoolKey(host.id, n.node, pool.name);
+          const key = zfsPoolKey(host.id, node, pool.name);
           const was = prev[key] ?? false;
           const next = applyZfsWatchState(was, summary.allHealthy);
           nextNotified[key] = next.notified;
@@ -53,12 +54,12 @@ export async function scanZfsHealth(): Promise<number> {
           notifyTopic("zfs.degraded", {
             level: summary.problemDisks ? "warning" : "error",
             title: `ZFS ${pool.name} ${pool.health || "DEGRADED"}`,
-            message: `${pool.name} auf ${host.name}/${n.node}: ${problems}/${summary.totalDisks || "?"} Disk(s) nicht OK`,
+            message: `${pool.name} auf ${host.name}/${node}: ${problems}/${summary.totalDisks || "?"} Disk(s) nicht OK`,
             hostId: host.id,
             name: pool.name,
             id: pool.name,
             host: host.name,
-            node: n.node,
+            node,
             href: "/zfs",
           });
         }

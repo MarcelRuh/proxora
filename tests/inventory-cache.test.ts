@@ -3,6 +3,7 @@ import type { ClusterInventory, ProxmoxClient } from "@/server/proxmox/client";
 import {
   clearInventoryCache,
   invalidateInventoryCache,
+  INVENTORY_TTL_MS,
   loadHostInventory,
 } from "@/server/services/inventory-cache";
 
@@ -63,7 +64,7 @@ describe("loadHostInventory", () => {
     invalidateInventoryCache("h1");
     await loadHostInventory(client, "h1");
     expect(listInventory).toHaveBeenCalledTimes(2);
-    vi.advanceTimersByTime(10_001);
+    vi.advanceTimersByTime(INVENTORY_TTL_MS + 1);
     await loadHostInventory(client, "h1");
     expect(listInventory).toHaveBeenCalledTimes(3);
   });

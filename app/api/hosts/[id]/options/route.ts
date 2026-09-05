@@ -6,6 +6,7 @@ import { collectUsedGuestIpsForHost } from "@/server/services/guest-ips";
 import { networksForHostId } from "@/server/services/guest-ip-settings";
 import { collectIsoVolumes, collectVztmplVolumes } from "@/server/services/lxc-template-catalog";
 import { getHostOrThrow, withHostClient } from "@/server/services/host-service";
+import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
 
 export const GET = apiRoute(["vm.create", "lxc.create", "vm.clone", "lxc.clone"], async (req, session, params) => {
   const url = new URL(req.url);
@@ -15,11 +16,12 @@ export const GET = apiRoute(["vm.create", "lxc.create", "vm.clone", "lxc.clone"]
   const [used, hostData] = await Promise.all([
     collectUsedGuestIpsForHost(target),
     withHostClient(params.id, session.user, async (client) => {
-      const nodes = await client.nodes.list();
-      const selected = node ?? nodes[0]?.node;
+      const inv = await loadHostInventory(client, params.id);
+      const nodeNames = inventoryNodeNames(inv);
+      const selected = node ?? nodeNames[0];
       if (!selected) {
         return {
-          nodes: [],
+          nodes: [] as Array<{ node: string }>,
           storage: [],
           isos: [],
           templates: [],
@@ -32,7 +34,6 @@ export const GET = apiRoute(["vm.create", "lxc.create", "vm.clone", "lxc.clone"]
         client.nodes.network(selected).catch(() => []),
         client.cluster.nextId().catch(() => null),
       ]);
-      const nodeNames = nodes.map((n) => n.node);
       const [{ volids: templateVolids }, { volids: isoVolids }] = await Promise.all([
         collectVztmplVolumes(client, nodeNames),
         collectIsoVolumes(client, nodeNames),
@@ -40,7 +41,7 @@ export const GET = apiRoute(["vm.create", "lxc.create", "vm.clone", "lxc.clone"]
       const templates = templateVolids.map((volid) => ({ volid }));
       const isos = isoVolids.map((volid) => ({ volid }));
       const bridges = network.filter((n) => n.type === "bridge" || String(n.iface ?? "").startsWith("vmbr"));
-      return { nodes, storage, isos, templates, bridges, fallbackNext };
+      return { nodes: nodeNames.map((name) => ({ node: name })), storage, isos, templates, bridges, fallbackNext };
     }),
   ]);
   const usedIpSet = new Set(used.ips);

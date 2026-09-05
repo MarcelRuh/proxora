@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.12] – 2026-09-06
+
+### Changed
+
+- ISO/template catalog paints first; volume usage loads in a second request (`?usage=1`). Config probes skip templates, scan only VMs or LXC, and run at most 4 at a time.
+- Storage and backup file listing use one cluster `/storage` call: shared stores once, local stores per node, content fetches capped at 4. ISO/template volume lists cache 20s.
+- Dashboard waits 8s for colleague (PEER) hosts and 3s locally. Overview poll is 90s; inventory cache is 15s. Search skips offline/maintenance hosts.
+- Node discovery for APT, ZFS, backups, updates, tasks, storage, and create options uses the inventory cache. `esbuild` is a build-time dependency.
+
 ## [1.4.11] – 2026-09-06
 
 ### Changed

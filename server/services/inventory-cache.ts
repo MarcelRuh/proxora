@@ -1,6 +1,6 @@
 import type { ClusterInventory, ProxmoxClient } from "@/server/proxmox/client";
 
-export const INVENTORY_TTL_MS = 10_000;
+export const INVENTORY_TTL_MS = 15_000;
 
 type CachedInventory = ClusterInventory & { at: number };
 
@@ -39,7 +39,10 @@ export function invalidateInventoryCache(hostId?: string) {
   }
 }
 
-/** One cluster/resources fetch per host, shared by dashboard, guests, and search for 10s. */
+export function inventoryNodeNames(inv: { nodes: Array<{ node?: string }> }): string[] {
+  return [...new Set(inv.nodes.map((n) => n.node).filter((n): n is string => Boolean(n)))];
+}
+
 export async function loadHostInventory(
   client: ProxmoxClient,
   hostId: string,

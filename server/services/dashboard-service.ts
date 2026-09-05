@@ -35,7 +35,12 @@ export type HostOverview = {
 type HostCounts = { vms: number; lxc: number; running: number; stopped: number; paused: number };
 
 export const HOST_SNAPSHOT_TIMEOUT_MS = 3_000;
+export const HOST_SNAPSHOT_TIMEOUT_PEER_MS = 8_000;
 export const VISIBLE_GUEST_IP_LIMIT = 40;
+
+export function hostSnapshotTimeoutMs(host: { origin?: string }): number {
+  return host.origin === "PEER" ? HOST_SNAPSHOT_TIMEOUT_PEER_MS : HOST_SNAPSHOT_TIMEOUT_MS;
+}
 
 type HostSnapshot = {
   overview: HostOverview;
@@ -198,7 +203,7 @@ async function snapshotHostTimed(
     containers: [],
   });
   try {
-    return await withTimeoutFallback(snapshotHost(host, user, mode), HOST_SNAPSHOT_TIMEOUT_MS, timedOut);
+    return await withTimeoutFallback(snapshotHost(host, user, mode), hostSnapshotTimeoutMs(host), timedOut);
   } catch (error) {
     return {
       overview: hostShell(host, {

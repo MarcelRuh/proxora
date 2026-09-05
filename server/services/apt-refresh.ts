@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { dispatchNotification } from "@/server/notifications/dispatch";
 import { clientForHost } from "@/server/services/host-service";
+import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
 
 export async function persistAptSnapshot(
   host: Pick<Host, "id" | "name" | "aptNotifiedCount">,
@@ -45,19 +46,19 @@ export async function notifyAptUpdates(
 
 async function refreshOneHost(host: Host): Promise<{ count: number; preview: string[]; nodes: string[] }> {
   const client = await clientForHost(host);
-  const nodes = await client.nodes.list();
+  const names = inventoryNodeNames(await loadHostInventory(client, host.id));
   let count = 0;
   const preview: string[] = [];
-  for (const n of nodes) {
-    const upid = await client.updates.refresh(n.node);
-    if (upid) await client.tasks.wait(n.node, upid);
-    const packages = await client.updates.list(n.node);
+  for (const node of names) {
+    const upid = await client.updates.refresh(node);
+    if (upid) await client.tasks.wait(node, upid);
+    const packages = await client.updates.list(node);
     count += packages.length;
     for (const pkg of packages) {
       if (preview.length < 8 && pkg.Package) preview.push(pkg.Package);
     }
   }
-  return { count, preview, nodes: nodes.map((n) => n.node) };
+  return { count, preview, nodes: names };
 }
 
 export async function refreshAllHostPackageLists(): Promise<{
