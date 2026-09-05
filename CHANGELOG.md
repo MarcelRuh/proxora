@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.3.4] – 2026-09-05
+
+### Fixed
+
+- WireGuard sidecar image builds again: Alpine 3.21 has no `wireguard-go` package, so the image uses Alpine 3.22.
+
 ## [1.3.3] – 2026-09-05
 
 ### Changed

@@ -1,4 +1,4 @@
-FROM alpine:3.21
+FROM alpine:3.22
 RUN apk add --no-cache wireguard-tools wireguard-go iproute2 iptables
 COPY docker/wireguard/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
