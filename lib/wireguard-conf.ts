@@ -1,5 +1,8 @@
 import { interfaceIpv4, isWireguardKey } from "@/lib/wireguard-keys";
 
+/** Safe over typical internet/UDP paths (WG overhead on 1500 or PPPoE). */
+export const WG_CLIENT_MTU = 1280;
+
 export type WgConfPeer = {
   publicKey: string;
   endpoint?: string;
@@ -15,8 +18,20 @@ export type ParsedWgQuick = {
 };
 
 /** Client config: one hub server, no ListenPort. DNS is never written (breaks Docker DNS). */
-export function buildWg0Conf(input: { privateKey: string; address: string; peers: WgConfPeer[] }): string {
-  const lines = ["[Interface]", `PrivateKey = ${input.privateKey}`, `Address = ${input.address}`, ""];
+export function buildWg0Conf(input: {
+  privateKey: string;
+  address: string;
+  peers: WgConfPeer[];
+  mtu?: number;
+}): string {
+  const mtu = input.mtu && input.mtu >= 1280 && input.mtu <= 1420 ? input.mtu : WG_CLIENT_MTU;
+  const lines = [
+    "[Interface]",
+    `PrivateKey = ${input.privateKey}`,
+    `Address = ${input.address}`,
+    `MTU = ${mtu}`,
+    "",
+  ];
   const seen = new Set<string>();
   for (const peer of input.peers) {
     const key = peer.publicKey.trim();
@@ -36,6 +51,38 @@ export function buildWg0Conf(input: { privateKey: string; address: string; peers
     lines.push("");
   }
   return `${lines.join("\n").trim()}\n`;
+}
+
+function ipv4ToInt(ip: string): number | null {
+  const o = ip.split(".").map((n) => Number.parseInt(n, 10));
+  if (o.length !== 4 || o.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+  return ((o[0]! << 24) | (o[1]! << 16) | (o[2]! << 8) | o[3]!) >>> 0;
+}
+
+export function cidrContainsIpv4(cidr: string, ip: string): boolean {
+  const trimmed = cidr.trim();
+  if (!trimmed) return false;
+  const slash = trimmed.indexOf("/");
+  const net = (slash === -1 ? trimmed : trimmed.slice(0, slash)).trim();
+  const prefix = slash === -1 ? 32 : Number.parseInt(trimmed.slice(slash + 1), 10);
+  const netInt = ipv4ToInt(net);
+  const ipInt = ipv4ToInt(ip.trim());
+  if (netInt === null || ipInt === null || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) return false;
+  if (prefix === 0) return true;
+  const mask = prefix === 32 ? 0xffffffff : (~((1 << (32 - prefix)) - 1)) >>> 0;
+  return (netInt & mask) === (ipInt & mask);
+}
+
+/** Adds ip/32 to AllowedIPs unless a listed CIDR already covers it. */
+export function ensureIpInAllowedIps(allowedIPs: string, ip: string): string {
+  const host = ip.trim().split("/")[0]?.trim() ?? "";
+  if (!interfaceIpv4(host)) return allowedIPs.trim();
+  const parts = allowedIPs
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (parts.some((cidr) => cidrContainsIpv4(cidr, host))) return parts.join(", ");
+  return [...parts, `${host}/32`].join(", ");
 }
 
 export function sanitizeClientAllowedIps(allowedIPs: string, address: string): string {

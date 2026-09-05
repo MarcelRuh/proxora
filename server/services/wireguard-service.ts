@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { decryptSecret, encryptSecret, randomToken, sha256 } from "@/lib/crypto";
 import { ValidationError, NotFoundError } from "@/lib/errors";
 import { encodeWireguardInvite, parseWireguardInvite } from "@/lib/wireguard-invite";
-import { buildWg0Conf, parseWgQuickConf, sanitizeClientAllowedIps, serverPeerSnippet } from "@/lib/wireguard-conf";
+import { buildWg0Conf, ensureIpInAllowedIps, parseWgQuickConf, sanitizeClientAllowedIps, serverPeerSnippet } from "@/lib/wireguard-conf";
 import { generateWireguardKeypair, interfaceIpv4, isWireguardKey, peerAllowedIps, publicKeyFromPrivate } from "@/lib/wireguard-keys";
 import { hostClientCache } from "@/server/proxmox/client-cache";
 
@@ -113,6 +113,16 @@ async function saveInterface(next: WireguardInterfaceSettings) {
   await writeWireguardConfig(next);
 }
 
+/** Route the colleague Proxora IP through wg0 even if AllowedIPs was only the WG subnet. */
+async function ensureTunnelCoversHost(address: string) {
+  const ip = address.trim().split("/")[0]?.trim() ?? "";
+  if (!interfaceIpv4(ip)) return;
+  const current = await loadWireguardInterface();
+  const nextAllowed = ensureIpInAllowedIps(current.allowedIPs, ip);
+  if (nextAllowed === current.allowedIPs) return;
+  await saveInterface({ ...current, allowedIPs: nextAllowed });
+}
+
 export async function patchWireguardInterface(input: unknown) {
   const patch = interfacePatchSchema.parse(input);
   const current = await loadWireguardInterface();
@@ -143,7 +153,23 @@ export function publicInterface(cfg: WireguardInterfaceSettings) {
 }
 
 export async function writeWireguardConfig(cfg?: WireguardInterfaceSettings) {
-  const settings = cfg ?? (await loadWireguardInterface());
+  let settings = cfg ?? (await loadWireguardInterface());
+  const proxoraPeers = await prisma.wireguardPeer.findMany({
+    where: { kind: WireguardPeerKind.PROXORA },
+    select: { address: true },
+  });
+  let allowed = settings.allowedIPs;
+  for (const peer of proxoraPeers) {
+    if (peer.address) allowed = ensureIpInAllowedIps(allowed, peer.address);
+  }
+  if (allowed !== settings.allowedIPs) {
+    settings = { ...settings, allowedIPs: allowed };
+    await prisma.setting.upsert({
+      where: { key: WG_SETTING_KEY },
+      create: { key: WG_SETTING_KEY, value: settings },
+      update: { value: settings },
+    });
+  }
   await mkdir(WG_CONFIG_DIR, { recursive: true });
   const disabledPath = path.join(WG_CONFIG_DIR, "disabled");
   if (!settings.enabled) {
@@ -168,12 +194,12 @@ export async function writeWireguardConfig(cfg?: WireguardInterfaceSettings) {
     });
   }
   for (const peer of gateways) {
-    const allowed = peerAllowedIps(peer.address, peer.allowedIPs);
-    if (!allowed) continue;
+    const allowedIps = peerAllowedIps(peer.address, peer.allowedIPs);
+    if (!allowedIps) continue;
     peers.push({
       publicKey: peer.publicKey,
       endpoint: peer.endpoint,
-      allowedIPs: allowed,
+      allowedIPs: allowedIps,
       persistentKeepalive: peer.persistentKeepalive || 25,
     });
   }
@@ -230,6 +256,7 @@ export async function createProxoraPeer(name: string, address = "", proxoraPort 
       encryptedOutboundToken: encrypted,
     },
   });
+  if (host) await ensureTunnelCoversHost(host);
   return { peer: serializePeer(peer) };
 }
 
@@ -276,6 +303,7 @@ export async function updateProxoraPeer(
     const hosts = await prisma.host.findMany({ where: { peerId }, select: { id: true } });
     for (const host of hosts) hostClientCache.invalidate(host.id);
   }
+  if (data.address) await ensureTunnelCoversHost(data.address);
   return serializePeer(next);
 }
 
@@ -438,7 +466,8 @@ export function peerHttpBase(peer: { address: string; proxoraPort?: number }): s
   const host = peer.address.trim().split("/")[0]?.trim() ?? "";
   if (!host) throw new ValidationError("Set the colleague's Proxora IP first");
   const port = peer.proxoraPort && peer.proxoraPort > 0 ? peer.proxoraPort : 3000;
-  return `http://${host}:${port}`;
+  const wrapped = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+  return `http://${wrapped}:${port}`;
 }
 
 export function outboundToken(peer: WireguardPeer): string {

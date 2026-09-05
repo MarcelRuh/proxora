@@ -11,6 +11,7 @@ import { startDiskWatchScheduler } from "@/server/services/disk-watch";
 import { startZfsWatchScheduler } from "@/server/services/zfs-watch";
 import { startHostReconnectScheduler } from "@/server/services/host-reconnect";
 import { startPeerSyncScheduler } from "@/server/services/peer-sync";
+import { writeWireguardConfig } from "@/server/services/wireguard-service";
 import { ensureSystemRoles } from "@/server/services/role-sync";
 
 const dev = process.env.NODE_ENV !== "production";
@@ -48,6 +49,7 @@ async function main() {
   server.listen(port, listenHost, () => {
     logger.info({ port, listenHost, dev }, "Proxora listening");
     void ensureSystemRoles();
+    void writeWireguardConfig().catch((error) => logger.warn({ err: error }, "WireGuard config rewrite failed"));
     startHostReconnectScheduler();
     startPeerSyncScheduler();
     startAptRefreshScheduler();

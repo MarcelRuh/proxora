@@ -17,6 +17,14 @@ write_status() {
   printf '{"up":%s,"error":%s}\n' "$1" "$2" > "$STATUS" || true
 }
 
+# Locally generated TCP (Proxora → colleague) must clamp MSS; FORWARD never sees it.
+clamp_wg_mss() {
+  iptables -t mangle -C OUTPUT -o wg0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null ||
+    iptables -t mangle -A OUTPUT -o wg0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu || true
+  iptables -t mangle -C INPUT -i wg0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null ||
+    iptables -t mangle -A INPUT -i wg0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu || true
+}
+
 apply() {
   if [ -f "$DISABLED" ] || [ ! -f "$CONF_SRC" ]; then
     wg-quick down wg0 >/dev/null 2>&1 || true
@@ -26,6 +34,8 @@ apply() {
   HASH="$(md5sum "$CONF_SRC" | awk '{print $1}')"
   OLD="$(cat "$HASHFILE" 2>/dev/null || true)"
   if [ "$HASH" = "$OLD" ] && wg show wg0 >/dev/null 2>&1; then
+    ip link set dev wg0 mtu 1280 2>/dev/null || true
+    clamp_wg_mss
     write_status true null
     return 0
   fi
@@ -34,6 +44,8 @@ apply() {
   wg-quick down wg0 >/dev/null 2>&1 || true
   if wg-quick up wg0; then
     echo "$HASH" > "$HASHFILE"
+    ip link set dev wg0 mtu 1280 2>/dev/null || true
+    clamp_wg_mss
     write_status true null
   else
     write_status false '"wg-quick failed"'

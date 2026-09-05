@@ -59,7 +59,8 @@ export class ProxmoxApiError extends AppError {
 
 export class HostUnreachableError extends AppError {
   constructor(hostName: string, reason: string) {
-    super(503, `Unable to connect to ${hostName}`, "HOST_UNREACHABLE", { reason });
+    const detail = reason.trim() ? `: ${reason.trim().slice(0, 240)}` : "";
+    super(503, `Unable to connect to ${hostName}${detail}`, "HOST_UNREACHABLE", { reason });
     this.name = "HostUnreachableError";
   }
 }

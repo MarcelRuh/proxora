@@ -111,7 +111,8 @@ export function assertLocalHost(host: Host) {
 }
 
 export async function clientForHost(host: Host) {
-  if (host.origin === HostOrigin.PEER) {
+  const peerHost = host.origin === HostOrigin.PEER || host.url.startsWith("federation://");
+  if (peerHost) {
     if (!host.peerId || !host.remoteHostId) throw new ValidationError("Peer host is incomplete");
     const peer = await prisma.wireguardPeer.findUnique({ where: { id: host.peerId } });
     if (!peer?.address) throw new HostUnreachableError(host.name, "Set the colleague's Proxora IP first");

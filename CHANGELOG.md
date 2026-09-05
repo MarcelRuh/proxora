@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.2] – 2026-09-05
+
+### Fixed
+
+- Federation to a colleague host no longer dies on large Proxmox payloads over WireGuard: client MTU is 1280, TCP MSS is clamped, and the colleague Proxora IP is added to AllowedIPs when missing. Error text includes the underlying reason.
+
 ## [1.4.1] – 2026-09-05
 
 ### Changed

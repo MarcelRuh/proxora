@@ -215,6 +215,7 @@ export class ProxmoxHttpClient {
           Accept: "application/json",
           "Content-Type": "application/json",
           Authorization: `Bearer ${fed.token}`,
+          Connection: "close",
         },
         body: JSON.stringify({
           method,
@@ -237,6 +238,10 @@ export class ProxmoxHttpClient {
       }
     }
     if (!response.ok) {
+      logger.warn(
+        { url, status: response.status, error: parsed.error, code: parsed.code, pvePath: path },
+        "Federation PVE proxy failed",
+      );
       throw new ProxmoxApiError(parsed.error || `Peer Proxora error (${response.status})`, response.status);
     }
     return (parsed.data as T) ?? (undefined as T);
@@ -247,12 +252,13 @@ export class ProxmoxHttpClient {
     try {
       return await undiciFetch(url, {
         ...init,
-        dispatcher: this.agent,
+        // Federation is plain HTTP to the peer Proxora — do not reuse the PVE TLS agent.
+        ...(this.config.federation ? {} : { dispatcher: this.agent }),
         signal: AbortSignal.timeout(timeout),
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Unknown network error";
-      logger.error({ url: this.baseUrl, reason }, "Proxmox API request failed");
+      logger.error({ url, reason }, "Proxmox API request failed");
       throw new ProxmoxApiError(`Connection failed: ${reason}`, 503);
     }
   }

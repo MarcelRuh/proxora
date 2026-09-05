@@ -1,12 +1,11 @@
 import { HostOrigin, PeerShareLevel, WireguardPeerKind, type Host } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { encryptSecret, decryptSecret } from "@/lib/crypto";
+import { encryptSecret } from "@/lib/crypto";
 import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from "@/lib/errors";
 import { federationActionLevel, parseShareLevel, shareAllows, type ShareLevel } from "@/lib/federation-access";
 import { logger } from "@/lib/logger";
 import { findPeerByInboundToken, outboundToken, peerHttpBase } from "@/server/services/wireguard-service";
-import { clientConfigFromHost } from "@/server/services/host-service";
-import { createProxmoxClient } from "@/server/proxmox/client";
+import { clientForHost } from "@/server/services/host-service";
 import type { WireguardPeer } from "@prisma/client";
 
 function bearerToken(request: Request): string {
@@ -59,18 +58,13 @@ export async function assertSharedHost(peer: WireguardPeer, remoteHostId: string
 
 export async function proxyPveRequest(host: Host, method: string, path: string, query?: Record<string, string>, body?: Record<string, unknown>) {
   if (!path.startsWith("/") || path.includes("..")) throw new ValidationError("Invalid Proxmox path");
-  const secret = decryptSecret(host.encryptedSecret);
-  const client = createProxmoxClient(clientConfigFromHost(host, secret));
-  try {
-    const verb = method.toUpperCase();
-    if (verb === "GET") return client.http.get(path, query);
-    if (verb === "POST") return client.http.post(path, body, query);
-    if (verb === "PUT") return client.http.put(path, body, query);
-    if (verb === "DELETE") return client.http.del(path, query);
-    throw new ValidationError(`Unsupported method ${method}`);
-  } finally {
-    client.dispose();
-  }
+  const client = await clientForHost(host);
+  const verb = method.toUpperCase();
+  if (verb === "GET") return client.http.get(path, query);
+  if (verb === "POST") return client.http.post(path, body, query);
+  if (verb === "PUT") return client.http.put(path, body, query);
+  if (verb === "DELETE") return client.http.del(path, query);
+  throw new ValidationError(`Unsupported method ${method}`);
 }
 
 export async function syncPeerHosts() {

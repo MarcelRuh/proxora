@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { encodeWireguardInvite, parseWireguardInvite } from "@/lib/wireguard-invite";
-import { buildWg0Conf, parseWgQuickConf, sanitizeClientAllowedIps, serverPeerSnippet } from "@/lib/wireguard-conf";
+import { buildWg0Conf, parseWgQuickConf, sanitizeClientAllowedIps, serverPeerSnippet, ensureIpInAllowedIps, cidrContainsIpv4 } from "@/lib/wireguard-conf";
 import { generateWireguardKeypair, isWireguardKey, publicKeyFromPrivate } from "@/lib/wireguard-keys";
 import { federationActionLevel, shareAllows } from "@/lib/federation-access";
 
@@ -40,6 +40,7 @@ describe("wireguard client conf", () => {
     });
     expect(conf).toContain("[Interface]");
     expect(conf).toContain("Address = 10.88.0.2/24");
+    expect(conf).toContain("MTU = 1280");
     expect(conf).not.toMatch(/ListenPort/);
     expect(conf).toContain(`PublicKey = ${server.publicKey}`);
     expect(conf).toContain("Endpoint = 192.168.10.50:51820");
@@ -128,6 +129,13 @@ PersistentKeepalive = 25
   it("drops full-tunnel AllowedIPs so Docker DNS still works", () => {
     expect(sanitizeClientAllowedIps("0.0.0.0/0, ::/0", "10.88.0.2/24")).toBe("10.88.0.0/24");
     expect(sanitizeClientAllowedIps("10.88.0.0/24, 0.0.0.0/0", "10.88.0.2/24")).toBe("10.88.0.0/24");
+  });
+
+  it("adds a colleague IP to AllowedIPs when the subnet does not cover it", () => {
+    expect(ensureIpInAllowedIps("10.88.0.0/24", "10.88.0.4")).toBe("10.88.0.0/24");
+    expect(ensureIpInAllowedIps("10.88.0.0/24", "192.168.10.50")).toBe("10.88.0.0/24, 192.168.10.50/32");
+    expect(cidrContainsIpv4("10.89.0.0/24", "10.89.0.1")).toBe(true);
+    expect(cidrContainsIpv4("10.89.0.0/24", "10.88.0.1")).toBe(false);
   });
 });
 

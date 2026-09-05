@@ -55,12 +55,11 @@ export class ProxmoxClient {
 
   async testConnection(): Promise<ConnectionTestResult> {
     try {
-      const [version, cluster, nodes, permissions] = await Promise.all([
-        this.version(),
-        this.cluster.status().catch(() => [] as ClusterStatusEntry[]),
-        this.nodes.list(),
-        this.permissions().catch(() => ({}) as PermissionMap),
-      ]);
+      // Sequential: WireGuard userspace handles one TCP stream more reliably than four at once.
+      const version = await this.version();
+      const cluster = await this.cluster.status().catch(() => [] as ClusterStatusEntry[]);
+      const nodes = await this.nodes.list();
+      const permissions = await this.permissions().catch(() => ({}) as PermissionMap);
 
       const clusterInfo = (cluster as ClusterStatusEntry[]).find((c) => c.type === "cluster");
       return {
@@ -93,13 +92,8 @@ export class ProxmoxClient {
   }
 
   async listInventory(): Promise<{ nodes: ProxmoxResource[]; vms: GuestListItem[]; containers: GuestListItem[] }> {
-    const [nodeRows, guestRows] = await Promise.all([this.listResources("node"), this.listResources("vm")]);
-    const { vms, containers } = splitResources(guestRows);
-    return {
-      nodes: nodeRows.filter((r) => r.type === "node"),
-      vms,
-      containers,
-    };
+    const split = splitResources(await this.listResources());
+    return { nodes: split.nodes, vms: split.vms, containers: split.containers };
   }
 
   async listGuests(): Promise<{ vms: GuestListItem[]; containers: GuestListItem[] }> {

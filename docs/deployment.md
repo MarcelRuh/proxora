@@ -44,7 +44,7 @@ The wget installer prints username and password again in the final summary box. 
 | `PROXORA_UPDATE_SIGNAL_DIR` | Compose | `/update-signal` shared with `proxora-updater` |
 | `PROXORA_REPO` | no | default `MarcelRuh/proxora` |
 
-WireGuard lives under **WireGuard** in the sidebar. Each Proxora is a **client of the colleague's WG server** (import their client `.conf`), then you enter **their Proxora IP** and the same **shared secret**. Share your own hosts; they do the reverse. No invite exchange. UDP 51820 is published only on the WG VMs.
+WireGuard lives under **WireGuard** in the sidebar. Each Proxora is a **client of the colleague's WG server** (import their client `.conf`), then you enter **their Proxora IP** and the same **shared secret**. Share your own hosts; they do the reverse. No invite exchange. UDP 51820 is published only on the WG VMs. The sidecar uses MTU 1280 and TCP MSS clamping so Proxmox API payloads fit through the tunnel.
 
 ## Reverse proxy
 
