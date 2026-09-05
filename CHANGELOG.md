@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.2.4] – 2026-09-05
+
+### Fixed
+
+- Creating a VM or container updates Address and Gateway when the guest ID or host changes, as long as the IP is still the auto suggestion.
+
+### Added
+
+- RAM presets from 128 MiB to 64 GiB next to the numeric field when creating VMs and containers.
+
 ## [1.2.3] – 2026-09-05
 
 ### Changed

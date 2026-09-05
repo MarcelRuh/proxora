@@ -91,6 +91,20 @@ export function guestGateway(networkId: string, networks?: GuestIpNetwork[]): st
   return guestIpNetwork(networkId, networks).gateway;
 }
 
+/** True when empty or still the auto IP for this network + VMID. */
+export function shouldSyncGuestIp(
+  cidr: string,
+  networkId: string,
+  vmid: number,
+  networks?: GuestIpNetwork[],
+): boolean {
+  if (!cidr.trim()) return true;
+  const host = ipv4Host(cidr);
+  if (!host) return false;
+  const suggestedHost = guestIpFromVmid(networkId, vmid, networks);
+  return Boolean(suggestedHost && host === suggestedHost);
+}
+
 export function parseGuestConfigIps(config: Record<string, unknown>): string[] {
   const ips: string[] = [];
   for (const [key, value] of Object.entries(config)) {

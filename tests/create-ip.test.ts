@@ -9,6 +9,7 @@ import {
   parseGuestConfigIps,
   parseAgentNetworkIps,
   parseGuestIpSettings,
+  shouldSyncGuestIp,
 } from "@/lib/create-ip";
 
 describe("guest IP from VMID", () => {
@@ -23,6 +24,14 @@ describe("guest IP from VMID", () => {
     expect(guestIpFromVmid("192.168.178.0", 0)).toBeNull();
     expect(guestIpFromVmid("192.168.178.0", 255)).toBeNull();
     expect(guestCidrFromVmid("192.168.178.0", 300)).toBe("");
+  });
+
+  it("syncs empty or current auto IP, keeps custom and stale auto IPs", () => {
+    expect(shouldSyncGuestIp("", DEFAULT_GUEST_NETWORK, 210)).toBe(true);
+    expect(shouldSyncGuestIp("192.168.178.210/24", DEFAULT_GUEST_NETWORK, 210)).toBe(true);
+    expect(shouldSyncGuestIp("192.168.178.210", DEFAULT_GUEST_NETWORK, 210)).toBe(true);
+    expect(shouldSyncGuestIp("192.168.178.204/24", DEFAULT_GUEST_NETWORK, 210)).toBe(false);
+    expect(shouldSyncGuestIp("10.0.0.50/24", DEFAULT_GUEST_NETWORK, 210)).toBe(false);
   });
 });
 

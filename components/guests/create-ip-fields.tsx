@@ -1,11 +1,13 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import {
   DEFAULT_GUEST_NETWORK,
   GUEST_IP_NETWORKS,
   guestCidrFromVmid,
   guestGateway,
   ipv4Host,
+  shouldSyncGuestIp,
   type GuestIpNetwork,
 } from "@/lib/create-ip";
 import type { LxcIpMode } from "@/lib/lxc-net";
@@ -53,6 +55,30 @@ export function CreateIpFields({
   const host = ipv4Host(value.cidr);
   const collision = value.ipMode === "static" && Boolean(host && usedIps.includes(host));
   const highId = vmid > 254;
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const listRef = useRef(list);
+  listRef.current = list;
+  const prevVmid = useRef<number | null>(null);
+
+  useEffect(() => {
+    const current = valueRef.current;
+    if (current.ipMode !== "static") {
+      prevVmid.current = vmid;
+      return;
+    }
+    const nets = listRef.current;
+    const prev = prevVmid.current;
+    prevVmid.current = vmid;
+    if (prev === vmid) return;
+    const from = prev != null && prev > 0 ? prev : vmid;
+    if (current.cidr.trim() && !shouldSyncGuestIp(current.cidr, current.network, from, nets)) return;
+    const next = ipFieldsFromVmid(current.network, vmid, nets);
+    if (next.cidr === current.cidr && next.gateway === current.gateway) return;
+    onChangeRef.current({ ...current, ...next });
+  }, [vmid]);
 
   function setMode(ipMode: LxcIpMode) {
     if (ipMode === "static") {

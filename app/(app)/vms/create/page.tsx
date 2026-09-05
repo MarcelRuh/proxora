@@ -16,7 +16,8 @@ import { bytesToSize } from "@/lib/utils";
 import { isWindowsIso, suggestVirtioIso } from "@/lib/iso-images";
 import { storageIsIscsi, vmDiskStorages, VM_DISK_BUSES, VM_SCSI_CONTROLLERS } from "@/lib/vm-storage";
 import { CreateIpFields, ipCollision, ipFieldsFromVmid } from "@/components/guests/create-ip-fields";
-import { DEFAULT_GUEST_NETWORK, type GuestIpNetwork } from "@/lib/create-ip";
+import { MemoryField } from "@/components/guests/memory-field";
+import { DEFAULT_GUEST_NETWORK, shouldSyncGuestIp, type GuestIpNetwork } from "@/lib/create-ip";
 import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { StorageContentItem } from "@/lib/storage-content";
@@ -135,7 +136,9 @@ export default function CreateVmPage() {
       const network =
         f.network && netList?.some((n) => n.id === f.network) ? f.network : (netList?.[0]?.id ?? f.network ?? DEFAULT_GUEST_NETWORK);
       const ip =
-        f.ipMode === "static" && !f.cidr.trim() ? ipFieldsFromVmid(network, vmid, netList) : {};
+        f.ipMode === "static" && shouldSyncGuestIp(f.cidr, network, vmid, netList)
+          ? ipFieldsFromVmid(network, vmid, netList)
+          : {};
       return { ...f, node, diskStorage, bridge, vmid, iso, iso2, network, ...ip };
     });
   }, [options]);
@@ -219,7 +222,19 @@ export default function CreateVmPage() {
               className={selectClass}
               value={form.hostId}
               onChange={(e) =>
-                setForm({ ...form, hostId: e.target.value, node: "", iso: "", iso2: "", diskStorage: "", diskVolume: "", bridge: "", vmid: 0 })
+                setForm({
+                  ...form,
+                  hostId: e.target.value,
+                  node: "",
+                  iso: "",
+                  iso2: "",
+                  diskStorage: "",
+                  diskVolume: "",
+                  bridge: "",
+                  vmid: 0,
+                  cidr: "",
+                  gateway: "",
+                })
               }
             >
               <option value="">{t("common.chooseHost")}</option>
@@ -394,7 +409,7 @@ export default function CreateVmPage() {
             <Field label={t("create.disk")} value={form.diskSize} onChange={(diskSize) => setForm({ ...form, diskSize })} />
           )}
           <Field label={t("create.cores")} value={String(form.cores)} onChange={(v) => setForm({ ...form, cores: Number(v) || 1 })} />
-          <Field label={t("create.memory")} value={String(form.memory)} onChange={(v) => setForm({ ...form, memory: Number(v) || 512 })} />
+          <MemoryField value={form.memory} onChange={(memory) => setForm({ ...form, memory })} />
           <label className="text-sm">
             {t("create.bridge")}
             <select className={selectClass} value={form.bridge} onChange={(e) => setForm({ ...form, bridge: e.target.value })}>

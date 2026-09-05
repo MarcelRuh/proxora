@@ -12,8 +12,9 @@ import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { CreateIpFields, ipCollision, ipFieldsFromVmid } from "@/components/guests/create-ip-fields";
+import { MemoryField } from "@/components/guests/memory-field";
 import { CreateProgressDialog } from "@/components/guests/create-progress-dialog";
-import { DEFAULT_GUEST_NETWORK, type GuestIpNetwork } from "@/lib/create-ip";
+import { DEFAULT_GUEST_NETWORK, shouldSyncGuestIp, type GuestIpNetwork } from "@/lib/create-ip";
 import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
 
@@ -107,7 +108,7 @@ export default function CreateLxcPage() {
       const network =
         f.network && netList?.some((n) => n.id === f.network) ? f.network : (netList?.[0]?.id ?? f.network ?? DEFAULT_GUEST_NETWORK);
       const ip =
-        f.ipMode === "static" && !f.cidr.trim()
+        f.ipMode === "static" && shouldSyncGuestIp(f.cidr, network, vmid, netList)
           ? ipFieldsFromVmid(network, vmid, netList)
           : {};
       return { ...f, node, storage, bridge, ostemplate, vmid, network, ...ip };
@@ -189,7 +190,17 @@ export default function CreateLxcPage() {
               className={selectClass}
               value={form.hostId}
               onChange={(e) =>
-                setForm({ ...form, hostId: e.target.value, node: "", ostemplate: "", storage: "", bridge: "", vmid: 0 })
+                setForm({
+                  ...form,
+                  hostId: e.target.value,
+                  node: "",
+                  ostemplate: "",
+                  storage: "",
+                  bridge: "",
+                  vmid: 0,
+                  cidr: "",
+                  gateway: "",
+                })
               }
             >
               <option value="">{t("common.chooseHost")}</option>
@@ -215,14 +226,7 @@ export default function CreateLxcPage() {
           <Field
             label={t("create.id")}
             value={form.vmid ? String(form.vmid) : ""}
-            onChange={(v) => {
-              const vmid = Number(v) || 0;
-              setForm({
-                ...form,
-                vmid,
-                ...(form.ipMode === "static" ? ipFieldsFromVmid(form.network, vmid, networks) : {}),
-              });
-            }}
+            onChange={(v) => setForm({ ...form, vmid: Number(v) || 0 })}
           />
           <Field label={t("create.hostname")} value={form.hostname} onChange={(hostname) => setForm({ ...form, hostname })} />
           <Field
@@ -272,7 +276,7 @@ export default function CreateLxcPage() {
           </label>
           <Field label={t("create.disk")} value={form.diskSize} onChange={(diskSize) => setForm({ ...form, diskSize })} />
           <Field label={t("create.cores")} value={String(form.cores)} onChange={(v) => setForm({ ...form, cores: Number(v) || 1 })} />
-          <Field label={t("create.memory")} value={String(form.memory)} onChange={(v) => setForm({ ...form, memory: Number(v) || 512 })} />
+          <MemoryField value={form.memory} onChange={(memory) => setForm({ ...form, memory })} />
           <label className="text-sm">
             {t("create.bridge")}
             <select
