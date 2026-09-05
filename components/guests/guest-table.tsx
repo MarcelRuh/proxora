@@ -24,7 +24,7 @@ import type { Guest } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useSessionUser } from "@/components/auth/session-user";
 import { userHasPermission, type Permission } from "@/lib/permissions";
-import { invalidateDashboardQueries } from "@/components/dashboard/use-dashboard";
+import { invalidateDashboardQueries, applyGuestIpsToCache } from "@/components/dashboard/use-dashboard";
 
 export const GuestTable = memo(function GuestTable({
   kind,
@@ -82,8 +82,11 @@ export const GuestTable = memo(function GuestTable({
   }, [items, q, status, tag, hostFilter, hostId, sort]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const firstRowRef = useRef<HTMLTableRowElement>(null);
+  const askedIpsAt = useRef(new Map<string, number>());
   const [scrollTop, setScrollTop] = useState(0);
   const [viewH, setViewH] = useState(560);
+  const [rowH, setRowH] = useState(GUEST_ROW_ESTIMATE_PX);
   const virtualize = filtered.length > GUEST_TABLE_VIRTUALIZE_AFTER;
 
   useEffect(() => {
@@ -103,8 +106,52 @@ export const GuestTable = memo(function GuestTable({
   }, [virtualize]);
 
   const win = virtualize
-    ? windowRows(filtered, scrollTop, viewH, GUEST_ROW_ESTIMATE_PX)
+    ? windowRows(filtered, scrollTop, viewH, rowH)
     : { start: 0, end: filtered.length, padTop: 0, padBottom: 0, slice: filtered };
+
+  useEffect(() => {
+    const el = firstRowRef.current;
+    if (!el || !virtualize) return;
+    const ro = new ResizeObserver(() => {
+      const h = el.getBoundingClientRect().height;
+      if (h >= 36 && Math.abs(h - rowH) >= 2) setRowH(h);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [virtualize, win.slice[0], rowH]);
+
+  const hydrateKey = win.slice
+    .filter((g) => g.status === "running" && !g.template && !(g.ips && g.ips.length) && g.node && g.vmid)
+    .map((g) => `${g.hostId ?? hostId}:${g.kind ?? kind}:${g.vmid}`)
+    .join(",");
+
+  useEffect(() => {
+    const now = Date.now();
+    const pending = win.slice.flatMap((g) => {
+      if (g.status !== "running" || g.template || (g.ips && g.ips.length) || !g.node || !g.vmid) return [];
+      const hid = g.hostId ?? hostId ?? "";
+      if (!hid) return [];
+      const row = rowKind(g);
+      const key = `${hid}:${row}:${g.vmid}`;
+      const asked = askedIpsAt.current.get(key) ?? 0;
+      if (now - asked < 20_000) return [];
+      askedIpsAt.current.set(key, now);
+      return [{ hostId: hid, node: g.node, vmid: g.vmid, kind: row }];
+    });
+    if (!pending.length) return;
+    void api<{ ips: Array<{ hostId: string; kind: "vm" | "lxc"; vmid: number; ips: string[] }> }>("/api/dashboard/guest-ips", {
+      method: "POST",
+      body: JSON.stringify({ guests: pending }),
+    })
+      .then((res) => {
+        for (const row of res.ips ?? []) {
+          const key = `${row.hostId}:${row.kind}:${row.vmid}`;
+          if (row.ips.length) askedIpsAt.current.set(key, now + 10 * 60_000);
+        }
+        applyGuestIpsToCache(qc, res.ips ?? []);
+      })
+      .catch(() => undefined);
+  }, [hydrateKey, hostId, qc, win.slice]);
 
   const visibleKeys = filtered.map((g) => rowKey(g));
   const selectedVisible = visibleKeys.filter((key) => selected.has(key));
@@ -274,7 +321,7 @@ export const GuestTable = memo(function GuestTable({
         }
       >
         <table className={`w-full text-left text-sm ${mixed ? "min-w-[1080px]" : "min-w-[860px]"}`}>
-          <thead className="font-[family-name:var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+          <thead className="sticky top-0 z-10 bg-background font-[family-name:var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-muted-foreground shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
             <tr>
               <th className="w-10 px-3 py-2">
                 <input
@@ -356,7 +403,7 @@ export const GuestTable = memo(function GuestTable({
                 const ips = uniqueGuestIps(g.ips);
                 const ipLabel = ips.join(", ");
                 return (
-                  <tr key={key} className="border-t border-border">
+                  <tr key={key} ref={g === win.slice[0] ? firstRowRef : undefined} data-guest-row className="border-t border-border">
                     <td className="px-3 py-2">
                       <input
                         type="checkbox"

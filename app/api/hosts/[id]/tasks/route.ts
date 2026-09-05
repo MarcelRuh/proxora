@@ -5,6 +5,7 @@ import { clientIp } from "@/server/auth/session";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
+import { loadHostInventory } from "@/server/services/inventory-cache";
 import { taskGuestLabel, taskTypeLabel } from "@/lib/proxmox-tasks";
 
 export const GET = apiRoute("tasks.view", async (req, session, params) => {
@@ -12,13 +13,13 @@ export const GET = apiRoute("tasks.view", async (req, session, params) => {
   const node = url.searchParams.get("node");
   const data = await withHostClient(params.id, session.user, async (client) => {
     const nodes = node ? [{ node }] : await client.nodes.list();
-    const [taskLists, guests] = await Promise.all([
+    const [taskLists, inv] = await Promise.all([
       Promise.all(nodes.map((n) => client.tasks.list(n.node, { source: "all", limit: 80 }))),
-      client.listGuests().catch(() => ({ vms: [], containers: [] })),
+      loadHostInventory(client, params.id).catch(() => ({ vms: [], containers: [] })),
     ]);
     const names = new Map<string, { name: string; kind: "vm" | "lxc" }>();
-    for (const guest of guests.vms) names.set(String(guest.vmid), { name: guest.name, kind: "vm" });
-    for (const guest of guests.containers) names.set(String(guest.vmid), { name: guest.name, kind: "lxc" });
+    for (const guest of inv.vms) names.set(String(guest.vmid), { name: guest.name, kind: "vm" });
+    for (const guest of inv.containers) names.set(String(guest.vmid), { name: guest.name, kind: "lxc" });
     const tasks = taskLists.flat().map((task) => {
       const match = names.get(String(task.id ?? "").trim());
       return {

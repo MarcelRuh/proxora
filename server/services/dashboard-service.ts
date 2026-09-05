@@ -3,8 +3,9 @@ import { listHosts, withHostClient } from "@/server/services/host-service";
 import { applyCachedVmDisks } from "@/server/services/guest-disk";
 import { applyCachedGuestIps, rememberGuestIps } from "@/server/services/guest-ip-cache";
 import { loadHostInventory } from "@/server/services/inventory-cache";
-import { filterGuestsForUser } from "@/server/auth/session-core";
+import { canAccessGuest, filterGuestsForUser } from "@/server/auth/session-core";
 import { isClusterNodeOnline, minPositiveUptime, weightedCpuRatio } from "@/lib/cluster-metrics";
+import { withTimeoutFallback } from "@/lib/promise-timeout";
 import type { ConnectionState, Guest } from "@/lib/types";
 import type { GuestListItem, ProxmoxResource } from "@/server/proxmox/types";
 
@@ -32,6 +33,9 @@ export type HostOverview = {
 };
 
 type HostCounts = { vms: number; lxc: number; running: number; stopped: number; paused: number };
+
+export const HOST_SNAPSHOT_TIMEOUT_MS = 3_000;
+export const VISIBLE_GUEST_IP_LIMIT = 40;
 
 type HostSnapshot = {
   overview: HostOverview;
@@ -132,8 +136,6 @@ async function snapshotHost(
       }
       const vms = applyCachedGuestIps(client, "vm", applyCachedVmDisks(client, filteredVms));
       const containers = applyCachedGuestIps(client, "lxc", filteredLxc);
-      void rememberGuestIps(client, "vm", vms).catch(() => undefined);
-      void rememberGuestIps(client, "lxc", containers).catch(() => undefined);
       return { overview, counts: guestCounts(vms, containers), vms, containers };
     });
   } catch (error) {
@@ -181,16 +183,114 @@ function dashboardShell(snapshots: HostSnapshot[]) {
   };
 }
 
+async function snapshotHostTimed(
+  host: Awaited<ReturnType<typeof listHosts>>[number],
+  user: SessionUser,
+  mode: "overview" | "guests",
+): Promise<HostSnapshot> {
+  const timedOut = (): HostSnapshot => ({
+    overview: hostShell(host, {
+      connectionState: "ERROR",
+      lastError: host.lastError ?? "Host did not respond in time",
+    }),
+    counts: guestCounts([], []),
+    vms: [],
+    containers: [],
+  });
+  try {
+    return await withTimeoutFallback(snapshotHost(host, user, mode), HOST_SNAPSHOT_TIMEOUT_MS, timedOut);
+  } catch (error) {
+    return {
+      overview: hostShell(host, {
+        connectionState: "ERROR",
+        lastError: error instanceof Error ? error.message : (host.lastError ?? "Unable to connect"),
+      }),
+      counts: guestCounts([], []),
+      vms: [],
+      containers: [],
+    };
+  }
+}
+
 export async function getDashboard(user: SessionUser) {
   const hosts = await listHosts(user);
-  const snapshots = await Promise.all(hosts.map((host) => snapshotHost(host, user, "overview")));
+  const snapshots = await Promise.all(hosts.map((host) => snapshotHostTimed(host, user, "overview")));
   return dashboardShell(snapshots);
 }
 
 export async function getDashboardGuests(user: SessionUser, kind: "vm" | "lxc" | "all" = "all") {
   const hosts = await listHosts(user);
-  const snapshots = await Promise.all(hosts.map((host) => snapshotHost(host, user, "guests")));
+  const snapshots = await Promise.all(hosts.map((host) => snapshotHostTimed(host, user, "guests")));
   const vms = kind === "lxc" ? [] : snapshots.flatMap((s) => attachHost(s, s.vms));
   const containers = kind === "vm" ? [] : snapshots.flatMap((s) => attachHost(s, s.containers));
   return { vms, containers };
+}
+
+export type GuestIpTarget = { hostId: string; node: string; vmid: number; kind: "vm" | "lxc" };
+
+export async function hydrateVisibleGuestIps(user: SessionUser, targets: GuestIpTarget[]) {
+  const capped = targets
+    .filter((t) => t.hostId && t.node && t.vmid > 0 && (t.kind === "vm" || t.kind === "lxc"))
+    .filter((t) => canAccessGuest(user, t.hostId, t.kind, t.vmid))
+    .slice(0, VISIBLE_GUEST_IP_LIMIT);
+  const byHost = new Map<string, GuestIpTarget[]>();
+  for (const target of capped) {
+    const list = byHost.get(target.hostId) ?? [];
+    list.push(target);
+    byHost.set(target.hostId, list);
+  }
+  const rows: Array<{ hostId: string; kind: "vm" | "lxc"; node: string; vmid: number; ips: string[] }> = [];
+  await Promise.all(
+    [...byHost.entries()].map(async ([hostId, group]) => {
+      try {
+        await withHostClient(hostId, user, async (client) => {
+          const vms = group
+            .filter((g) => g.kind === "vm")
+            .map((g) => ({
+              vmid: g.vmid,
+              name: "",
+              node: g.node,
+              status: "running" as const,
+              cpu: 0,
+              cpus: 0,
+              mem: 0,
+              maxmem: 0,
+              disk: 0,
+              maxdisk: 0,
+              uptime: 0,
+              template: false,
+            }));
+          const containers = group
+            .filter((g) => g.kind === "lxc")
+            .map((g) => ({
+              vmid: g.vmid,
+              name: "",
+              node: g.node,
+              status: "running" as const,
+              cpu: 0,
+              cpus: 0,
+              mem: 0,
+              maxmem: 0,
+              disk: 0,
+              maxdisk: 0,
+              uptime: 0,
+              template: false,
+            }));
+          const [vmRows, lxcRows] = await Promise.all([
+            rememberGuestIps(client, "vm", vms, { concurrency: 4, budgetMs: 3_000 }),
+            rememberGuestIps(client, "lxc", containers, { concurrency: 4, budgetMs: 3_000 }),
+          ]);
+          for (const guest of vmRows) {
+            rows.push({ hostId, kind: "vm", node: guest.node, vmid: guest.vmid, ips: guest.ips ?? [] });
+          }
+          for (const guest of lxcRows) {
+            rows.push({ hostId, kind: "lxc", node: guest.node, vmid: guest.vmid, ips: guest.ips ?? [] });
+          }
+        });
+      } catch {
+        // skip unreachable host
+      }
+    }),
+  );
+  return { ips: rows };
 }

@@ -17,7 +17,7 @@ export const GET = apiRoute("storage.view", async (req, session, params) => {
   const storage = url.searchParams.get("storage")?.trim() ?? "";
   if (!node || !storage) throw new ValidationError("Node und Storage fehlen");
   const data = await withHostClient(params.id, session.user, async (client) => {
-    const items = await listStorageContent(client, node, storage);
+    const items = await listStorageContent(client, params.id, node, storage);
     return { node, storage, items };
   });
   return json(data);

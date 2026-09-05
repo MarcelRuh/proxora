@@ -54,6 +54,7 @@ export default function BackupsPage() {
 
   function refresh() {
     void qc.invalidateQueries({ queryKey: ["backups"] });
+    void qc.invalidateQueries({ queryKey: ["backup-files"] });
   }
 
   return (
@@ -112,20 +113,28 @@ function HostBackups({
   const [fileKind, setFileKind] = useState<BackupFileFilter["kind"]>("all");
   const [fileStorage, setFileStorage] = useState("all");
   const [filePeriod, setFilePeriod] = useState<BackupFileFilter["period"]>("all");
+  const { data: filesData, isPending: filesPending } = useQuery({
+    queryKey: ["backup-files", hostId],
+    queryFn: () => api<{ files: BackupFile[] }>(`/api/hosts/${hostId}/backups/files`),
+    enabled: Boolean(overview),
+    staleTime: 20_000,
+    placeholderData: (previous) => previous,
+  });
+  const files = filesData?.files ?? overview?.files ?? [];
   const dateLocale = locale === "en" ? "en-GB" : "de-DE";
   const guestNames = useMemo(() => new Map((overview?.guests ?? []).map((g) => [g.vmid, g.name])), [overview?.guests]);
   const storageOptions = useMemo(
-    () => [...new Set([...(overview?.backupStorages ?? []), ...(overview?.files ?? []).map((f) => f.storage)])].filter(Boolean).sort(),
-    [overview],
+    () => [...new Set([...(overview?.backupStorages ?? []), ...files.map((f) => f.storage)])].filter(Boolean).sort(),
+    [overview?.backupStorages, files],
   );
   const filteredFiles = useMemo(
     () =>
       filterBackupFiles(
-        overview?.files ?? [],
+        files,
         { query: fileQuery, kind: fileKind, storage: fileStorage, period: filePeriod },
         guestNames,
       ),
-    [overview?.files, fileQuery, fileKind, fileStorage, filePeriod, guestNames],
+    [files, fileQuery, fileKind, fileStorage, filePeriod, guestNames],
   );
 
   const guestLabel = useMemo(() => {
@@ -271,13 +280,15 @@ function HostBackups({
             <section>
               <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
                 <p className="proxora-section">{t("backup.files")}</p>
-                {overview.files.length ? (
+                {files.length ? (
                   <p className="text-xs text-muted-foreground">
-                    {t("backup.filterCount", { shown: filteredFiles.length, total: overview.files.length })}
+                    {t("backup.filterCount", { shown: filteredFiles.length, total: files.length })}
                   </p>
                 ) : null}
               </div>
-              {overview.files.length === 0 ? (
+              {filesPending && !filesData ? (
+                <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+              ) : files.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{t("backup.noFiles")}</p>
               ) : (
                 <>

@@ -95,9 +95,15 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
   });
   const [restoreFile, setRestoreFile] = useState<BackupFile | null>(null);
-  const { data: backups } = useQuery({
+  const { data: backupOverview } = useQuery({
     queryKey: ["backups", params.hostId],
     queryFn: () => api<BackupOverview>(`/api/hosts/${params.hostId}/backups`),
+    enabled: Boolean(restoreFile),
+    staleTime: 60_000,
+  });
+  const { data: backups } = useQuery({
+    queryKey: ["backup-files", params.hostId],
+    queryFn: () => api<{ files: BackupFile[] }>(`/api/hosts/${params.hostId}/backups/files`),
     enabled: Boolean(restoreFile),
     staleTime: 60_000,
   });
@@ -267,8 +273,8 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
               }
               void qc
                 .fetchQuery({
-                  queryKey: ["backups", params.hostId],
-                  queryFn: () => api<BackupOverview>(`/api/hosts/${params.hostId}/backups`),
+                  queryKey: ["backup-files", params.hostId],
+                  queryFn: () => api<{ files: BackupFile[] }>(`/api/hosts/${params.hostId}/backups/files`),
                   staleTime: 60_000,
                 })
                 .then((overview) => {
@@ -435,10 +441,10 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           ))}
         </CardContent>
       </Card>
-      {backups ? (
+      {backupOverview ? (
         <RestoreDialog
           hostId={params.hostId}
-          overview={backups}
+          overview={backupOverview}
           file={restoreFile}
           open={Boolean(restoreFile)}
           onOpenChange={(next) => {

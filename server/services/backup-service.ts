@@ -14,6 +14,7 @@ import { withHostClient } from "@/server/services/host-service";
 import type { SessionUser } from "@/server/auth/session";
 import { filterGuestsForUser } from "@/server/auth/session-core";
 import type { ProxmoxClient } from "@/server/proxmox/client";
+import { loadHostInventory } from "@/server/services/inventory-cache";
 
 export type BackupGuest = { vmid: number; name: string; kind: "vm" | "lxc"; node: string; status: string };
 
@@ -31,41 +32,66 @@ export type BackupFile = {
 
 export async function listHostBackups(hostId: string, user: SessionUser) {
   return withHostClient(hostId, user, async (client) => {
-    const [nodes, listed, jobsRaw] = await Promise.all([
-      client.nodes.list(),
-      client.listGuests().catch(() => ({ vms: [], containers: [] })),
+    const [inv, jobsRaw, storage] = await Promise.all([
+      loadHostInventory(client, hostId),
       client.backup.jobs().catch(() => [] as Array<Record<string, unknown>>),
+      client.storage.list().catch(() => []),
     ]);
-    const vms = listed.vms;
-    const containers = listed.containers;
-    const nodeNames = nodes.map((n) => n.node);
+    const vms = inv.vms;
+    const containers = inv.containers;
+    const nodeNames = inv.nodes.map((n) => n.node).filter((n): n is string => Boolean(n));
     const primary = nodeNames[0] ?? "";
+    const backupStorages = [...new Set(storage.filter((s) => (s.content ?? "").includes("backup")).map((s) => s.storage))];
+    const diskStorages = [
+      ...new Set(
+        storage
+          .filter((s) => {
+            const content = s.content ?? "";
+            return content.includes("images") || content.includes("rootdir");
+          })
+          .map((s) => s.storage),
+      ),
+    ];
+
+    const guests: BackupGuest[] = [
+      ...filterGuestsForUser(user, hostId, "vm", vms).map((g) => ({
+        vmid: g.vmid,
+        name: g.name,
+        kind: "vm" as const,
+        node: g.node,
+        status: g.status,
+      })),
+      ...filterGuestsForUser(user, hostId, "lxc", containers).map((g) => ({
+        vmid: g.vmid,
+        name: g.name,
+        kind: "lxc" as const,
+        node: g.node,
+        status: g.status,
+      })),
+    ].sort((a, b) => a.vmid - b.vmid);
+
+    return {
+      nodes: nodeNames,
+      primaryNode: primary,
+      backupStorages,
+      diskStorages,
+      jobs: (Array.isArray(jobsRaw) ? jobsRaw : []).map((job) => normalizeBackupJob(job)).filter((j) => j.id),
+      files: [] as BackupFile[],
+      guests,
+    };
+  });
+}
+
+export async function listHostBackupFiles(hostId: string, user: SessionUser) {
+  return withHostClient(hostId, user, async (client) => {
+    const inv = await loadHostInventory(client, hostId);
+    const nodeNames = inv.nodes.map((n) => n.node).filter((n): n is string => Boolean(n));
     const storageLists = await Promise.all(
       nodeNames.map(async (node) => ({
         node,
         storage: await client.storage.list(node).catch(() => []),
       })),
     );
-    const backupStorages = [
-      ...new Set(
-        storageLists.flatMap((row) =>
-          row.storage.filter((s) => (s.content ?? "").includes("backup")).map((s) => s.storage),
-        ),
-      ),
-    ];
-    const diskStorages = [
-      ...new Set(
-        storageLists.flatMap((row) =>
-          row.storage
-            .filter((s) => {
-              const content = s.content ?? "";
-              return content.includes("images") || content.includes("rootdir");
-            })
-            .map((s) => s.storage),
-        ),
-      ),
-    ];
-
     const files: BackupFile[] = [];
     const seen = new Set<string>();
     for (const row of storageLists) {
@@ -92,37 +118,11 @@ export async function listHostBackups(hostId: string, user: SessionUser) {
       }
     }
     files.sort((a, b) => b.ctime - a.ctime);
-
-    const guests: BackupGuest[] = [
-      ...filterGuestsForUser(user, hostId, "vm", vms).map((g) => ({
-        vmid: g.vmid,
-        name: g.name,
-        kind: "vm" as const,
-        node: g.node,
-        status: g.status,
-      })),
-      ...filterGuestsForUser(user, hostId, "lxc", containers).map((g) => ({
-        vmid: g.vmid,
-        name: g.name,
-        kind: "lxc" as const,
-        node: g.node,
-        status: g.status,
-      })),
-    ].sort((a, b) => a.vmid - b.vmid);
     const allowedVmids =
       user.allowedGuests === null
         ? null
         : new Set(user.allowedGuests.filter((g) => g.hostId === hostId).map((g) => g.vmid));
-
-    return {
-      nodes: nodeNames,
-      primaryNode: primary,
-      backupStorages,
-      diskStorages,
-      jobs: (Array.isArray(jobsRaw) ? jobsRaw : []).map((job) => normalizeBackupJob(job)).filter((j) => j.id),
-      files: allowedVmids ? files.filter((f) => f.vmid != null && allowedVmids.has(f.vmid)) : files,
-      guests,
-    };
+    return { files: allowedVmids ? files.filter((f) => f.vmid != null && allowedVmids.has(f.vmid)) : files };
   });
 }
 
@@ -182,9 +182,9 @@ async function currentGuestStatus(
 
 async function stopGuestIfRunningForRestore(
   client: ProxmoxClient,
-  input: { node: string; vmid: number; kind: "vm" | "lxc" },
+  input: { hostId: string; node: string; vmid: number; kind: "vm" | "lxc" },
 ) {
-  const listed = await client.listGuests().catch(() => ({ vms: [], containers: [] }));
+  const listed = await loadHostInventory(client, input.hostId).catch(() => ({ vms: [], containers: [] }));
   const ct = listed.containers.find((g) => g.vmid === input.vmid);
   const vm = listed.vms.find((g) => g.vmid === input.vmid);
   const match = input.kind === "lxc" ? ct ?? vm : vm ?? ct;
@@ -222,12 +222,12 @@ async function stopGuestIfRunningForRestore(
 
 export async function restoreBackup(
   client: ProxmoxClient,
-  input: { node: string; volid: string; vmid: number; storage: string; force?: boolean; startAfter?: boolean },
+  input: { hostId: string; node: string; volid: string; vmid: number; storage: string; force?: boolean; startAfter?: boolean },
 ) {
   const parsed = parseBackupVolid(input.volid);
   const kind = parsed.kind === "unknown" ? "vm" : parsed.kind;
   if (input.force) {
-    await stopGuestIfRunningForRestore(client, { node: input.node, vmid: input.vmid, kind });
+    await stopGuestIfRunningForRestore(client, { hostId: input.hostId, node: input.node, vmid: input.vmid, kind });
   }
   const payload = compactProxmoxBody({
     vmid: input.vmid,

@@ -2,6 +2,7 @@ import type { ProxmoxClient } from "@/server/proxmox/client";
 import { isIsoRow } from "@/lib/iso-images";
 import { isVztmplRow, storageContentVolid } from "@/lib/lxc-templates";
 import { applyVolumeUsage, normalizeStorageContentRow, type StorageContentItem } from "@/lib/storage-content";
+import { loadHostInventory } from "@/server/services/inventory-cache";
 
 export async function collectStorageVolumes(
   client: ProxmoxClient,
@@ -40,6 +41,7 @@ export async function collectStorageVolumes(
 
 export async function listStorageContent(
   client: ProxmoxClient,
+  hostId: string,
   node: string,
   storage: string,
 ): Promise<StorageContentItem[]> {
@@ -48,7 +50,7 @@ export async function listStorageContent(
     .map((row) => normalizeStorageContentRow(row as Record<string, unknown>))
     .filter((item): item is StorageContentItem => Boolean(item));
 
-  const guests = await client.listGuests().catch(() => ({ vms: [], containers: [] }));
+  const guests = await loadHostInventory(client, hostId).catch(() => ({ vms: [], containers: [] }));
   const byVmid = new Map<number, { kind: "vm" | "lxc"; name: string; node: string }>();
   for (const guest of guests.vms) {
     if (guest.vmid) byVmid.set(guest.vmid, { kind: "vm", name: guest.name, node: guest.node });

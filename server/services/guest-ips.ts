@@ -8,24 +8,31 @@ import { mergeUsedGuestSets } from "@/lib/next-vmid";
 import type { ProxmoxClient } from "@/server/proxmox/client";
 import type { GuestListItem } from "@/server/proxmox/types";
 import { clientForHost } from "@/server/services/host-service";
+import { loadHostInventory } from "@/server/services/inventory-cache";
 import { HostOrigin, type Host } from "@prisma/client";
 
-async function listedGuests(client: ProxmoxClient) {
-  const guests = await client.listGuests().catch(() => ({ vms: [] as GuestListItem[], containers: [] as GuestListItem[] }));
+async function listedGuests(client: ProxmoxClient, hostId: string) {
+  const guests = await loadHostInventory(client, hostId).catch(() => ({
+    vms: [] as GuestListItem[],
+    containers: [] as GuestListItem[],
+  }));
   return [
     ...guests.vms.map((g) => ({ kind: "vm" as const, ...g })),
     ...guests.containers.map((g) => ({ kind: "lxc" as const, ...g })),
   ];
 }
 
-export async function collectUsedVmids(client: ProxmoxClient): Promise<number[]> {
-  return listedGuests(client).then((listed) =>
+export async function collectUsedVmids(client: ProxmoxClient, hostId: string): Promise<number[]> {
+  return listedGuests(client, hostId).then((listed) =>
     listed.map((g) => g.vmid).filter((id) => Number.isInteger(id) && id > 0),
   );
 }
 
-export async function collectUsedGuestIps(client: ProxmoxClient): Promise<{ vmids: number[]; ips: string[] }> {
-  const listed = await listedGuests(client);
+export async function collectUsedGuestIps(
+  client: ProxmoxClient,
+  hostId: string,
+): Promise<{ vmids: number[]; ips: string[] }> {
+  const listed = await listedGuests(client, hostId);
   const vmids = listed.map((g) => g.vmid).filter((id) => Number.isInteger(id) && id > 0);
   const ips = new Set<string>();
   const pending = listed.filter((g) => g.node && g.vmid && !g.template);
@@ -60,7 +67,11 @@ export async function collectUsedGuestIps(client: ProxmoxClient): Promise<{ vmid
   return { vmids, ips: [...ips] };
 }
 
-async function forEachHostInScope<T>(target: Host, fn: (client: ProxmoxClient) => Promise<T>, empty: T): Promise<T[]> {
+async function forEachHostInScope<T>(
+  target: Host,
+  fn: (client: ProxmoxClient, hostId: string) => Promise<T>,
+  empty: T,
+): Promise<T[]> {
   const all = await prisma.host.findMany({ orderBy: { name: "asc" } });
   const scopedIds = new Set(
     hostsInGuestIdentityScope(
@@ -73,7 +84,7 @@ async function forEachHostInScope<T>(target: Host, fn: (client: ProxmoxClient) =
     hosts.map(async (host) => {
       try {
         const client = await clientForHost(host);
-        return await fn(client);
+        return await fn(client, host.id);
       } catch (error) {
         logger.warn(
           { host: host.name, err: error instanceof Error ? error.message : String(error) },
@@ -86,7 +97,7 @@ async function forEachHostInScope<T>(target: Host, fn: (client: ProxmoxClient) =
 }
 
 export async function collectUsedVmidsForHost(target: Host): Promise<number[]> {
-  const parts = await forEachHostInScope(target, (client) => collectUsedVmids(client), [] as number[]);
+  const parts = await forEachHostInScope(target, (client, hostId) => collectUsedVmids(client, hostId), [] as number[]);
   return mergeUsedGuestSets(parts.map((vmids) => ({ vmids }))).vmids;
 }
 
@@ -94,7 +105,7 @@ export async function collectUsedVmidsForHost(target: Host): Promise<number[]> {
 export async function collectUsedGuestIpsForHost(target: Host): Promise<{ vmids: number[]; ips: string[] }> {
   const parts = await forEachHostInScope(
     target,
-    (client) => collectUsedGuestIps(client),
+    (client, hostId) => collectUsedGuestIps(client, hostId),
     { vmids: [] as number[], ips: [] as string[] },
   );
   return mergeUsedGuestSets(parts);

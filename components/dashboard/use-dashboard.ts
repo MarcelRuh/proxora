@@ -5,13 +5,29 @@ import { api } from "@/lib/api";
 import type { Dashboard, DashboardGuests, Guest } from "@/lib/types";
 
 export const DASHBOARD_POLL_MS = 45_000;
-export const GUEST_IP_RETRY_MS = 8_000;
 
 export function invalidateDashboardQueries(qc: QueryClient) {
   return Promise.all([
     qc.invalidateQueries({ queryKey: ["dashboard"] }),
     qc.invalidateQueries({ queryKey: ["dashboard-guests"] }),
   ]);
+}
+
+export function applyGuestIpsToCache(
+  qc: QueryClient,
+  rows: Array<{ hostId: string; kind: "vm" | "lxc"; vmid: number; ips: string[] }>,
+) {
+  if (!rows.length) return;
+  const map = new Map(rows.map((r) => [`${r.hostId}:${r.kind}:${r.vmid}`, r.ips]));
+  qc.setQueriesData<DashboardGuests>({ queryKey: ["dashboard-guests"] }, (old) => {
+    if (!old) return old;
+    const patch = (list: DashboardGuests["vms"], kind: "vm" | "lxc") =>
+      list.map((g) => {
+        const ips = map.get(`${g.hostId}:${kind}:${g.vmid}`);
+        return ips ? { ...g, ips } : g;
+      });
+    return { vms: patch(old.vms, "vm"), containers: patch(old.containers, "lxc") };
+  });
 }
 
 export function useDashboard() {
@@ -24,17 +40,11 @@ export function useDashboard() {
   });
 }
 
-function guestsNeedIpRetry(data: DashboardGuests | undefined, kind: "vm" | "lxc" | "all") {
-  if (!data) return true;
-  const rows = kind === "vm" ? data.vms : kind === "lxc" ? data.containers : [...data.vms, ...data.containers];
-  return rows.some((g) => g.status === "running" && !g.template && !(g.ips && g.ips.length));
-}
-
 export function useDashboardGuests(kind: "vm" | "lxc" | "all" = "all") {
   return useQuery({
     queryKey: ["dashboard-guests", kind],
     queryFn: () => api<DashboardGuests>(`/api/dashboard/guests?kind=${kind}`),
-    refetchInterval: (query) => (guestsNeedIpRetry(query.state.data, kind) ? GUEST_IP_RETRY_MS : DASHBOARD_POLL_MS),
+    refetchInterval: DASHBOARD_POLL_MS,
     staleTime: 15_000,
     placeholderData: (previous) => previous,
   });

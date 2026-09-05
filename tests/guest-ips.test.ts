@@ -3,6 +3,7 @@ import { hostsInGuestIdentityScope, identityConflict } from "@/lib/guest-identit
 import { mergeUsedGuestSets } from "@/lib/next-vmid";
 import { collectUsedGuestIps } from "@/server/services/guest-ips";
 import { clearGuestIpCache, rememberGuestIpCache } from "@/server/services/guest-ip-cache";
+import { clearInventoryCache } from "@/server/services/inventory-cache";
 import type { ProxmoxClient } from "@/server/proxmox/client";
 import type { GuestListItem } from "@/server/proxmox/types";
 
@@ -70,18 +71,19 @@ function listedGuest(vmid: number): GuestListItem {
 describe("collectUsedGuestIps cache", () => {
   beforeEach(() => {
     clearGuestIpCache();
+    clearInventoryCache();
   });
 
   it("reuses cached IPs instead of loading every guest config", async () => {
     const config = vi.fn();
     const client = {
       http: { baseUrl: "https://pve.test" },
-      listGuests: async () => ({ vms: [listedGuest(100)], containers: [] }),
+      listInventory: async () => ({ nodes: [], vms: [listedGuest(100)], containers: [], storage: [] }),
       vms: { config },
       lxc: { config },
     } as unknown as ProxmoxClient;
     rememberGuestIpCache(client, "vm", "pve", 100, ["10.0.0.8"]);
-    const used = await collectUsedGuestIps(client);
+    const used = await collectUsedGuestIps(client, "h1");
     expect(used.vmids).toEqual([100]);
     expect(used.ips).toEqual(["10.0.0.8"]);
     expect(config).not.toHaveBeenCalled();
@@ -91,12 +93,12 @@ describe("collectUsedGuestIps cache", () => {
     const config = vi.fn(async () => ({ ipconfig0: "ip=10.0.0.9/24,gw=10.0.0.1" }));
     const client = {
       http: { baseUrl: "https://pve.test" },
-      listGuests: async () => ({ vms: [listedGuest(100), listedGuest(101)], containers: [] }),
+      listInventory: async () => ({ nodes: [], vms: [listedGuest(100), listedGuest(101)], containers: [], storage: [] }),
       vms: { config },
       lxc: { config: vi.fn() },
     } as unknown as ProxmoxClient;
     rememberGuestIpCache(client, "vm", "pve", 100, ["10.0.0.8"]);
-    const used = await collectUsedGuestIps(client);
+    const used = await collectUsedGuestIps(client, "h1");
     expect(used.ips.sort()).toEqual(["10.0.0.8", "10.0.0.9"]);
     expect(config).toHaveBeenCalledTimes(1);
     expect(config).toHaveBeenCalledWith("pve", 101);

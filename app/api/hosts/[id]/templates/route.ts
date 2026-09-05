@@ -29,7 +29,7 @@ export const GET = apiRoute("lxc.create", async (req, session, params) => {
       catalogRaw.map((row) => normalizeAplTemplate(row)).filter((row): row is NonNullable<typeof row> => Boolean(row)),
       volumes.volids,
     );
-    const usedBy = await collectVolumeUsers(client, volumes.volids);
+    const usedBy = await collectVolumeUsers(client, params.id, volumes.volids);
     return {
       nodes: nodeNames,
       node: selected,

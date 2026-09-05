@@ -118,7 +118,7 @@ export const POST = apiRoute(
         notifyName = (await lookupGuestName(client, body.node, body.vmid)) || parseBackupVolid(body.volid).filename;
         notifyId = String(body.vmid);
         notifyNode = body.node;
-        const upid = await restoreBackup(client, body);
+        const upid = await restoreBackup(client, { ...body, hostId: params.id });
         return { upid };
       }
       case "delete-file": {

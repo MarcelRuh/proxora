@@ -3,19 +3,18 @@ set -e
 cd /app
 
 PRISMA="node ./node_modules/prisma/build/index.js"
-TSX="node ./node_modules/tsx/dist/cli.mjs"
 
 if [ ! -f ./node_modules/prisma/build/index.js ]; then
   echo "ERROR: prisma package missing in image (node_modules/prisma)" >&2
   ls -la ./node_modules/prisma 2>/dev/null || true
   exit 1
 fi
-if [ ! -f ./node_modules/tsx/dist/cli.mjs ]; then
-  echo "ERROR: tsx package missing in image" >&2
-  exit 1
-fi
 if [ ! -f ./dist/server.cjs ]; then
   echo "ERROR: compiled custom server missing (dist/server.cjs)" >&2
+  exit 1
+fi
+if [ ! -f ./dist/seed.cjs ]; then
+  echo "ERROR: compiled seed missing (dist/seed.cjs)" >&2
   exit 1
 fi
 
@@ -43,7 +42,7 @@ if [ "$i" -ge 30 ]; then
 fi
 
 echo "Seeding…"
-$TSX prisma/seed.ts
+node dist/seed.cjs
 
 echo "Starting Proxora on 0.0.0.0:${PORT:-3000}"
 # Do not start Next.js via tsx: its CJS transformer breaks AsyncLocalStorage in Next 16.

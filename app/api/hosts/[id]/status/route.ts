@@ -18,10 +18,7 @@ const actionSchema = z.object({
 
 export const GET = apiRoute("hosts.view", async (_req, session, params) => {
   const data = await withHostClient(params.id, session.user, async (client, host) => {
-    const [inv, storage] = await Promise.all([
-      loadHostInventory(client, params.id),
-      client.storage.list().catch(() => []),
-    ]);
+    const inv = await loadHostInventory(client, params.id);
     const details = inv.nodes
       .filter((n) => n.node)
       .map((n) => ({
@@ -39,7 +36,7 @@ export const GET = apiRoute("hosts.view", async (_req, session, params) => {
       nodes: details,
       vms: filterGuestsForUser(session.user, params.id, "vm", inv.vms),
       containers: filterGuestsForUser(session.user, params.id, "lxc", inv.containers),
-      storage,
+      storage: inv.storage.map((s) => ({ storage: s.storage, type: s.type, node: s.node })),
     };
   });
   return json(data);

@@ -3,7 +3,7 @@ import { logger } from "@/lib/logger";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { clientForHost } from "@/server/services/host-service";
 import { vmDiskFromAgent } from "@/server/services/guest-disk";
-import { rememberGuestIps } from "@/server/services/guest-ip-cache";
+import { loadHostInventory } from "@/server/services/inventory-cache";
 import {
   applyDiskWatchState,
   diskSampleHref,
@@ -65,33 +65,27 @@ export async function scanDiskUsage(): Promise<number> {
     if (host.connectionState === "OFFLINE" || host.connectionState === "MAINTENANCE") continue;
     try {
       const client = await clientForHost(host);
-      const nodes = await client.nodes.list();
-      const guests = await client.listGuests().catch(() => ({ vms: [], containers: [] }));
-      void rememberGuestIps(client, "vm", guests.vms).catch(() => undefined);
-      void rememberGuestIps(client, "lxc", guests.containers).catch(() => undefined);
+      const inv = await loadHostInventory(client, host.id);
+      const guests = { vms: inv.vms, containers: inv.containers };
 
-      await Promise.all(
-        nodes.map(async (n) => {
-          const list = await client.storage.list(n.node).catch(() => []);
-          for (const storage of list) {
-            if (!isStorageMonitored(storage)) continue;
-            const percent = diskUsagePercent(storage.used, storage.total);
-            if (percent == null) continue;
-            const sample: DiskSample = {
-              key: storageDiskKey(host.id, n.node, storage.storage),
-              kind: "storage",
-              name: storage.storage,
-              percent,
-              hostId: host.id,
-              hostName: host.name,
-              node: n.node,
-              id: storage.storage,
-            };
-            sample.href = diskSampleHref(sample);
-            samples.push(sample);
-          }
-        }),
-      );
+      for (const storage of inv.storage) {
+        if (!storage.storage) continue;
+        if (!isStorageMonitored({ total: storage.maxdisk, active: storage.status === "offline" ? 0 : 1 })) continue;
+        const percent = diskUsagePercent(storage.disk, storage.maxdisk);
+        if (percent == null) continue;
+        const sample: DiskSample = {
+          key: storageDiskKey(host.id, storage.node ?? "", storage.storage),
+          kind: "storage",
+          name: storage.storage,
+          percent,
+          hostId: host.id,
+          hostName: host.name,
+          node: storage.node,
+          id: storage.storage,
+        };
+        sample.href = diskSampleHref(sample);
+        samples.push(sample);
+      }
 
       const runningVms = guests.vms.filter((guest) => !guest.template && guest.vmid && guest.status === "running" && guest.node);
       let i = 0;

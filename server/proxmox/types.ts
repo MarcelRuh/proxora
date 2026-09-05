@@ -58,6 +58,8 @@ export interface ProxmoxResource {
   node?: string;
   storage?: string;
   plugintype?: string;
+  content?: string;
+  shared?: number;
   vmid?: number;
   name?: string;
   status?: string;

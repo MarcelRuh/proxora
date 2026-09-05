@@ -10,7 +10,7 @@ import { backupsForGuest, parseBackupVolid } from "@/lib/backup";
 import { bytesToSize } from "@/lib/utils";
 import { useCan } from "@/components/auth/session-user";
 import { useI18n } from "@/components/i18n/locale-provider";
-import type { BackupOverview } from "@/components/backups/types";
+import type { BackupFile } from "@/components/backups/types";
 
 export function GuestDeleteDialog({
   hostId,
@@ -37,8 +37,8 @@ export function GuestDeleteDialog({
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const { data, isLoading } = useQuery({
-    queryKey: ["backups", hostId],
-    queryFn: () => api<BackupOverview>(`/api/hosts/${hostId}/backups`),
+    queryKey: ["backup-files", hostId],
+    queryFn: () => api<{ files: BackupFile[] }>(`/api/hosts/${hostId}/backups/files`),
     enabled: open && canViewBackups,
     staleTime: 30_000,
   });

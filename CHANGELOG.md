@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.11] – 2026-09-06
+
+### Changed
+
+- Remaining Proxmox guest lists (disk watch, backups, storage, tasks, VMID/IP checks) use the 10s inventory cache. Disk watch no longer prefetches guest IPs.
+- Dashboard overview and guest lists wait at most 3s per host and return the rest if one node hangs.
+- Guest IPs load only for visible running rows (`POST /api/dashboard/guest-ips`), not for the whole inventory.
+- Host status uses cluster-resources storage; backup archives load from `/api/hosts/:id/backups/files` (jobs stay on the overview).
+- Virtualized guest tables keep a sticky header and measure row height. Docker seed is compiled to `dist/seed.cjs`; `tsx` is a devDependency.
+
 ## [1.4.10] – 2026-09-05
 
 ### Changed

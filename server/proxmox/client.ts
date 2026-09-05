@@ -112,7 +112,16 @@ export class ProxmoxClient {
   }
 }
 
-export type ClusterStorageItem = { storage: string; type: string; node?: string };
+export type ClusterStorageItem = {
+  storage: string;
+  type: string;
+  node?: string;
+  content?: string;
+  disk?: number;
+  maxdisk?: number;
+  status?: string;
+  shared?: number;
+};
 
 export type ClusterInventory = {
   nodes: ProxmoxResource[];
@@ -132,6 +141,11 @@ function splitResources(resources: ProxmoxResource[]): ClusterInventory {
         storage: String(r.storage ?? r.id?.replace(/^storage\//, "") ?? ""),
         type: String(r.plugintype ?? "storage"),
         node: r.node,
+        content: r.content,
+        disk: r.disk,
+        maxdisk: r.maxdisk,
+        status: r.status,
+        shared: r.shared,
       })),
   };
 }

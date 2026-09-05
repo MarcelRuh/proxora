@@ -23,7 +23,7 @@ export const GET = apiRoute("vm.create", async (req, session, params) => {
     const nodeNames = nodes.map((n) => n.node);
     const volumes = await collectIsoVolumes(client, nodeNames);
     const catalog = mergeIsoCatalog(volumes.volids);
-    const usedBy = await collectVolumeUsers(client, volumes.volids);
+    const usedBy = await collectVolumeUsers(client, params.id, volumes.volids);
     return {
       nodes: nodeNames,
       node: selected,

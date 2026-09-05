@@ -1,15 +1,17 @@
 import type { ProxmoxClient } from "@/server/proxmox/client";
 import { configReferencesVolume, type VolumeUser } from "@/lib/volume-usage";
+import { loadHostInventory } from "@/server/services/inventory-cache";
 
 export async function collectVolumeUsers(
   client: ProxmoxClient,
+  hostId: string,
   volids: string[],
 ): Promise<Record<string, VolumeUser[]>> {
   const unique = [...new Set(volids.filter(Boolean))];
   const out: Record<string, VolumeUser[]> = Object.fromEntries(unique.map((volid) => [volid, []]));
   if (!unique.length) return out;
 
-  const { vms, containers } = await client.listGuests();
+  const { vms, containers } = await loadHostInventory(client, hostId);
   const jobs = [
     ...vms.map((guest) => ({ kind: "vm" as const, guest, fetch: () => client.vms.config(guest.node, guest.vmid) })),
     ...containers.map((guest) => ({
