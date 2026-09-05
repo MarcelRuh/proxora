@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.2.1] – 2026-09-05
+
+### Fixed
+
+- After a host upgrade the package list is checked again (when the upgrade shell ends or the console is closed). The UI keeps that result instead of reloading the stale Proxmox changelog.
+
 ## [1.2.0] – 2026-09-04
 
 ### Added

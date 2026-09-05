@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmAction } from "@/components/confirm-action";
 import { WebConsole } from "@/components/console/web-console";
 import { api } from "@/lib/api";
+import { mergeHostUpdateDetails } from "@/lib/apt-updates";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { QueryGate } from "@/components/layout/query-gate";
@@ -26,6 +27,8 @@ export default function UpdatesPage() {
   const { t, locale } = useI18n();
   const qc = useQueryClient();
   const [shell, setShell] = useState<{ hostId: string; node: string; name: string } | null>(null);
+  const recheckTimer = useRef<number>(0);
+  useEffect(() => () => window.clearTimeout(recheckTimer.current), []);
   const { data: hosts, error: hostsError, refetch: refetchHosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
@@ -62,44 +65,69 @@ export default function UpdatesPage() {
         }),
       );
     },
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
     placeholderData: (previous) => previous,
   });
 
+  function applyChecked(hostId: string, data: { version: string | null; updates: HostUpdates["updates"] }) {
+    const checkedAt = new Date().toISOString();
+    qc.setQueriesData<HostUpdates[]>({ queryKey: ["update-details"] }, (prev) =>
+      mergeHostUpdateDetails(prev, hostId, data, checkedAt),
+    );
+    void qc.invalidateQueries({ queryKey: ["apt-summary"] });
+    void qc.invalidateQueries({ queryKey: ["hosts"] });
+  }
+
   const checkOne = useMutation({
     mutationFn: ({ hostId, node }: { hostId: string; node?: string }) =>
-      api(`/api/hosts/${hostId}/updates`, {
+      api<{ version: string | null; updates: HostUpdates["updates"] }>(`/api/hosts/${hostId}/updates`, {
         method: "POST",
         body: JSON.stringify({ action: "check", node }),
       }),
-    onSuccess: () => {
+    onSuccess: (data, { hostId }) => {
+      applyChecked(hostId, data);
       toast.success(t("updates.packagesUpdatedOne"));
-      void qc.invalidateQueries({ queryKey: ["update-details"] });
-      void qc.invalidateQueries({ queryKey: ["apt-summary"] });
-      void qc.invalidateQueries({ queryKey: ["hosts"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  function recheckHost(hostId: string, node?: string, delayMs = 0) {
+    window.clearTimeout(recheckTimer.current);
+    const run = () => {
+      if (checkOne.isPending) return;
+      checkOne.mutate({ hostId, node });
+    };
+    if (delayMs <= 0) {
+      run();
+      return;
+    }
+    recheckTimer.current = window.setTimeout(run, delayMs);
+  }
 
   const checkAll = useMutation({
     mutationFn: async () => {
       const ids = hosts?.hosts.map((h) => h.id) ?? [];
       const results = await Promise.allSettled(
-        ids.map((id) =>
-          api(`/api/hosts/${id}/updates`, {
-            method: "POST",
-            body: JSON.stringify({ action: "check" }),
-          }),
-        ),
+        ids.map(async (id) => {
+          const data = await api<{ version: string | null; updates: HostUpdates["updates"] }>(
+            `/api/hosts/${id}/updates`,
+            {
+              method: "POST",
+              body: JSON.stringify({ action: "check" }),
+            },
+          );
+          return { id, data };
+        }),
       );
+      const ok = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
       const failed = results.filter((r) => r.status === "rejected").length;
-      if (failed) throw new Error(t("updates.checkAllFailed", { n: failed }));
+      return { ok, failed };
     },
-    onSuccess: () => {
-      toast.success(t("updates.packagesUpdated"));
-      void qc.invalidateQueries({ queryKey: ["update-details"] });
-      void qc.invalidateQueries({ queryKey: ["apt-summary"] });
-      void qc.invalidateQueries({ queryKey: ["hosts"] });
+    onSuccess: ({ ok, failed }) => {
+      for (const row of ok) applyChecked(row.id, row.data);
+      if (failed) toast.error(t("updates.checkAllFailed", { n: failed }));
+      else toast.success(t("updates.packagesUpdated"));
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -128,7 +156,13 @@ export default function UpdatesPage() {
             <CardDescription>{t("updates.consoleBody", { node: shell.node })}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <WebConsole hostId={shell.hostId} node={shell.node} kind="node" cmd="upgrade" />
+            <WebConsole
+              hostId={shell.hostId}
+              node={shell.node}
+              kind="node"
+              cmd="upgrade"
+              onDisconnected={() => recheckHost(shell.hostId, shell.node, 4_000)}
+            />
             <Button
               variant="outline"
               size="sm"
@@ -137,7 +171,7 @@ export default function UpdatesPage() {
                 const hostId = shell.hostId;
                 const node = shell.node;
                 setShell(null);
-                checkOne.mutate({ hostId, node });
+                recheckHost(hostId, node);
               }}
             >
               {checkOne.isPending ? t("updates.checkingList") : t("updates.closeConsole")}
@@ -183,7 +217,7 @@ export default function UpdatesPage() {
                       size="sm"
                       variant="outline"
                       disabled={checking || checkAll.isPending}
-                      onClick={() => checkOne.mutate({ hostId: row.host.id })}
+                      onClick={() => recheckHost(row.host.id)}
                     >
                       {checking ? t("updates.checking") : t("updates.checkOne")}
                     </Button>

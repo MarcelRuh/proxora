@@ -3,6 +3,7 @@ import {
   APT_REFRESH_INTERVAL_MS,
   aptSummaryFingerprint,
   aptSummaryFromHosts,
+  mergeHostUpdateDetails,
   shouldNotifyAptUpdates,
 } from "@/lib/apt-updates";
 
@@ -29,5 +30,30 @@ describe("APT update notifications", () => {
     expect(summary.total).toBe(5);
     expect(summary.checkedAt).toBe("2026-08-27T12:00:00Z");
     expect(aptSummaryFingerprint(summary.hosts)).toBe("a:3|b:2");
+  });
+
+  it("replaces one host's live update list after a check", () => {
+    const merged = mergeHostUpdateDetails(
+      [
+        {
+          host: { id: "a", aptCheckedAt: "2026-09-04T10:00:00Z" },
+          version: "8.4",
+          updates: [{ node: "pve", count: 11, packages: [] }],
+          error: null,
+        },
+        {
+          host: { id: "b", aptCheckedAt: null },
+          version: "8.4",
+          updates: [{ node: "pve", count: 2, packages: [] }],
+          error: null,
+        },
+      ],
+      "a",
+      { version: "8.4.1", updates: [{ node: "pve", count: 0, packages: [] }] },
+      "2026-09-05T12:00:00Z",
+    );
+    expect(merged?.[0]?.updates).toEqual([{ node: "pve", count: 0, packages: [] }]);
+    expect(merged?.[0]?.host.aptCheckedAt).toBe("2026-09-05T12:00:00Z");
+    expect(merged?.[1]?.updates).toEqual([{ node: "pve", count: 2, packages: [] }]);
   });
 });

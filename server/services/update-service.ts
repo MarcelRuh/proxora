@@ -47,8 +47,19 @@ export async function refreshHostUpdates(hostId: string, user: SessionUser, node
     if (nodes.length === 0) throw new Error("Kein Node gefunden");
     const updates: NodeUpdates[] = [];
     for (const n of nodes) {
-      const upid = await client.updates.refresh(n.node);
-      if (upid) await client.tasks.wait(n.node, upid);
+      let lastError: unknown;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const upid = await client.updates.refresh(n.node);
+          if (upid) await client.tasks.wait(n.node, upid);
+          lastError = null;
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 4_000));
+        }
+      }
+      if (lastError) throw lastError;
       const packages = await client.updates.list(n.node);
       updates.push({ node: n.node, packages, count: packages.length });
     }

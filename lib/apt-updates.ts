@@ -34,3 +34,19 @@ export function aptSummaryFromHosts(
   }, null);
   return { total, checkedAt, hosts: rows };
 }
+
+export function mergeHostUpdateDetails<
+  T extends { host: { id: string; aptCheckedAt?: Date | string | null }; version: string | null; updates: unknown; error: string | null },
+>(
+  rows: T[] | undefined,
+  hostId: string,
+  next: { version: string | null; updates: T["updates"] },
+  checkedAt: string,
+): T[] | undefined {
+  if (!rows) return rows;
+  return rows.map((row) =>
+    row.host.id === hostId
+      ? { ...row, version: next.version, updates: next.updates, error: null, host: { ...row.host, aptCheckedAt: checkedAt } }
+      : row,
+  );
+}

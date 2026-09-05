@@ -16,12 +16,15 @@ type Props = {
   vmid?: number;
   cmd?: "upgrade";
   fill?: boolean;
+  onDisconnected?: () => void;
 };
 
-export function WebConsole({ hostId, node, kind, vmid, cmd, fill }: Props) {
+export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected }: Props) {
   const { t } = useI18n();
   const tRef = useRef(t);
   tRef.current = t;
+  const onDisconnectedRef = useRef(onDisconnected);
+  onDisconnectedRef.current = onDisconnected;
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -67,10 +70,14 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill }: Props) {
     wsRef.current = ws;
     setStatus("connecting");
     setDetail(null);
+    let sawConnected = false;
+    let closedByCleanup = false;
 
     ws.onopen = () => setStatus("connecting");
     ws.onclose = () => {
+      const hadSession = sawConnected;
       setStatus((s) => (s === "error" ? s : "disconnected"));
+      if (!closedByCleanup && hadSession) onDisconnectedRef.current?.();
     };
     ws.onerror = () => setStatus("error");
     ws.onmessage = (event) => {
@@ -84,6 +91,7 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill }: Props) {
           };
           if (parsed.type === "status" && parsed.status) {
             if (parsed.status === "connected") {
+              sawConnected = true;
               setStatus("connected");
               setDetail(null);
             } else {
@@ -125,6 +133,7 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill }: Props) {
     window.addEventListener("resize", onResize);
 
     return () => {
+      closedByCleanup = true;
       disposable.dispose();
       resizeDisp.dispose();
       clearInterval(ping);
