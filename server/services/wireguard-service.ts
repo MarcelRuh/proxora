@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { decryptSecret, encryptSecret, randomToken, sha256 } from "@/lib/crypto";
 import { ValidationError, NotFoundError } from "@/lib/errors";
 import { encodeWireguardInvite, parseWireguardInvite } from "@/lib/wireguard-invite";
+import { buildWg0Conf, serverPeerSnippet } from "@/lib/wireguard-conf";
 import { generateWireguardKeypair, interfaceIpv4, isWireguardKey, peerAllowedIps } from "@/lib/wireguard-keys";
 
 export const WG_SETTING_KEY = "wireguard";
@@ -15,18 +16,22 @@ export type WireguardInterfaceSettings = {
   enabled: boolean;
   instanceName: string;
   address: string;
-  listenPort: number;
-  endpoint: string;
   publicKey: string;
   encryptedPrivateKey: string;
+  serverPublicKey: string;
+  serverEndpoint: string;
+  allowedIPs: string;
+  persistentKeepalive: number;
 };
 
 const interfacePatchSchema = z.object({
   enabled: z.boolean().optional(),
   instanceName: z.string().min(1).max(80).optional(),
   address: z.string().min(7).max(48).optional(),
-  listenPort: z.number().int().min(1).max(65535).optional(),
-  endpoint: z.string().max(200).optional(),
+  serverPublicKey: z.string().max(64).optional(),
+  serverEndpoint: z.string().max(200).optional(),
+  allowedIPs: z.string().max(400).optional(),
+  persistentKeepalive: z.number().int().min(0).max(120).optional(),
 });
 
 const gatewaySchema = z.object({
@@ -41,11 +46,13 @@ export function defaultInterfaceSettings(): WireguardInterfaceSettings {
   return {
     enabled: false,
     instanceName: "Proxora",
-    address: "10.88.0.1/24",
-    listenPort: 51820,
-    endpoint: "",
+    address: "10.88.0.2/24",
     publicKey: keys.publicKey,
     encryptedPrivateKey: encryptSecret(keys.privateKey),
+    serverPublicKey: "",
+    serverEndpoint: "",
+    allowedIPs: "10.88.0.0/24",
+    persistentKeepalive: 25,
   };
 }
 
@@ -66,14 +73,30 @@ export async function loadWireguardInterface(): Promise<WireguardInterfaceSettin
     });
     return created;
   }
+  let serverPublicKey = String(rec.serverPublicKey ?? "").trim();
+  let serverEndpoint = String(rec.serverEndpoint ?? rec.endpoint ?? "").trim();
+  let allowedIPs = String(rec.allowedIPs ?? "10.88.0.0/24").trim() || "10.88.0.0/24";
+  if (!serverPublicKey) {
+    const gateway = await prisma.wireguardPeer.findFirst({
+      where: { kind: WireguardPeerKind.GATEWAY },
+      orderBy: { createdAt: "asc" },
+    });
+    if (gateway) {
+      serverPublicKey = gateway.publicKey;
+      serverEndpoint = gateway.endpoint || serverEndpoint;
+      allowedIPs = gateway.allowedIPs.trim() || allowedIPs;
+    }
+  }
   return {
     enabled: Boolean(rec.enabled),
     instanceName: String(rec.instanceName ?? "Proxora").trim() || "Proxora",
-    address: String(rec.address ?? "10.88.0.1/24"),
-    listenPort: Number(rec.listenPort ?? 51820) || 51820,
-    endpoint: String(rec.endpoint ?? ""),
+    address: String(rec.address ?? "10.88.0.2/24"),
     publicKey: String(rec.publicKey),
     encryptedPrivateKey: String(rec.encryptedPrivateKey),
+    serverPublicKey,
+    serverEndpoint,
+    allowedIPs,
+    persistentKeepalive: Number(rec.persistentKeepalive ?? 25) || 25,
   };
 }
 
@@ -90,7 +113,10 @@ export async function patchWireguardInterface(input: unknown) {
   const patch = interfacePatchSchema.parse(input);
   const current = await loadWireguardInterface();
   if (patch.address && !interfaceIpv4(patch.address)) {
-    throw new ValidationError("WireGuard address must be IPv4 CIDR, e.g. 10.88.0.1/24");
+    throw new ValidationError("WireGuard address must be IPv4 CIDR, e.g. 10.88.0.2/24");
+  }
+  if (patch.serverPublicKey && patch.serverPublicKey.trim() && !isWireguardKey(patch.serverPublicKey)) {
+    throw new ValidationError("Invalid WireGuard server public key");
   }
   const next: WireguardInterfaceSettings = { ...current, ...patch };
   await saveInterface(next);
@@ -102,9 +128,12 @@ export function publicInterface(cfg: WireguardInterfaceSettings) {
     enabled: cfg.enabled,
     instanceName: cfg.instanceName,
     address: cfg.address,
-    listenPort: cfg.listenPort,
-    endpoint: cfg.endpoint,
     publicKey: cfg.publicKey,
+    serverPublicKey: cfg.serverPublicKey,
+    serverEndpoint: cfg.serverEndpoint,
+    allowedIPs: cfg.allowedIPs,
+    persistentKeepalive: cfg.persistentKeepalive,
+    serverPeerSnippet: serverPeerSnippet(cfg.publicKey, cfg.address),
   };
 }
 
@@ -118,27 +147,34 @@ export async function writeWireguardConfig(cfg?: WireguardInterfaceSettings) {
   }
   await unlink(disabledPath).catch(() => undefined);
   const privateKey = decryptSecret(settings.encryptedPrivateKey);
-  const peers = await prisma.wireguardPeer.findMany({ orderBy: { name: "asc" } });
-  const lines = [
-    "[Interface]",
-    `PrivateKey = ${privateKey}`,
-    `Address = ${settings.address}`,
-    `ListenPort = ${settings.listenPort}`,
-    "",
-  ];
-  for (const peer of peers) {
-    if (!isWireguardKey(peer.publicKey)) continue;
+  const gateways = await prisma.wireguardPeer.findMany({
+    where: { kind: WireguardPeerKind.GATEWAY },
+    orderBy: { name: "asc" },
+  });
+  const peers = [];
+  if (settings.serverPublicKey && settings.serverEndpoint) {
+    peers.push({
+      publicKey: settings.serverPublicKey,
+      endpoint: settings.serverEndpoint,
+      allowedIPs: settings.allowedIPs || "10.88.0.0/24",
+      persistentKeepalive: settings.persistentKeepalive,
+    });
+  }
+  for (const peer of gateways) {
     const allowed = peerAllowedIps(peer.address, peer.allowedIPs);
     if (!allowed) continue;
-    lines.push("[Peer]");
-    lines.push(`PublicKey = ${peer.publicKey}`);
-    if (peer.endpoint.trim()) lines.push(`Endpoint = ${peer.endpoint.trim()}`);
-    lines.push(`AllowedIPs = ${allowed}`);
-    if (peer.persistentKeepalive > 0) lines.push(`PersistentKeepalive = ${peer.persistentKeepalive}`);
-    lines.push("");
+    peers.push({
+      publicKey: peer.publicKey,
+      endpoint: peer.endpoint,
+      allowedIPs: allowed,
+      persistentKeepalive: peer.persistentKeepalive || 25,
+    });
   }
   const confPath = path.join(WG_CONFIG_DIR, "wg0.conf");
-  await writeFile(confPath, `${lines.join("\n").trim()}\n`, { encoding: "utf8", mode: 0o600 });
+  await writeFile(confPath, buildWg0Conf({ privateKey, address: settings.address, peers }), {
+    encoding: "utf8",
+    mode: 0o600,
+  });
 }
 
 export function serializePeer(peer: WireguardPeer) {
@@ -156,15 +192,14 @@ export function serializePeer(peer: WireguardPeer) {
 }
 
 export function buildInvite(cfg: WireguardInterfaceSettings, token: string) {
-  const ip = interfaceIpv4(cfg.address) ?? "10.88.0.1";
-  const endpoint = cfg.endpoint.trim() || `0.0.0.0:${cfg.listenPort}`;
+  const ip = interfaceIpv4(cfg.address) ?? "10.88.0.2";
   return encodeWireguardInvite({
     v: 1,
     name: cfg.instanceName,
     publicKey: cfg.publicKey,
-    endpoint,
+    endpoint: cfg.serverEndpoint,
     address: ip,
-    listenPort: cfg.listenPort,
+    listenPort: 51820,
     token,
   });
 }
@@ -186,20 +221,15 @@ export async function createProxoraPeer(name: string) {
 export async function addGatewayPeer(input: unknown) {
   const body = gatewaySchema.parse(input);
   if (!isWireguardKey(body.publicKey)) throw new ValidationError("Invalid WireGuard public key");
-  const inbound = randomToken(32);
-  const peer = await prisma.wireguardPeer.create({
-    data: {
-      name: body.name.trim(),
-      kind: WireguardPeerKind.GATEWAY,
-      publicKey: body.publicKey.trim(),
-      endpoint: body.endpoint.trim(),
-      allowedIPs: body.allowedIPs.trim(),
-      inboundTokenHash: sha256(inbound),
-      encryptedInboundToken: encryptSecret(inbound),
-    },
-  });
-  await writeWireguardConfig();
-  return serializePeer(peer);
+  const current = await loadWireguardInterface();
+  const next: WireguardInterfaceSettings = {
+    ...current,
+    serverPublicKey: body.publicKey.trim(),
+    serverEndpoint: body.endpoint.trim(),
+    allowedIPs: body.allowedIPs.trim() || current.allowedIPs,
+  };
+  await saveInterface(next);
+  return publicInterface(next);
 }
 
 export async function importWireguardInvite(raw: string) {
@@ -219,14 +249,13 @@ export async function importWireguardInvite(raw: string) {
     where: { publicKey: invite.publicKey, kind: WireguardPeerKind.PROXORA },
   });
   const inbound = randomToken(32);
-  const endpoint = invite.endpoint.includes(":") ? invite.endpoint : `${invite.endpoint}:${invite.listenPort}`;
   const data = {
     name: invite.name,
     kind: WireguardPeerKind.PROXORA,
     publicKey: invite.publicKey,
-    endpoint,
+    endpoint: "",
     address: theirIp ?? invite.address,
-    allowedIPs: theirIp ? `${theirIp}/32` : "",
+    allowedIPs: "",
     encryptedOutboundToken: encryptSecret(invite.token),
   };
   const peer = existingKey

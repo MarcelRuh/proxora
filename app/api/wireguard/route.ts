@@ -17,9 +17,10 @@ import {
 
 export const GET = apiRoute("peers.manage", async () => {
   const cfg = await loadWireguardInterface();
+  const peers = (await listPeersWithShares()).filter((p) => p.kind === "PROXORA");
   return json({
     interface: publicInterface(cfg),
-    peers: await listPeersWithShares(),
+    peers,
   });
 });
 
@@ -53,15 +54,14 @@ export const POST = apiRoute("peers.manage", async (req) => {
     return json(await importWireguardInvite(body.invite));
   }
   if (body.action === "gateway") {
-    return json(
-      await addGatewayPeer({
+    return json({
+      interface: await addGatewayPeer({
         name: body.name,
         publicKey: body.publicKey,
         endpoint: body.endpoint,
         allowedIPs: body.allowedIPs,
       }),
-      201,
-    );
+    });
   }
   if (body.action === "invite") {
     if (!body.peerId) throw new ValidationError("peerId required");

@@ -10,11 +10,11 @@ Next.js UI + Route Handlers
     │
     ├── PostgreSQL (users, RBAC, hosts, audit, jobs)
     ├── WebSocket console proxy
-    └── WireGuard sidecar (shared netns)
+    └── WireGuard sidecar (shared netns, client to external WG server VM)
           │
           ├── Host A  → Proxmox API :8006
           ├── Host B  → Proxmox API :8006
-          └── Peer Proxora → shared hosts (federation HTTP/WS)
+          └── Peer Proxora (over WG hub) → shared hosts (federation HTTP/WS)
 ```
 
 ## Layers

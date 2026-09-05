@@ -31,9 +31,12 @@ type WgPayload = {
     enabled: boolean;
     instanceName: string;
     address: string;
-    listenPort: number;
-    endpoint: string;
     publicKey: string;
+    serverPublicKey: string;
+    serverEndpoint: string;
+    allowedIPs: string;
+    persistentKeepalive: number;
+    serverPeerSnippet: string;
   };
   peers: PeerRow[];
 };
@@ -56,10 +59,9 @@ export function WireguardSection() {
   const [peerName, setPeerName] = useState("");
   const [inviteIn, setInviteIn] = useState("");
   const [inviteOut, setInviteOut] = useState("");
-  const [gw, setGw] = useState({ name: "", publicKey: "", endpoint: "", allowedIPs: "10.0.0.0/24" });
 
   const iface = wg?.interface;
-  const peers = wg?.peers ?? [];
+  const peers = (wg?.peers ?? []).filter((p) => p.kind === "PROXORA");
 
   async function patch(body: Record<string, unknown>) {
     await api("/api/wireguard", { method: "PATCH", body: JSON.stringify(body) });
@@ -87,24 +89,78 @@ export function WireguardSection() {
       <CardContent className="space-y-6">
         <p className="text-sm text-muted-foreground">{t("peers.body")}</p>
         {iface ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex items-center gap-2 text-sm sm:col-span-2">
-              <input type="checkbox" checked={iface.enabled} onChange={(e) => void patch({ enabled: e.target.checked })} />
-              {t("peers.enabled")}
-            </label>
-            <Field label={t("peers.instanceName")} value={iface.instanceName} onBlur={(instanceName) => void patch({ instanceName })} />
-            <Field label={t("peers.address")} value={iface.address} onBlur={(address) => void patch({ address })} />
-            <Field label={t("peers.listenPort")} value={String(iface.listenPort)} onBlur={(v) => void patch({ listenPort: Number(v) || 51820 })} />
-            <Field label={t("peers.endpoint")} value={iface.endpoint} onBlur={(endpoint) => void patch({ endpoint })} />
-            <div className="space-y-1 sm:col-span-2">
-              <Label>{t("peers.publicKey")}</Label>
-              <Input readOnly value={iface.publicKey} className="font-mono text-xs" />
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                <input type="checkbox" checked={iface.enabled} onChange={(e) => void patch({ enabled: e.target.checked })} />
+                {t("peers.enabled")}
+              </label>
+              <Field label={t("peers.instanceName")} value={iface.instanceName} onBlur={(instanceName) => void patch({ instanceName })} />
+              <Field label={t("peers.address")} value={iface.address} onBlur={(address) => void patch({ address })} />
             </div>
-          </div>
+
+            <div className="space-y-3 rounded-lg border border-border p-3">
+              <p className="text-sm font-medium">{t("peers.gatewayTitle")}</p>
+              <p className="text-xs text-muted-foreground">{t("peers.gatewayBody")}</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field
+                  label={t("peers.serverEndpoint")}
+                  value={iface.serverEndpoint}
+                  onBlur={(serverEndpoint) => void patch({ serverEndpoint })}
+                />
+                <Field
+                  label={t("peers.allowedIps")}
+                  value={iface.allowedIPs}
+                  onBlur={(allowedIPs) => void patch({ allowedIPs })}
+                />
+                <div className="space-y-1 sm:col-span-2">
+                  <Label>{t("peers.serverPublicKey")}</Label>
+                  <Input
+                    defaultValue={iface.serverPublicKey}
+                    key={iface.serverPublicKey}
+                    className="font-mono text-xs"
+                    onBlur={(e) => {
+                      if (e.target.value !== iface.serverPublicKey) void patch({ serverPublicKey: e.target.value });
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 rounded-lg border border-border p-3">
+              <p className="text-sm font-medium">{t("peers.clientSnippetTitle")}</p>
+              <p className="text-xs text-muted-foreground">{t("peers.clientSnippetBody")}</p>
+              <div className="space-y-1">
+                <Label>{t("peers.publicKey")}</Label>
+                <Input readOnly value={iface.publicKey} className="font-mono text-xs" />
+              </div>
+              <textarea
+                className="h-24 w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs"
+                readOnly
+                value={iface.serverPeerSnippet}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(iface.serverPeerSnippet);
+                    toast.success(t("peers.copied"));
+                  } catch {
+                    toast.error(t("common.failed"));
+                  }
+                }}
+              >
+                {t("peers.copySnippet")}
+              </Button>
+            </div>
+          </>
         ) : null}
 
         <div className="space-y-2 rounded-lg border border-border p-3">
           <p className="text-sm font-medium">{t("peers.inviteColleague")}</p>
+          <p className="text-xs text-muted-foreground">{t("peers.inviteBody")}</p>
           <div className="flex flex-wrap gap-2">
             <Input
               placeholder={t("peers.peerName")}
@@ -154,32 +210,6 @@ export function WireguardSection() {
           </Button>
         </div>
 
-        <div className="space-y-2 rounded-lg border border-border p-3">
-          <p className="text-sm font-medium">{t("peers.gatewayTitle")}</p>
-          <p className="text-xs text-muted-foreground">{t("peers.gatewayBody")}</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Input placeholder={t("peers.peerName")} value={gw.name} onChange={(e) => setGw({ ...gw, name: e.target.value })} />
-            <Input placeholder={t("peers.endpoint")} value={gw.endpoint} onChange={(e) => setGw({ ...gw, endpoint: e.target.value })} />
-            <Input placeholder={t("peers.publicKey")} className="font-mono text-xs sm:col-span-2" value={gw.publicKey} onChange={(e) => setGw({ ...gw, publicKey: e.target.value })} />
-            <Input placeholder={t("peers.allowedIps")} className="font-mono text-xs sm:col-span-2" value={gw.allowedIPs} onChange={(e) => setGw({ ...gw, allowedIPs: e.target.value })} />
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={async () => {
-              try {
-                await post({ action: "gateway", ...gw });
-                setGw({ name: "", publicKey: "", endpoint: "", allowedIPs: "10.0.0.0/24" });
-                toast.success(t("peers.gatewayAdded"));
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : t("common.failed"));
-              }
-            }}
-          >
-            {t("peers.addGateway")}
-          </Button>
-        </div>
-
         {peers.map((peer) => (
           <PeerCard
             key={peer.id}
@@ -208,9 +238,13 @@ function Field({ label, value, onBlur }: { label: string; value: string; onBlur:
   return (
     <div className="space-y-1">
       <Label>{label}</Label>
-      <Input defaultValue={value} key={value} onBlur={(e) => {
-        if (e.target.value !== value) onBlur(e.target.value);
-      }} />
+      <Input
+        defaultValue={value}
+        key={value}
+        onBlur={(e) => {
+          if (e.target.value !== value) onBlur(e.target.value);
+        }}
+      />
     </div>
   );
 }
@@ -244,22 +278,20 @@ function PeerCard({
         <div>
           <p className="font-medium">{peer.name}</p>
           <p className="text-xs text-muted-foreground">
-            {peer.kind === "GATEWAY" ? t("peers.kindGateway") : peer.paired ? t("peers.paired") : t("peers.waiting")}
+            {peer.paired ? t("peers.paired") : t("peers.waiting")}
             {peer.address ? ` · ${peer.address}` : ""}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {peer.kind === "PROXORA" ? (
-            <Button size="sm" variant="outline" onClick={() => void onInvite().catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")))}>
-              {t("peers.showInvite")}
-            </Button>
-          ) : null}
+          <Button size="sm" variant="outline" onClick={() => void onInvite().catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")))}>
+            {t("peers.showInvite")}
+          </Button>
           <Button size="sm" variant="destructive" onClick={() => void onDelete().catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")))}>
             {t("peers.remove")}
           </Button>
         </div>
       </div>
-      {peer.kind === "PROXORA" && localHosts.length ? (
+      {localHosts.length ? (
         <div className="space-y-2">
           <p className="text-xs font-medium">{t("peers.shareHosts")}</p>
           {localHosts.map((host) => (

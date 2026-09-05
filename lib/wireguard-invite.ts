@@ -32,11 +32,11 @@ export function parseWireguardInvite(raw: string): WireguardInvite {
   const rec = parsed as Record<string, unknown>;
   const name = String(rec.name ?? "").trim();
   const publicKey = String(rec.publicKey ?? "").trim();
-  const endpoint = String(rec.endpoint ?? "").trim();
   const address = String(rec.address ?? "").trim();
   const token = String(rec.token ?? "").trim();
-  const listenPort = Number(rec.listenPort ?? 51820);
-  if (!name || !isWireguardKey(publicKey) || !endpoint || !interfaceIpv4ish(address) || !token) {
+  const endpoint = String(rec.endpoint ?? "").trim();
+  const listenPort = Number(rec.listenPort ?? 51820) || 51820;
+  if (!name || !isWireguardKey(publicKey) || !interfaceIpv4ish(address) || !token) {
     throw new Error("Invalid invite");
   }
   if (!Number.isInteger(listenPort) || listenPort < 1 || listenPort > 65535) {

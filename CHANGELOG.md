@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.3.1] – 2026-09-05
+
+### Changed
+
+- WireGuard is a **client** to an external server VM. Proxora no longer listens on UDP 51820 or peers colleague instances directly; federation HTTP uses the WG addresses through the hub.
+
 ## [1.3.0] – 2026-09-05
 
 ### Added
