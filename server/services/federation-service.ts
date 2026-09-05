@@ -79,7 +79,7 @@ export async function syncPeerHosts() {
     if (!peer.encryptedOutboundToken || !peer.address) continue;
     try {
       const token = outboundToken(peer);
-      const res = await fetch(`${peerHttpBase(peer.address)}/api/federation/hosts`, {
+      const res = await fetch(`${peerHttpBase(peer)}/api/federation/hosts`, {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         signal: AbortSignal.timeout(12_000),
       });

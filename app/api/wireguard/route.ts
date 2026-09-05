@@ -14,6 +14,7 @@ import {
   patchWireguardInterface,
   publicInterface,
   setPeerShares,
+  updateProxoraPeer,
 } from "@/server/services/wireguard-service";
 
 export const GET = apiRoute("peers.manage", async () => {
@@ -33,11 +34,13 @@ export const PATCH = apiRoute("peers.manage", async (req) => {
 export const POST = apiRoute("peers.manage", async (req) => {
   const body = z
     .object({
-      action: z.enum(["create-peer", "import", "import-conf", "gateway", "invite", "shares", "delete-peer"]),
+      action: z.enum(["create-peer", "import", "import-conf", "gateway", "invite", "shares", "delete-peer", "update-peer"]),
       name: z.string().optional(),
       invite: z.string().optional(),
       config: z.string().optional(),
       peerId: z.string().optional(),
+      address: z.string().optional(),
+      proxoraPort: z.number().int().optional(),
       publicKey: z.string().optional(),
       endpoint: z.string().optional(),
       allowedIPs: z.string().optional(),
@@ -48,7 +51,7 @@ export const POST = apiRoute("peers.manage", async (req) => {
   if (body.action === "create-peer") {
     const name = body.name?.trim();
     if (!name) throw new ValidationError("Name required");
-    const created = await createProxoraPeer(name);
+    const created = await createProxoraPeer(name, body.address, body.proxoraPort);
     return json(created, 201);
   }
   if (body.action === "import") {
@@ -73,6 +76,16 @@ export const POST = apiRoute("peers.manage", async (req) => {
   if (body.action === "invite") {
     if (!body.peerId) throw new ValidationError("peerId required");
     return json({ invite: await inviteForPeer(body.peerId) });
+  }
+  if (body.action === "update-peer") {
+    if (!body.peerId) throw new ValidationError("peerId required");
+    return json({
+      peer: await updateProxoraPeer(body.peerId, {
+        name: body.name,
+        address: body.address,
+        proxoraPort: body.proxoraPort,
+      }),
+    });
   }
   if (body.action === "shares") {
     if (!body.peerId) throw new ValidationError("peerId required");

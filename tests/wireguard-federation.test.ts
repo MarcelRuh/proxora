@@ -132,38 +132,32 @@ PersistentKeepalive = 25
 });
 
 describe("wireguard invite", () => {
-  it("round-trips invite payloads", () => {
-    const keys = generateWireguardKeypair();
-    const encoded = encodeWireguardInvite({
-      v: 1,
-      name: "Studio",
-      publicKey: keys.publicKey,
-      endpoint: "192.168.10.50:51820",
-      address: "10.88.0.2",
-      listenPort: 51820,
-      token: "secret-token",
-    });
-    expect(encoded.startsWith("proxora1.")).toBe(true);
-    expect(parseWireguardInvite(encoded)).toMatchObject({
-      name: "Studio",
-      publicKey: keys.publicKey,
-      address: "10.88.0.2",
-      token: "secret-token",
-    });
+  it("round-trips v2 invites", () => {
+    const encoded = encodeWireguardInvite({ name: "Studio", token: "secret-token" });
+    expect(encoded.startsWith("proxora2.")).toBe(true);
+    expect(parseWireguardInvite(encoded)).toMatchObject({ v: 2, name: "Studio", token: "secret-token" });
   });
 
-  it("accepts invites without a public UDP endpoint", () => {
+  it("still parses v1 invites", () => {
     const keys = generateWireguardKeypair();
-    const encoded = encodeWireguardInvite({
+    const encoded = `proxora1.${Buffer.from(
+      JSON.stringify({
+        v: 1,
+        name: "Studio",
+        publicKey: keys.publicKey,
+        endpoint: "",
+        address: "10.88.0.3",
+        listenPort: 51820,
+        token: "secret-token",
+      }),
+      "utf8",
+    ).toString("base64url")}`;
+    expect(parseWireguardInvite(encoded)).toMatchObject({
       v: 1,
       name: "Studio",
-      publicKey: keys.publicKey,
-      endpoint: "",
       address: "10.88.0.3",
-      listenPort: 51820,
       token: "secret-token",
     });
-    expect(parseWireguardInvite(encoded).address).toBe("10.88.0.3");
   });
 
   it("rejects garbage", () => {

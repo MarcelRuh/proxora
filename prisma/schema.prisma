@@ -239,6 +239,7 @@ model WireguardPeer {
   publicKey                String            @default("")
   endpoint                 String            @default("")
   address                  String            @default("")
+  proxoraPort              Int               @default(3000)
   allowedIPs               String            @default("")
   persistentKeepalive      Int               @default(25)
   inboundTokenHash         String            @unique

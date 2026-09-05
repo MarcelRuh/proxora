@@ -8,6 +8,7 @@ import { ValidationError, NotFoundError } from "@/lib/errors";
 import { encodeWireguardInvite, parseWireguardInvite } from "@/lib/wireguard-invite";
 import { buildWg0Conf, parseWgQuickConf, sanitizeClientAllowedIps, serverPeerSnippet } from "@/lib/wireguard-conf";
 import { generateWireguardKeypair, interfaceIpv4, isWireguardKey, peerAllowedIps, publicKeyFromPrivate } from "@/lib/wireguard-keys";
+import { hostClientCache } from "@/server/proxmox/client-cache";
 
 export const WG_SETTING_KEY = "wireguard";
 export const WG_CONFIG_DIR = process.env.WG_CONFIG_DIR ?? "/wireguard";
@@ -191,37 +192,65 @@ export function serializePeer(peer: WireguardPeer) {
     publicKey: peer.publicKey,
     endpoint: peer.endpoint,
     address: peer.address,
+    proxoraPort: peer.proxoraPort,
     allowedIPs: peer.allowedIPs,
-    paired: Boolean(peer.publicKey && peer.encryptedOutboundToken),
+    paired: Boolean(peer.encryptedOutboundToken),
     lastSeenAt: peer.lastSeenAt?.toISOString() ?? null,
   };
 }
 
 export function buildInvite(cfg: WireguardInterfaceSettings, token: string) {
-  const ip = interfaceIpv4(cfg.address) ?? "10.88.0.2";
-  return encodeWireguardInvite({
-    v: 1,
-    name: cfg.instanceName,
-    publicKey: cfg.publicKey,
-    endpoint: cfg.serverEndpoint,
-    address: ip,
-    listenPort: 51820,
-    token,
-  });
+  return encodeWireguardInvite({ name: cfg.instanceName, token });
 }
 
-export async function createProxoraPeer(name: string) {
+function isReachableHost(value: string): boolean {
+  const host = value.trim().split("/")[0]?.trim() ?? "";
+  if (interfaceIpv4(host)) return true;
+  return /^[a-zA-Z0-9][a-zA-Z0-9.-]{0,250}$/.test(host);
+}
+
+export async function createProxoraPeer(name: string, address = "", proxoraPort = 3000) {
   const cfg = await loadWireguardInterface();
+  const host = address.trim();
+  if (host && !isReachableHost(host)) throw new ValidationError("Invalid Proxora IP");
+  const port = Number.isInteger(proxoraPort) && proxoraPort >= 1 && proxoraPort <= 65535 ? proxoraPort : 3000;
   const inbound = randomToken(32);
   const peer = await prisma.wireguardPeer.create({
     data: {
       name: name.trim(),
       kind: WireguardPeerKind.PROXORA,
+      address: host,
+      proxoraPort: port,
       inboundTokenHash: sha256(inbound),
       encryptedInboundToken: encryptSecret(inbound),
     },
   });
   return { peer: serializePeer(peer), invite: buildInvite(cfg, inbound) };
+}
+
+export async function updateProxoraPeer(peerId: string, input: { name?: string; address?: string; proxoraPort?: number }) {
+  const peer = await prisma.wireguardPeer.findUnique({ where: { id: peerId } });
+  if (!peer) throw new NotFoundError("Peer not found");
+  if (peer.kind !== WireguardPeerKind.PROXORA) throw new ValidationError("Only Proxora peers can be updated");
+  const data: { name?: string; address?: string; proxoraPort?: number } = {};
+  if (input.name?.trim()) data.name = input.name.trim();
+  if (input.address !== undefined) {
+    const host = input.address.trim();
+    if (host && !isReachableHost(host)) throw new ValidationError("Invalid Proxora IP");
+    data.address = host;
+  }
+  if (input.proxoraPort !== undefined) {
+    if (!Number.isInteger(input.proxoraPort) || input.proxoraPort < 1 || input.proxoraPort > 65535) {
+      throw new ValidationError("Invalid port");
+    }
+    data.proxoraPort = input.proxoraPort;
+  }
+  const next = await prisma.wireguardPeer.update({ where: { id: peerId }, data });
+  if (data.address !== undefined || data.proxoraPort !== undefined) {
+    const hosts = await prisma.host.findMany({ where: { peerId }, select: { id: true } });
+    for (const host of hosts) hostClientCache.invalidate(host.id);
+  }
+  return serializePeer(next);
 }
 
 export async function addGatewayPeer(input: unknown) {
@@ -280,34 +309,47 @@ export async function importWireguardInvite(raw: string) {
     throw new ValidationError("Invalid invite");
   }
   const cfg = await loadWireguardInterface();
-  const ourIp = interfaceIpv4(cfg.address);
-  const theirIp = interfaceIpv4(invite.address.includes("/") ? invite.address : `${invite.address}/32`);
-  if (ourIp && theirIp && ourIp === theirIp) {
-    throw new ValidationError("Both Proxoras use the same WireGuard address. Change yours (e.g. 10.88.0.2/24).");
-  }
-  const existingKey = await prisma.wireguardPeer.findFirst({
-    where: { publicKey: invite.publicKey, kind: WireguardPeerKind.PROXORA },
+  const existingKey = invite.publicKey
+    ? await prisma.wireguardPeer.findFirst({
+        where: { publicKey: invite.publicKey, kind: WireguardPeerKind.PROXORA },
+      })
+    : null;
+  const waiting = await prisma.wireguardPeer.findFirst({
+    where: { kind: WireguardPeerKind.PROXORA, encryptedOutboundToken: "" },
+    orderBy: { createdAt: "desc" },
   });
   const inbound = randomToken(32);
+  const suggestedHost = (invite.address ?? "").split("/")[0]?.trim() ?? "";
   const data = {
     name: invite.name,
     kind: WireguardPeerKind.PROXORA,
-    publicKey: invite.publicKey,
-    endpoint: "",
-    address: theirIp ?? invite.address,
-    allowedIPs: "",
+    publicKey: invite.publicKey ?? "",
     encryptedOutboundToken: encryptSecret(invite.token),
   };
   const peer = existingKey
-    ? await prisma.wireguardPeer.update({ where: { id: existingKey.id }, data })
-    : await prisma.wireguardPeer.create({
+    ? await prisma.wireguardPeer.update({
+        where: { id: existingKey.id },
         data: {
           ...data,
-          inboundTokenHash: sha256(inbound),
-          encryptedInboundToken: encryptSecret(inbound),
+          address: existingKey.address || suggestedHost,
         },
-      });
-  await writeWireguardConfig();
+      })
+    : waiting
+      ? await prisma.wireguardPeer.update({
+          where: { id: waiting.id },
+          data: {
+            ...data,
+            address: waiting.address || suggestedHost,
+          },
+        })
+      : await prisma.wireguardPeer.create({
+          data: {
+            ...data,
+            address: suggestedHost,
+            inboundTokenHash: sha256(inbound),
+            encryptedInboundToken: encryptSecret(inbound),
+          },
+        });
   const token = decryptSecret(peer.encryptedInboundToken);
   return { peer: serializePeer(peer), invite: buildInvite(cfg, token) };
 }
@@ -366,10 +408,11 @@ export async function findPeerByInboundToken(token: string) {
   return prisma.wireguardPeer.findUnique({ where: { inboundTokenHash: hash } });
 }
 
-export function peerHttpBase(address: string): string {
-  const ip = interfaceIpv4(address.includes("/") ? address : `${address}/32`) ?? address.trim();
-  const port = process.env.PORT ?? "3000";
-  return `http://${ip}:${port}`;
+export function peerHttpBase(peer: { address: string; proxoraPort?: number }): string {
+  const host = peer.address.trim().split("/")[0]?.trim() ?? "";
+  if (!host) throw new ValidationError("Set the colleague's Proxora IP first");
+  const port = peer.proxoraPort && peer.proxoraPort > 0 ? peer.proxoraPort : 3000;
+  return `http://${host}:${port}`;
 }
 
 export function outboundToken(peer: WireguardPeer): string {

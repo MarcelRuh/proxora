@@ -20,6 +20,7 @@ type PeerRow = {
   publicKey: string;
   endpoint: string;
   address: string;
+  proxoraPort: number;
   allowedIPs: string;
   paired: boolean;
   lastSeenAt: string | null;
@@ -58,6 +59,7 @@ export function WireguardSection() {
   });
   const localHosts = (hostData?.hosts ?? []).filter((h) => h.origin !== "PEER");
   const [peerName, setPeerName] = useState("");
+  const [peerIp, setPeerIp] = useState("");
   const [inviteIn, setInviteIn] = useState("");
   const [inviteOut, setInviteOut] = useState("");
   const [confIn, setConfIn] = useState("");
@@ -84,155 +86,133 @@ export function WireguardSection() {
   if (!can) return null;
 
   return (
-    <Card>
-      <CardContent className="space-y-6 pt-6">
-        {iface ? (
-          <>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="flex items-center gap-2 text-sm sm:col-span-2">
+    <div className="space-y-6">
+      <Card>
+        <CardContent className="space-y-4 pt-6">
+          <div>
+            <p className="text-sm font-medium">{t("peers.tunnelTitle")}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t("peers.tunnelBody")}</p>
+          </div>
+          {iface ? (
+            <>
+              <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={iface.enabled} onChange={(e) => void patch({ enabled: e.target.checked })} />
                 {t("peers.enabled")}
               </label>
               <Field label={t("peers.instanceName")} value={iface.instanceName} onBlur={(instanceName) => void patch({ instanceName })} />
-              <Field label={t("peers.address")} value={iface.address} onBlur={(address) => void patch({ address })} />
-            </div>
-
-            <div className="space-y-3 rounded-lg border border-border p-3">
-              <p className="text-sm font-medium">{t("peers.importConfTitle")}</p>
-              <p className="text-xs text-muted-foreground">{t("peers.importConfBody")}</p>
-              <input
-                type="file"
-                accept=".conf,.txt,text/plain"
-                className="block text-sm file:mr-2 file:rounded-md file:border file:border-input file:bg-transparent file:px-3 file:py-1"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = "";
-                  if (!file) return;
-                  void file.text().then(async (text) => {
-                    setConfIn(text);
+              <div className="space-y-2">
+                <p className="text-sm font-medium">{t("peers.importConfTitle")}</p>
+                <p className="text-xs text-muted-foreground">{t("peers.importConfBody")}</p>
+                <input
+                  type="file"
+                  accept=".conf,.txt,text/plain"
+                  className="block text-sm file:mr-2 file:rounded-md file:border file:border-input file:bg-transparent file:px-3 file:py-1"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!file) return;
+                    void file.text().then(async (text) => {
+                      setConfIn(text);
+                      try {
+                        await post({ action: "import-conf", config: text });
+                        setConfIn("");
+                        toast.success(t("peers.importConfDone"));
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : t("common.failed"));
+                      }
+                    });
+                  }}
+                />
+                <textarea
+                  className="h-28 w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs"
+                  placeholder={t("peers.importConfPaste")}
+                  value={confIn}
+                  onChange={(e) => setConfIn(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={async () => {
                     try {
-                      await post({ action: "import-conf", config: text });
+                      await post({ action: "import-conf", config: confIn });
                       setConfIn("");
                       toast.success(t("peers.importConfDone"));
-                    } catch (err) {
-                      toast.error(err instanceof Error ? err.message : t("common.failed"));
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : t("common.failed"));
                     }
-                  });
-                }}
-              />
-              <textarea
-                className="h-28 w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs"
-                placeholder={t("peers.importConfPaste")}
-                value={confIn}
-                onChange={(e) => setConfIn(e.target.value)}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    await post({ action: "import-conf", config: confIn });
-                    setConfIn("");
-                    toast.success(t("peers.importConfDone"));
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : t("common.failed"));
-                  }
-                }}
-              >
-                {t("peers.importConfButton")}
-              </Button>
-            </div>
-
-            <div className="space-y-3 rounded-lg border border-border p-3">
-              <p className="text-sm font-medium">{t("peers.gatewayTitle")}</p>
-              <p className="text-xs text-muted-foreground">{t("peers.gatewayBody")}</p>
+                  }}
+                >
+                  {t("peers.importConfButton")}
+                </Button>
+              </div>
               {iface.hasPresharedKey ? <p className="text-xs text-muted-foreground">{t("peers.hasPresharedKey")}</p> : null}
               <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={t("peers.address")} value={iface.address} onBlur={(address) => void patch({ address })} />
                 <Field
                   label={t("peers.serverEndpoint")}
                   value={iface.serverEndpoint}
                   onBlur={(serverEndpoint) => void patch({ serverEndpoint })}
                 />
-                <Field
-                  label={t("peers.allowedIps")}
-                  value={iface.allowedIPs}
-                  onBlur={(allowedIPs) => void patch({ allowedIPs })}
-                />
                 <div className="space-y-1 sm:col-span-2">
-                  <Label>{t("peers.serverPublicKey")}</Label>
+                  <Label>{t("peers.allowedIps")}</Label>
                   <Input
-                    defaultValue={iface.serverPublicKey}
-                    key={iface.serverPublicKey}
+                    defaultValue={iface.allowedIPs}
+                    key={iface.allowedIPs}
                     className="font-mono text-xs"
                     onBlur={(e) => {
-                      if (e.target.value !== iface.serverPublicKey) void patch({ serverPublicKey: e.target.value });
+                      if (e.target.value !== iface.allowedIPs) void patch({ allowedIPs: e.target.value });
                     }}
                   />
+                  <p className="text-xs text-muted-foreground">{t("peers.allowedIpsHint")}</p>
                 </div>
               </div>
-            </div>
-
-            <div className="space-y-2 rounded-lg border border-border p-3">
-              <p className="text-sm font-medium">{t("peers.clientSnippetTitle")}</p>
-              <p className="text-xs text-muted-foreground">{t("peers.clientSnippetBody")}</p>
-              <div className="space-y-1">
-                <Label>{t("peers.publicKey")}</Label>
-                <Input readOnly value={iface.publicKey} className="font-mono text-xs" />
-              </div>
-              <textarea
-                className="h-24 w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs"
-                readOnly
-                value={iface.serverPeerSnippet}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(iface.serverPeerSnippet);
-                    toast.success(t("peers.copied"));
-                  } catch {
-                    toast.error(t("common.failed"));
-                  }
-                }}
-              >
-                {t("peers.copySnippet")}
-              </Button>
-            </div>
-          </>
-        ) : null}
-
-        <div className="space-y-2 rounded-lg border border-border p-3">
-          <p className="text-sm font-medium">{t("peers.inviteColleague")}</p>
-          <p className="text-xs text-muted-foreground">{t("peers.inviteBody")}</p>
-          <div className="flex flex-wrap gap-2">
-            <Input
-              placeholder={t("peers.peerName")}
-              value={peerName}
-              onChange={(e) => setPeerName(e.target.value)}
-              className="max-w-56"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={async () => {
-                try {
-                  const res = await post({ action: "create-peer", name: peerName || "Kollege" });
-                  setInviteOut(res.invite ?? "");
-                  toast.success(t("peers.peerCreated"));
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : t("common.failed"));
-                }
-              }}
-            >
-              {t("peers.createInvite")}
-            </Button>
-          </div>
-          {inviteOut ? (
-            <textarea className="mt-2 h-24 w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs" readOnly value={inviteOut} />
+            </>
           ) : null}
-          <Label className="mt-2 block">{t("peers.pasteInvite")}</Label>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="space-y-4 pt-6">
+          <div>
+            <p className="text-sm font-medium">{t("peers.inviteColleague")}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t("peers.inviteBody")}</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label>{t("peers.peerName")}</Label>
+              <Input placeholder={t("peers.peerName")} value={peerName} onChange={(e) => setPeerName(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label>{t("peers.colleagueIp")}</Label>
+              <Input placeholder="10.89.0.1" value={peerIp} onChange={(e) => setPeerIp(e.target.value)} className="font-mono text-sm" />
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={async () => {
+              try {
+                const res = await post({
+                  action: "create-peer",
+                  name: peerName || "Kollege",
+                  address: peerIp,
+                  proxoraPort: 3000,
+                });
+                setInviteOut(res.invite ?? "");
+                setPeerName("");
+                setPeerIp("");
+                toast.success(t("peers.peerCreated"));
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : t("common.failed"));
+              }
+            }}
+          >
+            {t("peers.createInvite")}
+          </Button>
+          {inviteOut ? (
+            <textarea className="h-24 w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs" readOnly value={inviteOut} />
+          ) : null}
+          <Label className="block">{t("peers.pasteInvite")}</Label>
           <textarea
             className="h-24 w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs"
             value={inviteIn}
@@ -253,29 +233,33 @@ export function WireguardSection() {
           >
             {t("peers.importInvite")}
           </Button>
-        </div>
+        </CardContent>
+      </Card>
 
-        {peers.map((peer) => (
-          <PeerCard
-            key={peer.id}
-            peer={peer}
-            localHosts={localHosts}
-            onInvite={async () => {
-              const res = await post({ action: "invite", peerId: peer.id });
-              setInviteOut(res.invite ?? "");
-            }}
-            onShares={async (shares) => {
-              await post({ action: "shares", peerId: peer.id, shares });
-              toast.success(t("peers.sharesSaved"));
-            }}
-            onDelete={async () => {
-              await post({ action: "delete-peer", peerId: peer.id });
-              toast.success(t("peers.removed"));
-            }}
-          />
-        ))}
-      </CardContent>
-    </Card>
+      {peers.map((peer) => (
+        <PeerCard
+          key={peer.id}
+          peer={peer}
+          localHosts={localHosts}
+          onInvite={async () => {
+            const res = await post({ action: "invite", peerId: peer.id });
+            setInviteOut(res.invite ?? "");
+          }}
+          onUpdate={async (patch) => {
+            await post({ action: "update-peer", peerId: peer.id, ...patch });
+            toast.success(t("peers.peerSaved"));
+          }}
+          onShares={async (shares) => {
+            await post({ action: "shares", peerId: peer.id, shares });
+            toast.success(t("peers.sharesSaved"));
+          }}
+          onDelete={async () => {
+            await post({ action: "delete-peer", peerId: peer.id });
+            toast.success(t("peers.removed"));
+          }}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -298,12 +282,14 @@ function PeerCard({
   peer,
   localHosts,
   onInvite,
+  onUpdate,
   onShares,
   onDelete,
 }: {
   peer: PeerRow;
   localHosts: PublicHost[];
   onInvite: () => Promise<void>;
+  onUpdate: (patch: { name?: string; address?: string; proxoraPort?: number }) => Promise<void>;
   onShares: (shares: Array<{ hostId: string; level: string }>) => Promise<void>;
   onDelete: () => Promise<void>;
 }) {
@@ -318,57 +304,67 @@ function PeerCard({
   });
 
   return (
-    <div className="space-y-3 rounded-lg border border-border p-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="font-medium">{peer.name}</p>
-          <p className="text-xs text-muted-foreground">
-            {peer.paired ? t("peers.paired") : t("peers.waiting")}
-            {peer.address ? ` · ${peer.address}` : ""}
-          </p>
+    <Card>
+      <CardContent className="space-y-3 pt-6">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="font-medium">{peer.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {peer.paired ? t("peers.paired") : t("peers.waiting")}
+              {peer.lastSeenAt ? ` · ${new Date(peer.lastSeenAt).toLocaleString()}` : ""}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => void onInvite().catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")))}>
+              {t("peers.showInvite")}
+            </Button>
+            <Button size="sm" variant="destructive" onClick={() => void onDelete().catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")))}>
+              {t("peers.remove")}
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={() => void onInvite().catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")))}>
-            {t("peers.showInvite")}
-          </Button>
-          <Button size="sm" variant="destructive" onClick={() => void onDelete().catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")))}>
-            {t("peers.remove")}
-          </Button>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label={t("peers.colleagueIp")} value={peer.address} onBlur={(address) => void onUpdate({ address })} />
+          <Field
+            label={t("peers.colleaguePort")}
+            value={String(peer.proxoraPort ?? 3000)}
+            onBlur={(v) => void onUpdate({ proxoraPort: Number(v) || 3000 })}
+          />
         </div>
-      </div>
-      {localHosts.length ? (
-        <div className="space-y-2">
-          <p className="text-xs font-medium">{t("peers.shareHosts")}</p>
-          {localHosts.map((host) => (
-            <label key={host.id} className="flex items-center justify-between gap-2 text-sm">
-              <span>{host.name}</span>
-              <select
-                className="h-8 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
-                value={levels[host.id] ?? ""}
-                onChange={(e) => setLevels((prev) => ({ ...prev, [host.id]: e.target.value as ShareLevel | "" }))}
-              >
-                <option value="">{t("peers.shareNone")}</option>
-                <option value="view">{t("peers.shareView")}</option>
-                <option value="control">{t("peers.shareControl")}</option>
-                <option value="create">{t("peers.shareCreate")}</option>
-              </select>
-            </label>
-          ))}
-          <Button
-            size="sm"
-            type="button"
-            onClick={() =>
-              void onShares(
-                Object.entries(levels)
-                  .filter(([, level]) => level)
-                  .map(([hostId, level]) => ({ hostId, level: level as string })),
-              ).catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")))
-            }
-          >
-            {t("peers.saveShares")}
-          </Button>
-        </div>
-      ) : null}
-    </div>
+        {localHosts.length ? (
+          <div className="space-y-2">
+            <p className="text-xs font-medium">{t("peers.shareHosts")}</p>
+            {localHosts.map((host) => (
+              <label key={host.id} className="flex items-center justify-between gap-2 text-sm">
+                <span>{host.name}</span>
+                <select
+                  className="h-8 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+                  value={levels[host.id] ?? ""}
+                  onChange={(e) => setLevels((prev) => ({ ...prev, [host.id]: e.target.value as ShareLevel | "" }))}
+                >
+                  <option value="">{t("peers.shareNone")}</option>
+                  <option value="view">{t("peers.shareView")}</option>
+                  <option value="control">{t("peers.shareControl")}</option>
+                  <option value="create">{t("peers.shareCreate")}</option>
+                </select>
+              </label>
+            ))}
+            <Button
+              size="sm"
+              type="button"
+              onClick={() =>
+                void onShares(
+                  Object.entries(levels)
+                    .filter(([, level]) => level)
+                    .map(([hostId, level]) => ({ hostId, level: level as string })),
+                ).catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")))
+              }
+            >
+              {t("peers.saveShares")}
+            </Button>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

@@ -114,9 +114,9 @@ export async function clientForHost(host: Host) {
   if (host.origin === HostOrigin.PEER) {
     if (!host.peerId || !host.remoteHostId) throw new ValidationError("Peer host is incomplete");
     const peer = await prisma.wireguardPeer.findUnique({ where: { id: host.peerId } });
-    if (!peer?.address) throw new HostUnreachableError(host.name, "Peer Proxora is not paired");
+    if (!peer?.address) throw new HostUnreachableError(host.name, "Set the colleague's Proxora IP first");
     const token = outboundToken(peer);
-    const peerBaseUrl = peerHttpBase(peer.address);
+    const peerBaseUrl = peerHttpBase(peer);
     const remoteHostId = host.remoteHostId;
     return hostClientCache.get(host, () =>
       createProxmoxClient({

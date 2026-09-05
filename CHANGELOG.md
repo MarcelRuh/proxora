@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.0] – 2026-09-05
+
+### Changed
+
+- WireGuard federation is cross-server: import the colleague's client `.conf` (their WG VM), set **their Proxora IP**, exchange invites, and share your own hosts. They do the same toward you. No shared hub and no site-to-site between the WG servers is required.
+
 ## [1.3.4] – 2026-09-05
 
 ### Fixed
