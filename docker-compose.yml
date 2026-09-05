@@ -20,6 +20,7 @@ services:
     container_name: proxora
     ports:
       - "3000:3000"
+      - "${WG_LISTEN_PORT:-51820}:51820/udp"
     env_file:
       - .env
     environment:
@@ -31,11 +32,33 @@ services:
       PROXORA_REPO: ${PROXORA_REPO:-MarcelRuh/proxora}
       PROXORA_BRANCH: ${PROXORA_BRANCH:-main}
       PROXORA_UPDATE_SIGNAL_DIR: /update-signal
+      WG_CONFIG_DIR: /wireguard
     volumes:
       - proxora_update_signal:/update-signal
+      - proxora_wireguard:/wireguard
+    cap_add:
+      - NET_ADMIN
+    device_cgroup_rules:
+      - "c 10:200 rwm"
     depends_on:
       postgres:
         condition: service_healthy
+
+  proxora-wireguard:
+    build:
+      context: .
+      dockerfile: docker/wireguard/Dockerfile
+    container_name: proxora-wireguard
+    restart: unless-stopped
+    network_mode: "service:proxora"
+    cap_add:
+      - NET_ADMIN
+    device_cgroup_rules:
+      - "c 10:200 rwm"
+    volumes:
+      - proxora_wireguard:/wireguard
+    depends_on:
+      - proxora
 
   proxora-updater:
     image: docker:27.5.1-cli
@@ -65,3 +88,5 @@ volumes:
   postgres_data:
   proxora_update_signal:
     name: proxora_update_signal
+  proxora_wireguard:
+    name: proxora_wireguard

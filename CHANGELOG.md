@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.3.0] – 2026-09-05
+
+### Added
+
+- WireGuard client inside Proxora (Docker sidecar). Exchange invites with another Proxora, share selected hosts (view / control / create), and manage them in a separate “colleague” group. Optional client config for an existing WireGuard server.
+
 ## [1.2.5] – 2026-09-05
 
 ### Added

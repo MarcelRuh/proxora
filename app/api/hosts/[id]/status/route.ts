@@ -4,7 +4,7 @@ import { json } from "@/server/http/respond";
 import { clientIp } from "@/server/auth/session";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
-import { withHostClient } from "@/server/services/host-service";
+import { withHostClient, assertLocalHost } from "@/server/services/host-service";
 import { filterGuestsForUser } from "@/server/auth/session-core";
 import { hasPermission } from "@/lib/permissions";
 import { ForbiddenError } from "@/lib/errors";
@@ -49,7 +49,8 @@ export const POST = apiRoute(["hosts.reboot", "hosts.shutdown"], async (req, ses
   const body = actionSchema.parse(await req.json());
   const needed = body.action === "reboot" ? "hosts.reboot" : "hosts.shutdown";
   if (!hasPermission(session.user.role.permissions, needed)) throw new ForbiddenError();
-  const upid = await withHostClient(params.id, session.user, async (client) => {
+  const upid = await withHostClient(params.id, session.user, async (client, host) => {
+    assertLocalHost(host);
     if (body.action === "reboot") return client.nodes.reboot(body.node);
     return client.nodes.shutdown(body.node);
   });

@@ -137,6 +137,9 @@ export default function DashboardPage() {
                 <div className="mb-2 flex items-center justify-between">
                   <div>
                     <p className="font-medium">{h.name}</p>
+                    {h.origin === "PEER" && h.peerName ? (
+                      <p className="text-xs text-muted-foreground">{t("peers.sharedBy", { name: h.peerName })}</p>
+                    ) : null}
                     <p className="text-xs text-muted-foreground">Proxmox VE {h.proxmoxVersion ?? t("dashboard.unknown")}</p>
                   </div>
                   <HostStateBadge state={h.connectionState} />

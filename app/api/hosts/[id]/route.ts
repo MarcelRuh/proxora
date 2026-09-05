@@ -5,6 +5,7 @@ import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { hasPermission } from "@/lib/permissions";
 import { ForbiddenError } from "@/lib/errors";
+import { prisma } from "@/lib/db";
 import {
   deleteHost,
   getHostOrThrow,
@@ -15,7 +16,10 @@ import {
 
 export const GET = apiRoute("hosts.view", async (_req, session, params) => {
   const host = await getHostOrThrow(params.id, session.user);
-  return json({ host: toPublicHost(host) });
+  const peer = host.peerId
+    ? await prisma.wireguardPeer.findUnique({ where: { id: host.peerId }, select: { name: true } })
+    : null;
+  return json({ host: toPublicHost({ ...host, peer }) });
 });
 
 export const PATCH = apiRoute(["hosts.update", "hosts.credentials"], async (req, session, params) => {

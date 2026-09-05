@@ -17,6 +17,7 @@ import { isWindowsIso, suggestVirtioIso } from "@/lib/iso-images";
 import { storageIsIscsi, vmDiskStorages, VM_DISK_BUSES, VM_SCSI_CONTROLLERS } from "@/lib/vm-storage";
 import { CreateIpFields, ipCollision, ipFieldsFromVmid } from "@/components/guests/create-ip-fields";
 import { MemoryField } from "@/components/guests/memory-field";
+import { HostSelect, hostAllowsCreate } from "@/components/guests/host-select";
 import { DEFAULT_GUEST_NETWORK, shouldSyncGuestIp, type GuestIpNetwork } from "@/lib/create-ip";
 import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
@@ -84,9 +85,9 @@ export default function CreateVmPage() {
   });
 
   useEffect(() => {
-    const only = hosts?.hosts;
-    if (!form.hostId && only?.length === 1 && only[0]) {
-      setForm((f) => ({ ...f, hostId: only[0]!.id }));
+    const creatable = (hosts?.hosts ?? []).filter(hostAllowsCreate);
+    if (!form.hostId && creatable.length === 1 && creatable[0]) {
+      setForm((f) => ({ ...f, hostId: creatable[0]!.id }));
     }
   }, [hosts, form.hostId]);
 
@@ -218,13 +219,14 @@ export default function CreateVmPage() {
         <CardContent className="grid gap-3 pt-5 md:grid-cols-2">
           <label className="text-sm md:col-span-2">
             {t("create.host")}
-            <select
-              className={selectClass}
+            <HostSelect
+              hosts={hosts?.hosts ?? []}
               value={form.hostId}
-              onChange={(e) =>
+              createOnly
+              onChange={(hostId) =>
                 setForm({
                   ...form,
-                  hostId: e.target.value,
+                  hostId,
                   node: "",
                   iso: "",
                   iso2: "",
@@ -236,14 +238,15 @@ export default function CreateVmPage() {
                   gateway: "",
                 })
               }
-            >
-              <option value="">{t("common.chooseHost")}</option>
-              {(hosts?.hosts ?? []).map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.name}
-                </option>
-              ))}
-            </select>
+            />
+            {hosts?.hosts.find((h) => h.id === form.hostId)?.origin === "PEER" ? (
+              <p className="mt-1 text-xs text-warning">
+                {t("peers.createOnPeer", {
+                  name: hosts.hosts.find((h) => h.id === form.hostId)?.name ?? "",
+                  owner: hosts.hosts.find((h) => h.id === form.hostId)?.peerName ?? "",
+                })}
+              </p>
+            ) : null}
           </label>
           {(options?.nodes.length ?? 0) > 1 ? (
             <label className="text-sm">

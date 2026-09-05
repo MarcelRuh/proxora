@@ -65,6 +65,8 @@ export default function HostDetailPage() {
     );
   }
 
+  const remote = meta?.host.origin === "PEER";
+  const canHostAdmin = !remote;
   const nodes = data?.nodes ?? [];
 
   async function power(action: "reboot" | "shutdown", node: string) {
@@ -80,16 +82,20 @@ export default function HostDetailPage() {
       <PageHeader
         kicker={t("hosts.kicker")}
         title={meta?.host.name ?? data?.host ?? t("nav.hosts")}
-        description={`Proxmox VE ${meta?.host.proxmoxVersion ?? "—"}`}
+        description={
+          remote && meta?.host.peerName
+            ? `${t("peers.sharedBy", { name: meta.host.peerName })} · Proxmox VE ${meta.host.proxmoxVersion ?? "—"}`
+            : `Proxmox VE ${meta?.host.proxmoxVersion ?? "—"}`
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {meta ? <HostStateBadge state={meta.host.connectionState} /> : null}
-            {canEdit && meta ? (
+            {canEdit && meta && canHostAdmin ? (
               <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
                 {t("hosts.edit")}
               </Button>
             ) : null}
-            {meta ? <HostMaintenanceButton host={meta.host} onDone={() => {
+            {meta && canHostAdmin ? <HostMaintenanceButton host={meta.host} onDone={() => {
               void qc.invalidateQueries({ queryKey: ["hosts"] });
               void qc.invalidateQueries({ queryKey: ["host-meta", params.id] });
               void qc.invalidateQueries({ queryKey: ["host", params.id] });
@@ -108,7 +114,7 @@ export default function HostDetailPage() {
                 <span className="ml-2 text-sm font-normal text-muted-foreground">{item.online}</span>
               </CardTitle>
               <div className="flex flex-wrap gap-2">
-                {canConsole ? (
+                {canConsole && canHostAdmin ? (
                   <Button size="sm" asChild>
                     <Link href={`/hosts/${params.id}/console?node=${encodeURIComponent(item.node)}`}>
                       {t("hosts.terminal")}
@@ -121,7 +127,7 @@ export default function HostDetailPage() {
                 <Button size="sm" variant="outline" asChild>
                   <Link href="/backups">{t("nav.backups")}</Link>
                 </Button>
-                {canReboot ? (
+                {canReboot && canHostAdmin ? (
                   <ConfirmAction
                     title={t("hosts.rebootTitle", { node: item.node })}
                     description={t("hosts.rebootBody")}
@@ -134,7 +140,7 @@ export default function HostDetailPage() {
                     </Button>
                   </ConfirmAction>
                 ) : null}
-                {canShutdown ? (
+                {canShutdown && canHostAdmin ? (
                   <ConfirmAction
                     title={t("hosts.shutdownTitle", { node: item.node })}
                     description={t("hosts.shutdownBody")}

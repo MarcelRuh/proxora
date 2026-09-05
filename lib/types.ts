@@ -17,6 +17,10 @@ export type PublicHost = {
   notes: string | null;
   aptUpdateCount?: number;
   aptCheckedAt?: string | Date | null;
+  origin?: "LOCAL" | "PEER";
+  peerId?: string | null;
+  peerName?: string | null;
+  shareLevel?: string | null;
 };
 
 export type Guest = {
@@ -33,6 +37,7 @@ export type Guest = {
   uptime: number;
   hostId?: string;
   hostName?: string;
+  hostOwner?: string | null;
   template?: boolean;
   kind?: "vm" | "lxc";
   tags?: string;
@@ -64,6 +69,8 @@ export type DashboardHost = {
   lastError?: string | null;
   nodeCount?: number;
   onlineNodes?: number;
+  origin?: "LOCAL" | "PEER";
+  peerName?: string | null;
 };
 
 export type Dashboard = {

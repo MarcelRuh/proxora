@@ -7,13 +7,14 @@ Browser
   │  HTTPS (session cookie)
   ▼
 Next.js UI + Route Handlers
-  │
-  ├── PostgreSQL (users, RBAC, hosts, audit, jobs)
-  └── WebSocket console proxy
-        │
-        ├── Host A  → Proxmox API :8006
-        ├── Host B  → Proxmox API :8006
-        └── Host N
+    │
+    ├── PostgreSQL (users, RBAC, hosts, audit, jobs)
+    ├── WebSocket console proxy
+    └── WireGuard sidecar (shared netns)
+          │
+          ├── Host A  → Proxmox API :8006
+          ├── Host B  → Proxmox API :8006
+          └── Peer Proxora → shared hosts (federation HTTP/WS)
 ```
 
 ## Layers

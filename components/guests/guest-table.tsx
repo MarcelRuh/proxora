@@ -340,6 +340,7 @@ export const GuestTable = memo(function GuestTable({
                       {ipLabel || "—"}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
+                      {g.hostOwner ? `${g.hostOwner} · ` : ""}
                       {g.hostName ?? hid} / {g.node}
                     </td>
                     <td className="px-3 py-2">

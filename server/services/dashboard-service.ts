@@ -26,6 +26,8 @@ export type HostOverview = {
   loadavg?: [string, string, string];
   nodeCount?: number;
   onlineNodes?: number;
+  origin?: "LOCAL" | "PEER";
+  peerName?: string | null;
 };
 
 type HostSnapshot = {
@@ -44,6 +46,8 @@ function hostShell(
     lastError: string | null;
     clusterName: string | null;
     isClusterMember: boolean;
+    origin?: "LOCAL" | "PEER";
+    peerName?: string | null;
   },
   extra: Partial<HostOverview> = {},
 ): HostOverview {
@@ -56,6 +60,8 @@ function hostShell(
     lastError: host.lastError,
     clusterName: host.clusterName,
     isClusterMember: host.isClusterMember,
+    origin: host.origin,
+    peerName: host.peerName,
     ...extra,
   };
 }
@@ -123,9 +129,21 @@ export async function getDashboard(user: SessionUser) {
   );
 
   const overviews = snapshots.map((s) => s.overview);
-  const allVms = snapshots.flatMap((s) => s.vms.map((vm) => ({ ...vm, hostId: s.overview.id, hostName: s.overview.name })));
+  const allVms = snapshots.flatMap((s) =>
+    s.vms.map((vm) => ({
+      ...vm,
+      hostId: s.overview.id,
+      hostName: s.overview.name,
+      hostOwner: s.overview.origin === "PEER" ? s.overview.peerName : null,
+    })),
+  );
   const allLxc = snapshots.flatMap((s) =>
-    s.containers.map((ct) => ({ ...ct, hostId: s.overview.id, hostName: s.overview.name })),
+    s.containers.map((ct) => ({
+      ...ct,
+      hostId: s.overview.id,
+      hostName: s.overview.name,
+      hostOwner: s.overview.origin === "PEER" ? s.overview.peerName : null,
+    })),
   );
 
   const online = overviews.filter((h) => h.connectionState === "ONLINE").length;

@@ -8,6 +8,7 @@ import { hasPermission } from "@/lib/permissions";
 import { getSessionFromToken, assertGuestAccess, canAccessHost } from "@/server/auth/session-core";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { clientForHost } from "@/server/services/host-service";
+import { handleFederationWebsocket } from "@/server/ws/federation-ws";
 import { consumeProxmoxVncHandshake, wsPayloadToBuffer } from "@/lib/vnc-handshake";
 import { rfbPasswordFromVncProxy } from "@/lib/vnc-password";
 import { isTermproxySerialError, vmHasGraphics, vmHasSerialSocket, vmHasTablet } from "@/lib/guest-console";
@@ -36,6 +37,10 @@ export function attachConsoleProxy(wss: WebSocketServer) {
 
 async function handleConnection(browser: WebSocket, req: IncomingMessage) {
   const url = new URL(req.url ?? "", "http://localhost");
+  if (url.pathname === "/api/federation/ws") {
+    await handleFederationWebsocket(browser, req);
+    return;
+  }
   const hostId = url.searchParams.get("hostId") ?? "";
   const node = url.searchParams.get("node") ?? "";
   const kind = (url.searchParams.get("kind") ?? "node") as ConsoleKind;

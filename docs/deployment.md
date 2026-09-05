@@ -11,6 +11,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 Services:
 
 - `proxora` — Next.js + console proxy (`server/index.ts`)
+- `proxora-wireguard` — userspace WireGuard in the Proxora network namespace
 - `postgres` — application database
 
 The entrypoint runs `prisma migrate deploy`, seeds the admin user, then starts the HTTP server on port 3000.
@@ -42,6 +43,9 @@ The wget installer prints username and password again in the final summary box. 
 | `PROXORA_INSTALL_DIR` | for self-update | Host path of the Compose install |
 | `PROXORA_UPDATE_SIGNAL_DIR` | Compose | `/update-signal` shared with `proxora-updater` |
 | `PROXORA_REPO` | no | default `MarcelRuh/proxora` |
+| `WG_LISTEN_PORT` | no | UDP port published for WireGuard (default `51820`) |
+
+WireGuard pairing lives under **Settings → WireGuard**. Each instance needs a unique address (e.g. `10.88.0.1/24` vs `10.88.0.2/24`), a reachable UDP endpoint, and `/dev/net/tun` available to the container (the compose file grants `c 10:200`). Host sharing is decided by the owner; remote hosts appear in a separate group and cannot reboot or re-credential the node.
 
 ## Reverse proxy
 

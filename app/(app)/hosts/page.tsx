@@ -55,69 +55,28 @@ export default function HostsPage() {
             ))}
           </div>
         ) : data?.hosts.length ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {data.hosts.map((host) => (
-              <Card key={host.id}>
-                <CardHeader className="flex flex-row items-start justify-between">
-                  <div>
-                    <CardTitle>{host.name}</CardTitle>
-                    <p className="text-xs text-muted-foreground">{host.url}</p>
-                  </div>
-                  <HostStateBadge state={host.connectionState} />
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm">Proxmox VE {host.proxmoxVersion ?? "—"}</p>
-                  {host.lastError ? <p className="text-sm text-destructive">{host.lastError}</p> : null}
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" asChild>
-                      <Link href={`/hosts/${host.id}`}>{t("hosts.open")}</Link>
-                    </Button>
-                    {canConsole ? (
-                      <Button size="sm" variant="outline" asChild>
-                        <Link href={`/hosts/${host.id}/console`}>{t("hosts.terminal")}</Link>
-                      </Button>
-                    ) : null}
-                    {canEdit ? (
-                      <Button size="sm" variant="outline" onClick={() => setEditing(host)}>
-                        {t("hosts.edit")}
-                      </Button>
-                    ) : null}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={async () => {
-                        try {
-                          await api(`/api/hosts/${host.id}/test`, { method: "POST" });
-                          toast.success(t("hosts.testOk"));
-                          refresh();
-                        } catch (e) {
-                          toast.error(e instanceof Error ? e.message : t("common.failed"));
-                        }
-                      }}
-                    >
-                      {t("hosts.test")}
-                    </Button>
-                    <HostMaintenanceButton host={host} onDone={refresh} />
-                    {canDelete ? (
-                      <ConfirmAction
-                        title={t("hosts.removeTitle", { name: host.name })}
-                        description={t("hosts.removeBody")}
-                        actionLabel={t("hosts.removeAction")}
-                        destructive
-                        onConfirm={async () => {
-                          await api(`/api/hosts/${host.id}`, { method: "DELETE" });
-                          toast.success(t("hosts.removed"));
-                          refresh();
-                        }}
-                      >
-                        <Button size="sm" variant="destructive">
-                          {t("hosts.remove")}
-                        </Button>
-                      </ConfirmAction>
-                    ) : null}
-                  </div>
-                </CardContent>
-              </Card>
+          <div className="space-y-8">
+            <HostSection
+              title={t("peers.localGroup")}
+              hosts={data.hosts.filter((h) => h.origin !== "PEER")}
+              canConsole={canConsole}
+              canEdit={canEdit}
+              canDelete={canDelete}
+              onEdit={setEditing}
+              onRefresh={refresh}
+            />
+            {[...groupPeerHosts(data.hosts, t("peers.unknown"))].map(([owner, hosts]) => (
+              <HostSection
+                key={owner}
+                title={t("peers.peerGroup", { name: owner })}
+                hosts={hosts}
+                remote
+                canConsole={false}
+                canEdit={false}
+                canDelete={false}
+                onEdit={setEditing}
+                onRefresh={refresh}
+              />
             ))}
           </div>
         ) : (
@@ -138,6 +97,112 @@ export default function HostsPage() {
         }}
         onSaved={refresh}
       />
+    </div>
+  );
+}
+
+function groupPeerHosts(hosts: PublicHost[], fallback: string): Map<string, PublicHost[]> {
+  const groups = new Map<string, PublicHost[]>();
+  for (const host of hosts.filter((h) => h.origin === "PEER")) {
+    const key = host.peerName || fallback;
+    const bucket = groups.get(key) ?? [];
+    bucket.push(host);
+    groups.set(key, bucket);
+  }
+  return groups;
+}
+
+function HostSection({
+  title,
+  hosts,
+  remote,
+  canConsole,
+  canEdit,
+  canDelete,
+  onEdit,
+  onRefresh,
+}: {
+  title: string;
+  hosts: PublicHost[];
+  remote?: boolean;
+  canConsole: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  onEdit: (host: PublicHost) => void;
+  onRefresh: () => void;
+}) {
+  const { t } = useI18n();
+  if (!hosts.length) return null;
+  return (
+    <div className="space-y-3">
+      <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{title}</h2>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {hosts.map((host) => (
+          <Card key={host.id}>
+            <CardHeader className="flex flex-row items-start justify-between">
+              <div>
+                <CardTitle>{host.name}</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  {remote ? t("peers.sharedBy", { name: host.peerName ?? title }) : host.url}
+                </p>
+              </div>
+              <HostStateBadge state={host.connectionState} />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm">Proxmox VE {host.proxmoxVersion ?? "—"}</p>
+              {host.lastError ? <p className="text-sm text-destructive">{host.lastError}</p> : null}
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" asChild>
+                  <Link href={`/hosts/${host.id}`}>{t("hosts.open")}</Link>
+                </Button>
+                {canConsole ? (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href={`/hosts/${host.id}/console`}>{t("hosts.terminal")}</Link>
+                  </Button>
+                ) : null}
+                {canEdit ? (
+                  <Button size="sm" variant="outline" onClick={() => onEdit(host)}>
+                    {t("hosts.edit")}
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      await api(`/api/hosts/${host.id}/test`, { method: "POST" });
+                      toast.success(t("hosts.testOk"));
+                      onRefresh();
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : t("common.failed"));
+                    }
+                  }}
+                >
+                  {t("hosts.test")}
+                </Button>
+                {remote ? null : <HostMaintenanceButton host={host} onDone={onRefresh} />}
+                {canDelete ? (
+                  <ConfirmAction
+                    title={t("hosts.removeTitle", { name: host.name })}
+                    description={t("hosts.removeBody")}
+                    actionLabel={t("hosts.removeAction")}
+                    destructive
+                    onConfirm={async () => {
+                      await api(`/api/hosts/${host.id}`, { method: "DELETE" });
+                      toast.success(t("hosts.removed"));
+                      onRefresh();
+                    }}
+                  >
+                    <Button size="sm" variant="destructive">
+                      {t("hosts.remove")}
+                    </Button>
+                  </ConfirmAction>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }

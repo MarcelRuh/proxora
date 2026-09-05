@@ -10,6 +10,7 @@ import { startBackupWatchScheduler } from "@/server/services/backup-watch";
 import { startDiskWatchScheduler } from "@/server/services/disk-watch";
 import { startZfsWatchScheduler } from "@/server/services/zfs-watch";
 import { startHostReconnectScheduler } from "@/server/services/host-reconnect";
+import { startPeerSyncScheduler } from "@/server/services/peer-sync";
 import { ensureSystemRoles } from "@/server/services/role-sync";
 
 const dev = process.env.NODE_ENV !== "production";
@@ -33,7 +34,7 @@ async function main() {
 
   server.on("upgrade", (req, socket, head) => {
     const { pathname } = parse(req.url ?? "");
-    if (pathname === "/ws/console" || pathname === "/ws/vnc") {
+    if (pathname === "/ws/console" || pathname === "/ws/vnc" || pathname === "/api/federation/ws") {
       wss.handleUpgrade(req, socket, head, (ws) => {
         wss.emit("connection", ws, req);
       });
@@ -48,6 +49,7 @@ async function main() {
     logger.info({ port, listenHost, dev }, "Proxora listening");
     void ensureSystemRoles();
     startHostReconnectScheduler();
+    startPeerSyncScheduler();
     startAptRefreshScheduler();
     startBackupWatchScheduler();
     startDiskWatchScheduler();

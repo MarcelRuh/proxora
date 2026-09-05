@@ -1,8 +1,8 @@
-import { AuthType, Host, HostConnectionState } from "@prisma/client";
+import { AuthType, Host, HostConnectionState, HostOrigin } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
-import { ConflictError, HostUnreachableError, NotFoundError, ProxmoxApiError, ValidationError } from "@/lib/errors";
+import { ConflictError, ForbiddenError, HostUnreachableError, NotFoundError, ProxmoxApiError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import type { SessionUser } from "@/server/auth/session-core";
 import { canAccessHost } from "@/server/auth/session-core";
@@ -11,6 +11,7 @@ import { hostClientCache } from "@/server/proxmox/client-cache";
 import type { ConnectionTestResult, ProxmoxConnectionConfig } from "@/server/proxmox/types";
 import { normalizeProxmoxUsername } from "@/server/proxmox/username";
 import { notifyTopic } from "@/server/notifications/dispatch";
+import { outboundToken, peerHttpBase } from "@/server/services/wireguard-service";
 
 export const hostInputSchema = z.object({
   name: z.string().min(1).max(80),
@@ -39,11 +40,13 @@ function normalizeUrl(url: string): string {
   return `https://${trimmed}:8006`;
 }
 
-export function toPublicHost(host: Omit<Host, "encryptedSecret">) {
+export function toPublicHost(
+  host: Omit<Host, "encryptedSecret"> & { peer?: { name: string } | null },
+) {
   return {
     id: host.id,
     name: host.name,
-    url: host.url,
+    url: host.origin === HostOrigin.PEER ? "" : host.url,
     authType: host.authType,
     username: host.username,
     tokenId: host.tokenId,
@@ -59,6 +62,10 @@ export function toPublicHost(host: Omit<Host, "encryptedSecret">) {
     aptCheckedAt: host.aptCheckedAt,
     createdAt: host.createdAt,
     updatedAt: host.updatedAt,
+    origin: host.origin === HostOrigin.PEER ? ("PEER" as const) : ("LOCAL" as const),
+    peerId: host.peerId,
+    peerName: host.peer?.name ?? null,
+    shareLevel: host.peerShareLevel ? host.peerShareLevel.toLowerCase() : null,
   };
 }
 
@@ -71,6 +78,7 @@ export async function listHosts(user: SessionUser) {
   const hosts = await prisma.host.findMany({
     orderBy: { name: "asc" },
     omit: { encryptedSecret: true },
+    include: { peer: { select: { name: true } } },
   });
   return filterHostsForUser(user, hosts).map(toPublicHost);
 }
@@ -96,7 +104,32 @@ export function clientConfigFromHost(
   };
 }
 
+export function assertLocalHost(host: Host) {
+  if (host.origin === HostOrigin.PEER) {
+    throw new ForbiddenError("This host is shared by a peer and cannot be administered here");
+  }
+}
+
 export async function clientForHost(host: Host) {
+  if (host.origin === HostOrigin.PEER) {
+    if (!host.peerId || !host.remoteHostId) throw new ValidationError("Peer host is incomplete");
+    const peer = await prisma.wireguardPeer.findUnique({ where: { id: host.peerId } });
+    if (!peer?.address) throw new HostUnreachableError(host.name, "Peer Proxora is not paired");
+    const token = outboundToken(peer);
+    const peerBaseUrl = peerHttpBase(peer.address);
+    const remoteHostId = host.remoteHostId;
+    return hostClientCache.get(host, () =>
+      createProxmoxClient({
+        url: peerBaseUrl,
+        authType: "API_TOKEN",
+        username: "peer@pve",
+        tokenId: "federation",
+        secret: token,
+        allowInsecureTls: true,
+        federation: { peerBaseUrl, token, remoteHostId },
+      }),
+    );
+  }
   return hostClientCache.get(host, (row) => {
     const secret = decryptSecret(row.encryptedSecret);
     return createProxmoxClient(clientConfigFromHost(row, secret));
@@ -216,6 +249,7 @@ export async function createHost(input: z.infer<typeof hostInputSchema>) {
 
 export async function updateHost(id: string, input: z.infer<typeof hostUpdateSchema>, user: SessionUser) {
   const host = await getHostOrThrow(id, user);
+  assertLocalHost(host);
   const data: Record<string, unknown> = {};
   if (input.name) data.name = input.name;
   if (input.url) data.url = normalizeUrl(input.url);
@@ -233,12 +267,24 @@ export async function updateHost(id: string, input: z.infer<typeof hostUpdateSch
 
 export async function deleteHost(id: string, user: SessionUser) {
   const host = await getHostOrThrow(id, user);
+  assertLocalHost(host);
   hostClientCache.invalidate(host.id);
   await prisma.host.delete({ where: { id: host.id } });
 }
 
 export async function testHost(id: string, user: SessionUser) {
   const host = await getHostOrThrow(id, user);
+  if (host.origin === HostOrigin.PEER) {
+    const client = await clientForHost(host);
+    try {
+      const result = await client.testConnection();
+      await applyTestResult(host.id, result);
+      return result;
+    } finally {
+      client.dispose();
+      hostClientCache.invalidate(host.id);
+    }
+  }
   const secret = decryptSecret(host.encryptedSecret);
   const result = await testRawConnection({
     name: host.name,
@@ -259,6 +305,18 @@ export async function probeAllHosts() {
     hosts.map(async (host) => {
       if (host.connectionState === HostConnectionState.MAINTENANCE) return;
       try {
+        if (host.origin === HostOrigin.PEER) {
+          const client = await clientForHost(host);
+          try {
+            const result = await client.testConnection();
+            await applyTestResult(host.id, result);
+            logger.info({ host: host.name, ok: result.ok }, "Host probe finished");
+          } finally {
+            client.dispose();
+            hostClientCache.invalidate(host.id);
+          }
+          return;
+        }
         const secret = decryptSecret(host.encryptedSecret);
         const result = await testRawConnection({
           name: host.name,
@@ -324,7 +382,8 @@ export async function withHostClient<T>(
 }
 
 export async function setHostState(id: string, state: "MAINTENANCE" | "ONLINE", user: SessionUser) {
-  await getHostOrThrow(id, user);
+  const host = await getHostOrThrow(id, user);
+  assertLocalHost(host);
   if (state === "MAINTENANCE") {
     return prisma.host.update({
       where: { id },

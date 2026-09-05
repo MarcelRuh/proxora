@@ -1,5 +1,11 @@
 export type ProxmoxAuthType = "API_TOKEN" | "PASSWORD";
 
+export type FederationTransport = {
+  peerBaseUrl: string;
+  token: string;
+  remoteHostId: string;
+};
+
 export interface ProxmoxConnectionConfig {
   url: string;
   authType: ProxmoxAuthType;
@@ -8,6 +14,7 @@ export interface ProxmoxConnectionConfig {
   secret: string;
   allowInsecureTls?: boolean;
   timeoutMs?: number;
+  federation?: FederationTransport;
 }
 
 export interface ProxmoxVersion {

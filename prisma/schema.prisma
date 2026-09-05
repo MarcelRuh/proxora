@@ -26,6 +26,22 @@ enum HostConnectionState {
   MAINTENANCE
 }
 
+enum HostOrigin {
+  LOCAL
+  PEER
+}
+
+enum WireguardPeerKind {
+  PROXORA
+  GATEWAY
+}
+
+enum PeerShareLevel {
+  VIEW
+  CONTROL
+  CREATE
+}
+
 enum AuditResult {
   SUCCESS
   FAILURE
@@ -104,14 +120,22 @@ model Host {
   aptUpdateCount   Int                 @default(0)
   aptCheckedAt     DateTime?
   aptNotifiedCount Int                 @default(0)
+  origin           HostOrigin          @default(LOCAL)
+  peerId           String?
+  peer             WireguardPeer?      @relation(fields: [peerId], references: [id], onDelete: Cascade)
+  remoteHostId     String?
+  peerShareLevel   PeerShareLevel?
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   userAccess       UserHostAccess[]
   guestAccess      UserGuestAccess[]
   auditLogs        AuditLog[]
   jobs             Job[]
+  shares           HostShare[]
 
   @@index([connectionState])
+  @@index([origin])
+  @@unique([peerId, remoteHostId])
 }
 
 model UserHostAccess {
@@ -206,4 +230,35 @@ model Job {
 
   @@index([status])
   @@index([type])
+}
+
+model WireguardPeer {
+  id                       String            @id @default(cuid())
+  name                     String
+  kind                     WireguardPeerKind @default(PROXORA)
+  publicKey                String            @default("")
+  endpoint                 String            @default("")
+  address                  String            @default("")
+  allowedIPs               String            @default("")
+  persistentKeepalive      Int               @default(25)
+  inboundTokenHash         String            @unique
+  encryptedInboundToken    String
+  encryptedOutboundToken   String            @default("")
+  lastSeenAt               DateTime?
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+  hosts                    Host[]
+  shares                   HostShare[]
+}
+
+model HostShare {
+  id     String         @id @default(cuid())
+  peerId String
+  hostId String
+  level  PeerShareLevel
+  peer   WireguardPeer  @relation(fields: [peerId], references: [id], onDelete: Cascade)
+  host   Host           @relation(fields: [hostId], references: [id], onDelete: Cascade)
+
+  @@unique([peerId, hostId])
+  @@index([hostId])
 }

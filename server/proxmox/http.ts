@@ -92,12 +92,28 @@ export class ProxmoxHttpClient {
   }
 
   websocketUrl(path: string, query?: Query): string {
+    if (this.config.federation) {
+      const httpUrl = new URL("/api/federation/ws", this.config.federation.peerBaseUrl);
+      httpUrl.protocol = httpUrl.protocol === "https:" ? "wss:" : "ws:";
+      httpUrl.searchParams.set("remoteHostId", this.config.federation.remoteHostId);
+      httpUrl.searchParams.set("path", path);
+      if (query) {
+        for (const [key, value] of Object.entries(query)) {
+          if (value === undefined || value === null) continue;
+          httpUrl.searchParams.set(key, String(value));
+        }
+      }
+      return httpUrl.toString();
+    }
     const httpUrl = new URL(`/api2/json${path}${toSearch(query)}`, this.baseUrl);
     httpUrl.protocol = httpUrl.protocol === "https:" ? "wss:" : "ws:";
     return httpUrl.toString();
   }
 
   async authHeaders(): Promise<Record<string, string>> {
+    if (this.config.federation) {
+      return { Authorization: `Bearer ${this.config.federation.token}` };
+    }
     if (this.config.authType === "API_TOKEN") {
       const tokenId = this.config.tokenId;
       if (!tokenId) {
@@ -145,6 +161,9 @@ export class ProxmoxHttpClient {
     path: string,
     options: { query?: Query; body?: Record<string, unknown>; timeoutMs?: number } = {},
   ): Promise<T> {
+    if (this.config.federation) {
+      return this.federationRequest<T>(method, path, options);
+    }
     const url = `${this.baseUrl}/api2/json${path}${toSearch(options.query)}`;
     const headers: Record<string, string> = {
       Accept: "application/json",
@@ -178,6 +197,48 @@ export class ProxmoxHttpClient {
       throw new ProxmoxApiError(message, response.status, undefined, parsed.errors);
     }
 
+    return (parsed.data as T) ?? (undefined as T);
+  }
+
+  private async federationRequest<T>(
+    method: string,
+    path: string,
+    options: { query?: Query; body?: Record<string, unknown>; timeoutMs?: number },
+  ): Promise<T> {
+    const fed = this.config.federation!;
+    const url = `${fed.peerBaseUrl.replace(/\/+$/, "")}/api/federation/pve/${encodeURIComponent(fed.remoteHostId)}`;
+    const response = await this.rawFetch(
+      url,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${fed.token}`,
+        },
+        body: JSON.stringify({
+          method,
+          path,
+          query: options.query ?? {},
+          body: options.body ?? null,
+        }),
+      },
+      options.timeoutMs ?? 45_000,
+    );
+    const text = await response.text();
+    let parsed: { data?: T; error?: string; code?: string } = {};
+    if (text) {
+      try {
+        parsed = JSON.parse(text) as typeof parsed;
+      } catch {
+        throw new ProxmoxApiError("Invalid JSON from peer Proxora", response.status, undefined, {
+          body: text.slice(0, 200),
+        });
+      }
+    }
+    if (!response.ok) {
+      throw new ProxmoxApiError(parsed.error || `Peer Proxora error (${response.status})`, response.status);
+    }
     return (parsed.data as T) ?? (undefined as T);
   }
 
