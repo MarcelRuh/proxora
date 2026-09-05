@@ -154,3 +154,25 @@ export function parseAgentNetworkIps(payload: unknown): string[] {
   }
   return [...new Set(ips)];
 }
+
+/** LXC `GET .../interfaces` (`inet` / `inet6`). */
+export function parseLxcInterfaceIps(payload: unknown): string[] {
+  const root = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const list = Array.isArray(payload) ? payload : Array.isArray(root.result) ? root.result : [];
+  const ips: string[] = [];
+  for (const nic of list) {
+    if (!nic || typeof nic !== "object") continue;
+    const rec = nic as Record<string, unknown>;
+    const name = String(rec.name ?? "").trim().toLowerCase();
+    if (!name || name === "lo" || name.startsWith("lo:")) continue;
+    const values = [rec.inet, rec.ip, rec.address];
+    for (const value of values) {
+      const parts = Array.isArray(value) ? value : [value];
+      for (const part of parts) {
+        const host = ipv4Host(String(part ?? ""));
+        if (host && !host.startsWith("127.")) ips.push(host);
+      }
+    }
+  }
+  return [...new Set(ips)];
+}

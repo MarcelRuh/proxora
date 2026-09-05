@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.8] – 2026-09-05
+
+### Changed
+
+- Dashboard guest table: Host filter, Host/Node as two lines (host name first), IPs listed completely, delete as trash icon aligned with the other actions.
+- Guest IPs load with the dashboard instead of appearing on a later poll. Empty DHCP results retry after 20s; LXC also reads runtime interfaces.
+
 ## [1.4.7] – 2026-09-05
 
 ### Changed

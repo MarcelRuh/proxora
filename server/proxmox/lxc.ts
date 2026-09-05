@@ -113,4 +113,12 @@ export class LxcApi {
       `/nodes/${encodeURIComponent(node)}/lxc/${vmid}/termproxy`,
     );
   }
+
+  interfaces(node: string, vmid: number) {
+    return this.http.get<Array<Record<string, unknown>> | { result?: Array<Record<string, unknown>> }>(
+      `/nodes/${encodeURIComponent(node)}/lxc/${vmid}/interfaces`,
+      undefined,
+      4_000,
+    );
+  }
 }

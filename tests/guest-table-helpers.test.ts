@@ -48,9 +48,9 @@ describe("guest sort", () => {
 });
 
 describe("formatGuestIps", () => {
-  it("shows the first address and a remainder count", () => {
+  it("lists every address", () => {
     expect(formatGuestIps(["10.0.0.8"])).toBe("10.0.0.8");
-    expect(formatGuestIps(["10.0.0.8", "10.0.0.9"])).toBe("10.0.0.8 +1");
+    expect(formatGuestIps(["10.0.0.8", "10.0.0.9"])).toBe("10.0.0.8, 10.0.0.9");
     expect(formatGuestIps([])).toBe("");
   });
 });

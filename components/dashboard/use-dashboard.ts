@@ -11,7 +11,7 @@ export function useDashboard() {
     queryKey: ["dashboard"],
     queryFn: () => api<Dashboard>("/api/dashboard"),
     refetchInterval: DASHBOARD_POLL_MS,
-    staleTime: 20_000,
+    staleTime: 30_000,
     placeholderData: (previous) => previous,
   });
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState, memo } from "react";
-import { Play, Square, RotateCcw, Terminal, Camera } from "lucide-react";
+import { Play, Square, RotateCcw, Terminal, Camera, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import { api } from "@/lib/api";
 import { DEFAULT_GUEST_SORT, nextGuestSort, sortGuests, type GuestSortKey } from "@/lib/guest-sort";
 import { guestHasTag, parseGuestTags, uniqueGuestTags } from "@/lib/guest-tags";
 import { bulkActionFits, guestRowKey, type BulkGuestAction } from "@/lib/guest-bulk";
-import { formatGuestIps } from "@/lib/guest-ip-display";
+import { uniqueGuestIps } from "@/lib/guest-ip-display";
 import { formatUptime } from "@/lib/utils";
 import type { Guest } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
@@ -44,8 +44,18 @@ export const GuestTable = memo(function GuestTable({
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const [tag, setTag] = useState("all");
+  const [hostFilter, setHostFilter] = useState("all");
   const [sort, setSort] = useState(DEFAULT_GUEST_SORT);
   const tags = useMemo(() => uniqueGuestTags(items), [items]);
+  const hosts = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const g of items) {
+      const id = g.hostId ?? hostId ?? "";
+      if (!id) continue;
+      map.set(id, g.hostName ?? id);
+    }
+    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1], "de"));
+  }, [items, hostId]);
 
   function rowKind(g: Guest): "vm" | "lxc" {
     if (g.kind === "vm" || g.kind === "lxc") return g.kind;
@@ -63,10 +73,11 @@ export const GuestTable = memo(function GuestTable({
       const textOk = !needle || hay.includes(needle);
       const statusOk = status === "all" || g.status === status;
       const tagOk = tag === "all" || guestHasTag(g.tags, tag);
-      return textOk && statusOk && tagOk;
+      const hostOk = hostFilter === "all" || (g.hostId ?? hostId ?? "") === hostFilter;
+      return textOk && statusOk && tagOk && hostOk;
     });
     return sortGuests(matched, sort);
-  }, [items, q, status, tag, sort]);
+  }, [items, q, status, tag, hostFilter, hostId, sort]);
 
   const visibleKeys = filtered.map((g) => rowKey(g));
   const selectedVisible = visibleKeys.filter((key) => selected.has(key));
@@ -162,6 +173,21 @@ export const GuestTable = memo(function GuestTable({
           <option value="stopped">{t("guest.status.stopped")}</option>
           <option value="paused">{t("guest.status.paused")}</option>
         </select>
+        {hosts.length > 1 ? (
+          <select
+            className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+            value={hostFilter}
+            onChange={(e) => setHostFilter(e.target.value)}
+            aria-label={t("table.host")}
+          >
+            <option value="all">{t("table.allHosts")}</option>
+            {hosts.map(([id, name]) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
+          </select>
+        ) : null}
         {tags.length > 0 ? (
           <select
             className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
@@ -242,7 +268,7 @@ export const GuestTable = memo(function GuestTable({
               {mixed ? <SortHeader label={t("table.type")} column="kind" sort={sort} onSort={setSort} /> : null}
               <SortHeader label={t("table.name")} column="name" sort={sort} onSort={setSort} />
               <th className="px-3 py-2 font-medium">{t("table.ip")}</th>
-              <SortHeader label={t("table.hostNode")} column="host" sort={sort} onSort={setSort} />
+              <SortHeader label={t("table.host")} column="host" sort={sort} onSort={setSort} />
               <SortHeader label={t("table.status")} column="status" sort={sort} onSort={setSort} />
               <SortHeader label={t("table.cpu")} column="cpu" sort={sort} onSort={setSort} />
               <SortHeader label={t("table.ram")} column="ram" sort={sort} onSort={setSort} />
@@ -287,7 +313,8 @@ export const GuestTable = memo(function GuestTable({
                 const stopped = g.status === "stopped";
                 const key = rowKey(g);
                 const rowBusy = busyId === `${hid}:${g.vmid}` || bulkBusy;
-                const ipLabel = formatGuestIps(g.ips);
+                const ips = uniqueGuestIps(g.ips);
+                const ipLabel = ips.join(", ");
                 return (
                   <tr key={key} className="border-t border-border">
                     <td className="px-3 py-2">
@@ -337,12 +364,23 @@ export const GuestTable = memo(function GuestTable({
                         </div>
                       ) : null}
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs" title={(g.ips ?? []).join(", ")}>
-                      {ipLabel || "—"}
+                    <td className="px-3 py-2 font-mono text-xs leading-tight" title={ipLabel || undefined}>
+                      {ips.length ? (
+                        ips.map((ip) => (
+                          <div key={ip} className="whitespace-nowrap text-foreground">
+                            {ip}
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {g.hostOwner ? `${g.hostOwner} · ` : ""}
-                      {g.hostName ?? hid} / {g.node}
+                    <td className="px-3 py-2">
+                      <p className="font-medium leading-tight text-foreground">{g.hostName ?? hid}</p>
+                      <p className="text-xs leading-tight text-muted-foreground">
+                        {t("table.node")}: {g.node}
+                        {g.hostOwner ? ` · ${g.hostOwner}` : ""}
+                      </p>
                     </td>
                     <td className="px-3 py-2">
                       <GuestStateBadge status={g.status} />
@@ -404,8 +442,15 @@ export const GuestTable = memo(function GuestTable({
                             kindLabel={kindLabel}
                             onConfirm={(backupVolids) => guestAction(hid, g.node, g.vmid, "delete", row, { backupVolids })}
                           >
-                            <Button size="sm" variant="destructive" disabled={rowBusy}>
-                              {t("guest.delete")}
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              disabled={rowBusy}
+                              title={t("guest.delete")}
+                              aria-label={t("guest.delete")}
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </GuestDeleteDialog>
                         ) : null}

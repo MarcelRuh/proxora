@@ -44,4 +44,30 @@ describe("guest IP cache", () => {
     expect(second[0]?.ips).toEqual(["10.0.0.50"]);
     expect(config).toHaveBeenCalledTimes(1);
   });
+
+  it("reads LXC interfaces when config has DHCP", async () => {
+    const config = vi.fn(async () => ({ net0: "name=eth0,bridge=vmbr0,ip=dhcp" }));
+    const interfaces = vi.fn(async () => [{ name: "eth0", inet: "192.168.178.88/24" }]);
+    const client = {
+      http: { baseUrl: "https://pve.test" },
+      lxc: { config, interfaces },
+    } as unknown as ProxmoxClient;
+    const rows = await rememberGuestIps(client, "lxc", [guest({ vmid: 88 })]);
+    expect(rows[0]?.ips).toEqual(["192.168.178.88"]);
+    expect(interfaces).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries empty IP results after a short TTL", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-09-05T20:00:00Z"));
+      const client = { http: { baseUrl: "https://pve.test" } } as unknown as ProxmoxClient;
+      rememberGuestIpCache(client, "vm", "pve", 10, []);
+      expect(applyCachedGuestIps(client, "vm", [guest({ vmid: 10 })])[0]?.ips).toEqual([]);
+      vi.setSystemTime(new Date("2026-09-05T20:00:25Z"));
+      expect(applyCachedGuestIps(client, "vm", [guest({ vmid: 10 })])[0]?.ips).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

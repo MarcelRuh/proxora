@@ -1,9 +1,10 @@
-import { parseAgentNetworkIps, parseGuestConfigIps } from "@/lib/create-ip";
+import { parseAgentNetworkIps, parseGuestConfigIps, parseLxcInterfaceIps } from "@/lib/create-ip";
 import { uniqueGuestIps } from "@/lib/guest-ip-display";
 import type { ProxmoxClient } from "@/server/proxmox/client";
 import type { GuestListItem } from "@/server/proxmox/types";
 
-const TTL_MS = 10 * 60_000;
+const TTL_FULL_MS = 10 * 60_000;
+const TTL_EMPTY_MS = 20_000;
 const cache = new Map<string, { ips: string[]; at: number }>();
 
 function ipCacheKey(client: ProxmoxClient, kind: "vm" | "lxc", node: string, vmid: number) {
@@ -17,7 +18,12 @@ export function peekGuestIpCache(
   vmid: number,
 ): string[] | null {
   const hit = cache.get(ipCacheKey(client, kind, node, vmid));
-  if (!hit || Date.now() - hit.at >= TTL_MS) return null;
+  if (!hit) return null;
+  const ttl = hit.ips.length ? TTL_FULL_MS : TTL_EMPTY_MS;
+  if (Date.now() - hit.at >= ttl) {
+    cache.delete(ipCacheKey(client, kind, node, vmid));
+    return null;
+  }
   return hit.ips;
 }
 
@@ -62,25 +68,32 @@ async function ipsFromGuest(
       : await client.lxc.config(guest.node, guest.vmid).catch(() => null);
   if (!cfg) return null;
   let ips = parseGuestConfigIps(cfg);
-  if (!ips.length && kind === "vm" && guest.status === "running") {
-    const net = await client.vms.agentNetworkInterfaces(guest.node, guest.vmid).catch(() => null);
-    ips = parseAgentNetworkIps(net);
+  if (!ips.length && guest.status === "running") {
+    if (kind === "vm") {
+      const net = await client.vms.agentNetworkInterfaces(guest.node, guest.vmid).catch(() => null);
+      ips = parseAgentNetworkIps(net);
+    } else {
+      const ifaces = await client.lxc.interfaces(guest.node, guest.vmid).catch(() => null);
+      ips = parseLxcInterfaceIps(ifaces);
+    }
   }
   rememberGuestIpCache(client, kind, guest.node, guest.vmid, ips);
   return ips;
 }
 
-/** Fill missing guest IPs from config (and QEMU agent when DHCP). Does not block forever. */
+/** Fill missing guest IPs from config (and QEMU agent / LXC interfaces when DHCP). */
 export async function rememberGuestIps(
   client: ProxmoxClient,
   kind: "vm" | "lxc",
   guests: GuestListItem[],
   options?: { concurrency?: number; budgetMs?: number },
 ): Promise<GuestListItem[]> {
-  const concurrency = Math.max(1, options?.concurrency ?? 6);
+  const concurrency = Math.max(1, options?.concurrency ?? 8);
   const deadline = Date.now() + (options?.budgetMs ?? 8_000);
-  const next = guests.map((guest) => ({ ...guest }));
-  const pending = next.filter((guest) => guest.node && guest.vmid && !guest.template);
+  const next = applyCachedGuestIps(client, kind, guests).map((guest) => ({ ...guest }));
+  const pending = next.filter(
+    (guest) => guest.node && guest.vmid && !guest.template && peekGuestIpCache(client, kind, guest.node, guest.vmid) === null,
+  );
   let i = 0;
   await Promise.all(
     Array.from({ length: Math.min(concurrency, pending.length) }, async () => {

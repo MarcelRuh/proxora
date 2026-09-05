@@ -7,6 +7,7 @@ import {
   ipv4Host,
   networksForHost,
   parseGuestConfigIps,
+  parseLxcInterfaceIps,
   resolveGuestNetworks,
   parseAgentNetworkIps,
   parseGuestIpSettings,
@@ -62,6 +63,15 @@ describe("guest IP settings and config parse", () => {
     expect(parseGuestConfigIps({ ipconfig0: "ip=192.168.1.50/24,gw=192.168.1.1" })).toEqual(["192.168.1.50"]);
     expect(parseGuestConfigIps({ net0: "name=eth0,ip=dhcp" })).toEqual([]);
     expect(ipv4Host("10.0.0.8/24")).toBe("10.0.0.8");
+  });
+
+  it("reads LXC runtime interfaces", () => {
+    expect(
+      parseLxcInterfaceIps([
+        { name: "lo", inet: "127.0.0.1/8" },
+        { name: "eth0", inet: "192.168.178.50/24", inet6: "fe80::1/64" },
+      ]),
+    ).toEqual(["192.168.178.50"]);
   });
 
   it("reads QEMU agent interfaces and skips loopback", () => {
