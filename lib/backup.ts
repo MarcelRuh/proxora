@@ -8,6 +8,29 @@ export type ParsedBackupVolid = {
   vmid: number | null;
 };
 
+export function backupsForGuest<T extends { vmid: number | null; kind: BackupKind }>(
+  files: T[],
+  vmid: number,
+  kind: "vm" | "lxc",
+): T[] {
+  return files.filter((file) => file.vmid === vmid && (file.kind === kind || file.kind === "unknown"));
+}
+
+export function assertGuestBackupVolids(volids: string[], vmid: number, kind: "vm" | "lxc"): string[] {
+  const unique = [...new Set(volids.map((value) => value.trim()).filter(Boolean))];
+  for (const volid of unique) {
+    const parsed = parseBackupVolid(volid);
+    if (!parsed.storage || !parsed.volume) throw new Error(`Ungültiges Backup: ${volid}`);
+    if (parsed.vmid != null && parsed.vmid !== vmid) {
+      throw new Error(`Backup ${volid} gehört nicht zu ${kind} ${vmid}`);
+    }
+    if (parsed.kind !== "unknown" && parsed.kind !== kind) {
+      throw new Error(`Backup ${volid} gehört nicht zu ${kind} ${vmid}`);
+    }
+  }
+  return unique;
+}
+
 export function parseBackupVolid(volid: string): ParsedBackupVolid {
   const raw = volid.trim();
   const colon = raw.indexOf(":");

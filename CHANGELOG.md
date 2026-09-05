@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.4] – 2026-09-05
+
+### Changed
+
+- Deleting a VM or container confirms **Shut down and delete**, stops the guest first if needed, then removes it. Optionally pick which backup archives to delete with it.
+
 ## [1.4.3] – 2026-09-05
 
 ### Changed

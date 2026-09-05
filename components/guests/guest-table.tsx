@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/misc";
 import { GuestStateBadge } from "@/components/status-badge";
 import { ConfirmAction } from "@/components/confirm-action";
+import { GuestDeleteDialog } from "@/components/guests/guest-delete-dialog";
 import { GuestCpuBar, GuestDiskBar, GuestRamBar } from "@/components/guests/guest-usage";
 import { api } from "@/lib/api";
 import { DEFAULT_GUEST_SORT, nextGuestSort, sortGuests, type GuestSortKey } from "@/lib/guest-sort";
@@ -99,10 +100,18 @@ export const GuestTable = memo(function GuestTable({
         method: "POST",
         body: JSON.stringify({ action, confirm: action === "delete", ...extra }),
       });
-      toast.success(action === "snapshot" ? t("guest.snapshotCreated") : t("common.taskDone"));
+      toast.success(
+        action === "snapshot"
+          ? t("guest.snapshotCreated")
+          : action === "delete"
+            ? t("guest.deleted", { kind: row === "vm" ? "VM" : "LXC", id: vmid })
+            : t("common.taskDone"),
+      );
       await qc.invalidateQueries({ queryKey: ["dashboard"] });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("common.failed"));
+      if (action !== "delete") {
+        toast.error(err instanceof Error ? err.message : t("common.failed"));
+      }
       throw err;
     } finally {
       setBusyId(null);
@@ -395,17 +404,18 @@ export const GuestTable = memo(function GuestTable({
                           </Button>
                         ) : null}
                         {perms.delete ? (
-                          <ConfirmAction
-                            title={t("guest.deleteTitle", { kind: kindLabel, id: g.vmid })}
-                            description={t("guest.deleteBody", { id: g.vmid, name: g.name })}
-                            actionLabel={t("guest.delete")}
-                            destructive
-                            onConfirm={() => guestAction(hid, g.node, g.vmid, "delete", row)}
+                          <GuestDeleteDialog
+                            hostId={hid}
+                            kind={row}
+                            vmid={g.vmid}
+                            name={g.name}
+                            kindLabel={kindLabel}
+                            onConfirm={(backupVolids) => guestAction(hid, g.node, g.vmid, "delete", row, { backupVolids })}
                           >
                             <Button size="sm" variant="destructive" disabled={rowBusy}>
                               {t("guest.delete")}
                             </Button>
-                          </ConfirmAction>
+                          </GuestDeleteDialog>
                         ) : null}
                       </div>
                     </td>

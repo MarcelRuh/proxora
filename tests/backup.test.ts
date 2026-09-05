@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   backupCtimeMs,
   filterBackupFiles,
+  backupsForGuest,
+  assertGuestBackupVolids,
   guestNeedsStopForRestore,
   jobSchedulePayload,
   normalizeBackupJob,
@@ -65,6 +67,19 @@ describe("backup file filter", () => {
     expect(
       filterBackupFiles(files, { query: "", kind: "all", storage: "all", period: "week", now: 1_700_060_000_000 }).map((f) => f.vmid),
     ).toEqual([100, 204]);
+  });
+
+  it("lists backups that belong to one guest", () => {
+    expect(backupsForGuest(files, 100, "vm").map((f) => f.volid)).toEqual(["local:backup/vzdump-qemu-100-a.vma.zst"]);
+    expect(backupsForGuest(files, 204, "lxc")).toHaveLength(1);
+    expect(backupsForGuest(files, 100, "lxc")).toHaveLength(0);
+  });
+
+  it("rejects backup volids that belong to another guest", () => {
+    expect(assertGuestBackupVolids(["local:backup/vzdump-qemu-100-a.vma.zst"], 100, "vm")).toEqual([
+      "local:backup/vzdump-qemu-100-a.vma.zst",
+    ]);
+    expect(() => assertGuestBackupVolids(["local:backup/vzdump-qemu-110-b.vma.zst"], 100, "vm")).toThrow(/gehört nicht/);
   });
 });
 

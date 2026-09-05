@@ -18,6 +18,7 @@ import { parseGuestConfigIps } from "@/lib/create-ip";
 import { rememberGuestIpCache } from "@/server/services/guest-ip-cache";
 import { durationLabel } from "@/lib/duration";
 import { notifyGuestTaskFailed } from "@/server/notifications/guest-task-fail";
+import { shutdownThenDeleteGuest } from "@/server/services/guest-delete";
 
 export const maxDuration = 800;
 
@@ -45,6 +46,7 @@ const actionSchema = z.object({
   config: z.record(z.string(), z.unknown()).optional(),
   disk: z.string().optional(),
   size: z.string().optional(),
+  backupVolids: z.array(z.string().min(1)).max(50).optional(),
 });
 
 const ACTION_AUDIT: Record<string, string> = {
@@ -122,7 +124,13 @@ export const POST = apiRoute("lxc.view", async (req, session, params) => {
           result = await client.lxc.reboot(node, vmid);
           break;
         case "delete":
-          result = await client.lxc.delete(node, vmid);
+          result = await shutdownThenDeleteGuest(client, {
+            kind: "lxc",
+            node,
+            vmid,
+            backupVolids: body.backupVolids,
+            canDeleteBackups: hasPermission(session.user.role.permissions, "backup.delete"),
+          });
           break;
         case "clone":
           if (body.newid) await assertGuestIdentityFree(host, body.newid);

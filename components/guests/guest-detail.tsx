@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { ProgressBar } from "@/components/ui/misc";
 import { GuestStateBadge } from "@/components/status-badge";
 import { ConfirmAction } from "@/components/confirm-action";
+import { GuestDeleteDialog } from "@/components/guests/guest-delete-dialog";
 import { WebConsole } from "@/components/console/web-console";
 import { VncConsole } from "@/components/console/vnc-console";
 import { GuestConfigForm } from "@/components/guests/guest-config-form";
@@ -288,21 +289,16 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           </Button>
         ) : null}
         {can.delete ? (
-          running || paused ? (
-            <Button variant="destructive" disabled>
-              {t("guest.delete")}
-            </Button>
-          ) : (
-            <ConfirmAction
-              title={t("guest.deleteTitle", { kind: kindLabel, id: params.vmid })}
-              description={t("guest.deleteBody", { id: params.vmid, name })}
-              actionLabel={t("guest.delete")}
-              destructive
-              onConfirm={() => action("delete", { confirm: true })}
-            >
-              <Button variant="destructive">{t("guest.delete")}</Button>
-            </ConfirmAction>
-          )
+          <GuestDeleteDialog
+            hostId={params.hostId}
+            kind={kind}
+            vmid={Number(params.vmid)}
+            name={name}
+            kindLabel={kindLabel}
+            onConfirm={(backupVolids) => action("delete", { confirm: true, backupVolids })}
+          >
+            <Button variant="destructive">{t("guest.delete")}</Button>
+          </GuestDeleteDialog>
         ) : null}
       </div>
 
