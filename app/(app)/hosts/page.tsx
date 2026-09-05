@@ -15,6 +15,7 @@ import { QueryGate } from "@/components/layout/query-gate";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan, useSessionUser } from "@/components/auth/session-user";
 import { userHasPermission } from "@/lib/permissions";
+import { peerHostAllowsPermission } from "@/lib/federation-access";
 import { HostEditorDialog } from "@/components/hosts/host-editor";
 import { HostMaintenanceButton } from "@/components/hosts/host-maintenance";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
@@ -125,7 +126,8 @@ function HostSection({
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{title}</h2>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {hosts.map((host) => {
-          const canConsole = !remote && userHasPermission(user, "hosts.console", host.id);
+          const canConsole =
+            userHasPermission(user, "hosts.console", host.id) && peerHostAllowsPermission(host, "hosts.console");
           const canEdit = !remote && userHasPermission(user, "hosts.update", host.id);
           const canCreds = !remote && userHasPermission(user, "hosts.credentials", host.id);
           const canDelete = !remote && userHasPermission(user, "hosts.delete", host.id);

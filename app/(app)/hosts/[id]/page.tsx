@@ -14,6 +14,7 @@ import { formatUptime, percentage } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { useState } from "react";
 import { useCan, useCanAny } from "@/components/auth/session-user";
+import { peerHostAllowsPermission } from "@/lib/federation-access";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { PublicHost } from "@/lib/types";
 import { HostEditorDialog } from "@/components/hosts/host-editor";
@@ -67,6 +68,7 @@ export default function HostDetailPage() {
 
   const remote = meta?.host.origin === "PEER";
   const canHostAdmin = !remote;
+  const canPeerConsole = peerHostAllowsPermission(meta?.host ?? { origin: "LOCAL" }, "hosts.console");
   const nodes = data?.nodes ?? [];
 
   async function power(action: "reboot" | "shutdown", node: string) {
@@ -114,7 +116,7 @@ export default function HostDetailPage() {
                 <span className="ml-2 text-sm font-normal text-muted-foreground">{item.online}</span>
               </CardTitle>
               <div className="flex flex-wrap gap-2">
-                {canConsole && canHostAdmin ? (
+                {canConsole && canPeerConsole ? (
                   <Button size="sm" asChild>
                     <Link href={`/hosts/${params.id}/console?node=${encodeURIComponent(item.node)}`}>
                       {t("hosts.terminal")}

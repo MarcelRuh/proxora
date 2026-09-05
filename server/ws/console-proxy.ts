@@ -4,7 +4,9 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/db";
 import { SESSION_COOKIE } from "@/lib/env";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
+import { HostOrigin } from "@prisma/client";
 import { userHasPermission } from "@/lib/permissions";
+import { parseShareLevel, shareHasPermission } from "@/lib/federation-access";
 import { getSessionFromToken, assertGuestAccess, canAccessHost } from "@/server/auth/session-core";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { clientForHost } from "@/server/services/host-service";
@@ -86,6 +88,13 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
     if (!canAccessHost(session.user, hostId)) {
       browser.close(4404, "Host not found");
       return;
+    }
+    if (host.origin === HostOrigin.PEER) {
+      const level = parseShareLevel(host.peerShareLevel) ?? "view";
+      if (!shareHasPermission(level, host.peerSharePermissions, permission)) {
+        browser.close(4403, "Forbidden");
+        return;
+      }
     }
     if ((kind === "vm" || kind === "lxc") && vmid) {
       try {

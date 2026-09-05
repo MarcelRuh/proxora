@@ -190,7 +190,11 @@ describe("federation share levels", () => {
   });
 
   it("grants host upgrades only via custom share permissions", () => {
-    expect(federationPermission("POST", "/nodes/pve/apt/update")).toBe("updates.check");
+    expect(federationPermission("POST", "/nodes/pve/termproxy")).toBe("hosts.console");
+    expect(federationPermission("GET", "/nodes/pve/vncwebsocket")).toEqual(["hosts.console", "updates.upgrade"]);
+    expect(federationPermission("POST", "/nodes/pve/qemu/100/termproxy")).toBe("vm.console");
+    expect(shareHasPermission("control", ["hosts.view", "hosts.console"], "hosts.console")).toBe(true);
+    expect(peerHostAllowsPermission({ origin: "PEER", shareLevel: "control", sharePermissions: ["hosts.view", "hosts.console"] }, "hosts.console")).toBe(true);
     expect(federationPermission("POST", "/nodes/pve/termproxy", { body: { cmd: "upgrade" } })).toBe("updates.upgrade");
     expect(federationPermission("POST", "/nodes/pve/status", { body: { command: "reboot" } })).toBe("hosts.reboot");
     expect(shareHasPermission("control", null, "updates.upgrade")).toBe(false);

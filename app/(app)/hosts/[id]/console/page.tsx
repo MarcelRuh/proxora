@@ -12,6 +12,7 @@ import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { QueryGate } from "@/components/layout/query-gate";
 import { useCan } from "@/components/auth/session-user";
+import { peerHostAllowsPermission } from "@/lib/federation-access";
 import { useI18n } from "@/components/i18n/locale-provider";
 
 type Status = {
@@ -30,6 +31,7 @@ export default function HostConsolePage() {
     queryKey: ["host-meta", params.id],
     queryFn: () => api<{ host: PublicHost }>(`/api/hosts/${params.id}`),
   });
+  const shareAllowsConsole = peerHostAllowsPermission(meta?.host ?? { origin: "LOCAL" }, "hosts.console");
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["host", params.id],
     queryFn: () => api<Status>(`/api/hosts/${params.id}/status`),
@@ -41,7 +43,7 @@ export default function HostConsolePage() {
     [data?.nodes, requested],
   );
 
-  if (!canConsole) {
+  if (!canConsole || (meta && !shareAllowsConsole)) {
     return (
       <div className="proxora-panel p-6">
         <p className="font-medium">{t("hosts.terminalForbidden")}</p>
@@ -88,7 +90,7 @@ export default function HostConsolePage() {
           void refetchMeta();
         }}
       >
-        {node ? (
+        {node && shareAllowsConsole ? (
           <WebConsole key={node} hostId={params.id} node={node} kind="node" fill />
         ) : (
           <div className="proxora-panel p-6">

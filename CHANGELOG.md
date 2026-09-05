@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.9] – 2026-09-05
+
+### Fixed
+
+- Consoles on colleague (shared) hosts work: the federation websocket queues the Proxmox handshake until the node socket is open. Host Terminal is shown when the share includes `hosts.console`.
+
 ## [1.4.8] – 2026-09-05
 
 ### Changed
