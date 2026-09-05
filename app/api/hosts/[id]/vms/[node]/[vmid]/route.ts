@@ -163,7 +163,7 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
         result = await vm.delete(node, vmid);
         break;
       case "clone":
-        if (body.newid) await assertGuestIdentityFree(body.newid);
+        if (body.newid) await assertGuestIdentityFree(host, body.newid);
         result = await vm.clone(node, vmid, { newid: body.newid, name: body.name, full: 1 });
         break;
       case "migrate": {

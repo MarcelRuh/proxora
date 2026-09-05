@@ -2,17 +2,18 @@ import { apiRoute } from "@/server/http/api-route";
 import { json } from "@/server/http/respond";
 import { guestIpFromVmid } from "@/lib/create-ip";
 import { nextSmallerVmid } from "@/lib/next-vmid";
-import { collectUsedGuestIpsAllHosts } from "@/server/services/guest-ips";
+import { collectUsedGuestIpsForHost } from "@/server/services/guest-ips";
 import { networksForHostId } from "@/server/services/guest-ip-settings";
 import { collectIsoVolumes, collectVztmplVolumes } from "@/server/services/lxc-template-catalog";
-import { withHostClient } from "@/server/services/host-service";
+import { getHostOrThrow, withHostClient } from "@/server/services/host-service";
 
 export const GET = apiRoute(["vm.create", "lxc.create", "vm.clone", "lxc.clone"], async (req, session, params) => {
   const url = new URL(req.url);
   const node = url.searchParams.get("node");
   const networks = await networksForHostId(params.id);
+  const target = await getHostOrThrow(params.id, session.user);
   const [used, hostData] = await Promise.all([
-    collectUsedGuestIpsAllHosts(),
+    collectUsedGuestIpsForHost(target),
     withHostClient(params.id, session.user, async (client) => {
       const nodes = await client.nodes.list();
       const selected = node ?? nodes[0]?.node;

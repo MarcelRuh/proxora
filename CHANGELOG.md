@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.3] – 2026-09-05
+
+### Changed
+
+- New VM/CT IDs (and static IPs) are unique only in the target scope: local hosts among themselves, a colleague cluster only against that cluster.
+
 ## [1.4.2] – 2026-09-05
 
 ### Fixed

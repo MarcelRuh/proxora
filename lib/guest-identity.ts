@@ -11,3 +11,11 @@ export function identityConflict(
   }
   return null;
 }
+
+export type IdentityHost = { id: string; origin: "LOCAL" | "PEER" };
+
+/** Local create: all local hosts. Colleague create: only that cluster. */
+export function hostsInGuestIdentityScope(target: IdentityHost, all: IdentityHost[]): IdentityHost[] {
+  if (target.origin === "PEER") return all.filter((h) => h.id === target.id);
+  return all.filter((h) => h.origin === "LOCAL");
+}

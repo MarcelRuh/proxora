@@ -1,6 +1,6 @@
 import { parseGuestConfigIps } from "@/lib/create-ip";
 import { peekGuestIpCache, rememberGuestIpCache } from "@/server/services/guest-ip-cache";
-import { identityConflict } from "@/lib/guest-identity";
+import { hostsInGuestIdentityScope, identityConflict } from "@/lib/guest-identity";
 import { prisma } from "@/lib/db";
 import { ConflictError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
@@ -8,6 +8,7 @@ import { mergeUsedGuestSets } from "@/lib/next-vmid";
 import type { ProxmoxClient } from "@/server/proxmox/client";
 import type { GuestListItem } from "@/server/proxmox/types";
 import { clientForHost } from "@/server/services/host-service";
+import { HostOrigin, type Host } from "@prisma/client";
 
 async function listedGuests(client: ProxmoxClient) {
   const guests = await client.listGuests().catch(() => ({ vms: [] as GuestListItem[], containers: [] as GuestListItem[] }));
@@ -59,8 +60,15 @@ export async function collectUsedGuestIps(client: ProxmoxClient): Promise<{ vmid
   return { vmids, ips: [...ips] };
 }
 
-async function forEachHost<T>(fn: (client: ProxmoxClient) => Promise<T>, empty: T): Promise<T[]> {
-  const hosts = await prisma.host.findMany({ orderBy: { name: "asc" } });
+async function forEachHostInScope<T>(target: Host, fn: (client: ProxmoxClient) => Promise<T>, empty: T): Promise<T[]> {
+  const all = await prisma.host.findMany({ orderBy: { name: "asc" } });
+  const scopedIds = new Set(
+    hostsInGuestIdentityScope(
+      { id: target.id, origin: target.origin === HostOrigin.PEER ? "PEER" : "LOCAL" },
+      all.map((h) => ({ id: h.id, origin: h.origin === HostOrigin.PEER ? "PEER" : "LOCAL" })),
+    ).map((h) => h.id),
+  );
+  const hosts = all.filter((h) => scopedIds.has(h.id));
   return Promise.all(
     hosts.map(async (host) => {
       try {
@@ -77,21 +85,25 @@ async function forEachHost<T>(fn: (client: ProxmoxClient) => Promise<T>, empty: 
   );
 }
 
-export async function collectUsedVmidsAllHosts(): Promise<number[]> {
-  const parts = await forEachHost((client) => collectUsedVmids(client), [] as number[]);
+export async function collectUsedVmidsForHost(target: Host): Promise<number[]> {
+  const parts = await forEachHostInScope(target, (client) => collectUsedVmids(client), [] as number[]);
   return mergeUsedGuestSets(parts.map((vmids) => ({ vmids }))).vmids;
 }
 
-/** VMIDs and guest IPs from every Proxora host so new IDs stay unique lab-wide. */
-export async function collectUsedGuestIpsAllHosts(): Promise<{ vmids: number[]; ips: string[] }> {
-  const parts = await forEachHost((client) => collectUsedGuestIps(client), { vmids: [] as number[], ips: [] as string[] });
+/** VMIDs and guest IPs in the create-target scope (local lab or one colleague cluster). */
+export async function collectUsedGuestIpsForHost(target: Host): Promise<{ vmids: number[]; ips: string[] }> {
+  const parts = await forEachHostInScope(
+    target,
+    (client) => collectUsedGuestIps(client),
+    { vmids: [] as number[], ips: [] as string[] },
+  );
   return mergeUsedGuestSets(parts);
 }
 
-export async function assertGuestIdentityFree(vmid: number, ip?: string | null) {
+export async function assertGuestIdentityFree(host: Host, vmid: number, ip?: string | null) {
   const used = ip
-    ? await collectUsedGuestIpsAllHosts()
-    : { vmids: await collectUsedVmidsAllHosts(), ips: [] as string[] };
+    ? await collectUsedGuestIpsForHost(host)
+    : { vmids: await collectUsedVmidsForHost(host), ips: [] as string[] };
   const conflict = identityConflict(used, vmid, ip);
   if (conflict === "vmid") throw new ConflictError(`VMID ${vmid} ist bereits vergeben`);
   if (conflict === "ip") throw new ConflictError(`IPv4 ${ip} ist bereits vergeben`);

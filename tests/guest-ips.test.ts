@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { identityConflict } from "@/lib/guest-identity";
+import { hostsInGuestIdentityScope, identityConflict } from "@/lib/guest-identity";
 import { mergeUsedGuestSets } from "@/lib/next-vmid";
 import { collectUsedGuestIps } from "@/server/services/guest-ips";
 import { clearGuestIpCache, rememberGuestIpCache } from "@/server/services/guest-ip-cache";
@@ -32,6 +32,21 @@ describe("identityConflict", () => {
   it("detects a taken IP only when one is provided", () => {
     expect(identityConflict({ vmids: [100], ips: ["192.168.178.101"] }, 101, "192.168.178.101")).toBe("ip");
     expect(identityConflict({ vmids: [100], ips: ["192.168.178.101"] }, 101)).toBeNull();
+  });
+});
+
+describe("hostsInGuestIdentityScope", () => {
+  const localA = { id: "a", origin: "LOCAL" as const };
+  const localB = { id: "b", origin: "LOCAL" as const };
+  const peer = { id: "p", origin: "PEER" as const };
+  const all = [localA, localB, peer];
+
+  it("uses every local host when creating on a local node", () => {
+    expect(hostsInGuestIdentityScope(localA, all).map((h) => h.id)).toEqual(["a", "b"]);
+  });
+
+  it("uses only that colleague cluster when creating on a peer host", () => {
+    expect(hostsInGuestIdentityScope(peer, all).map((h) => h.id)).toEqual(["p"]);
   });
 });
 

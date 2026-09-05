@@ -68,7 +68,7 @@ export const POST = apiRoute("lxc.create", async (req, session, params) => {
   try {
     const result = await withHostClient(params.id, session.user, async (client, host) => {
       hostName = host.name;
-      await assertGuestIdentityFree(body.vmid, staticIp);
+      await assertGuestIdentityFree(host, body.vmid, staticIp);
       const createUpid = await client.lxc.create(
         body.node,
         compactProxmoxBody({

@@ -138,7 +138,7 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
   try {
     const result = await withHostClient(params.id, session.user, async (client, host) => {
       hostName = host.name;
-      await assertGuestIdentityFree(body.vmid, staticIp);
+      await assertGuestIdentityFree(host, body.vmid, staticIp);
       const createUpid = await client.vms.create(body.node, payload as VmCreateParams);
       const done = await completeGuestCreate(client, "vm", body.node, body.vmid, createUpid, Boolean(body.startAfter));
       return { createUpid, ...done };

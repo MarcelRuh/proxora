@@ -125,7 +125,7 @@ export const POST = apiRoute("lxc.view", async (req, session, params) => {
           result = await client.lxc.delete(node, vmid);
           break;
         case "clone":
-          if (body.newid) await assertGuestIdentityFree(body.newid);
+          if (body.newid) await assertGuestIdentityFree(host, body.newid);
           result = await client.lxc.clone(node, vmid, { newid: body.newid, hostname: body.hostname });
           break;
         case "migrate": {
