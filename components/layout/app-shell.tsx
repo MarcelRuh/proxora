@@ -18,6 +18,7 @@ import {
   Shield,
   ArrowUpCircle,
   Library,
+  Network,
   Users,
   X,
 } from "lucide-react";
@@ -60,6 +61,7 @@ const NAV: Array<{
   { href: "/users", labelKey: "nav.users", icon: Users, anyOf: ["users.view"] },
   { href: "/roles", labelKey: "nav.roles", icon: Shield, anyOf: ["roles.view"] },
   { href: "/audit", labelKey: "nav.audit", icon: ClipboardList, anyOf: ["audit.view"] },
+  { href: "/wireguard", labelKey: "nav.wireguard", icon: Network, anyOf: ["peers.manage"] },
   { href: "/settings", labelKey: "nav.settings", icon: Settings, anyOf: ["settings.view", "notifications.view"] },
 ];
 

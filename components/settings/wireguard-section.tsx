@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { useCan } from "@/components/auth/session-user";
@@ -85,11 +85,7 @@ export function WireguardSection() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{t("peers.title")}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <p className="text-sm text-muted-foreground">{t("peers.body")}</p>
+      <CardContent className="space-y-6 pt-6">
         {iface ? (
           <>
             <div className="grid gap-3 sm:grid-cols-2">
