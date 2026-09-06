@@ -22,9 +22,10 @@ import { ConfirmAction } from "@/components/confirm-action";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { api, ApiRequestError } from "@/lib/api";
 import { bytesToSize } from "@/lib/utils";
+import { isAbortError, putBlobWithProgress } from "@/lib/guest-file-transfer";
 import {
   AGENT_FILE_MAX_BYTES,
-  GUEST_FILE_MAX_BYTES,
+  GUEST_FILE_EDITOR_WARN_BYTES,
   GUEST_FILE_SHORTCUTS,
   guestPathCrumbs,
   guestPathParent,
@@ -32,6 +33,7 @@ import {
   resolveGuestPath,
   type GuestFileEntry,
   type GuestFileResult,
+  type GuestTransferMode,
 } from "@/lib/guest-files";
 
 type Session = {
@@ -39,6 +41,12 @@ type Session = {
   port: number;
   username: string;
   password: string;
+};
+
+type Transfer = {
+  name: string;
+  sent: number;
+  total: number;
 };
 
 const selectClass =
@@ -114,6 +122,9 @@ export function GuestFilesPanel({
   const [saving, setSaving] = useState(false);
   const [showSsh, setShowSsh] = useState(kind === "lxc");
   const [agentError, setAgentError] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const [transfer, setTransfer] = useState<Transfer | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const opened = useRef(false);
 
   const apiPath = `/api/hosts/${hostId}/${kind === "vm" ? "vms" : "lxc"}/${encodeURIComponent(node)}/${vmid}/files`;
@@ -121,9 +132,10 @@ export function GuestFilesPanel({
   const crumbs = guestPathCrumbs(path);
   const parent = guestPathParent(path);
   const connected = via !== null;
-  const maxBytes = via === "agent" ? AGENT_FILE_MAX_BYTES : GUEST_FILE_MAX_BYTES;
+  const maxBytes = via === "agent" ? AGENT_FILE_MAX_BYTES : null;
+  const transferring = Boolean(transfer);
 
-  async function request(op: "list" | "read" | "write" | "mkdir" | "delete", extra: Record<string, unknown> = {}) {
+  async function request(op: "list" | "read" | "write" | "mkdir" | "delete" | "transfer-ticket", extra: Record<string, unknown> = {}) {
     const mode = extra.via === "sftp" || session ? "sftp" : "agent";
     const creds = session;
     if (mode === "sftp" && !creds && extra.via !== "sftp") {
@@ -222,30 +234,59 @@ export function GuestFilesPanel({
     return request(op, extra);
   }
 
+  async function transferTicket(mode: GuestTransferMode, filePath: string) {
+    const creds = session;
+    if (!creds) throw new Error(t("files.needConnect"));
+    const result = await api<GuestFileResult>(apiPath, {
+      method: "POST",
+      body: JSON.stringify({
+        op: "transfer-ticket",
+        mode,
+        via: "sftp",
+        path: filePath,
+        target: creds.target,
+        port: creds.port,
+        username: creds.username,
+        password: creds.password,
+      }),
+    });
+    if (!result.ticket) throw new Error(t("common.failed"));
+    return result.ticket;
+  }
+
+  async function sftpPut(filePath: string, body: Blob, name: string) {
+    const ticket = await transferTicket("upload", filePath);
+    abortRef.current?.abort();
+    const abort = new AbortController();
+    abortRef.current = abort;
+    setTransfer({ name, sent: 0, total: body.size });
+    try {
+      await putBlobWithProgress(`${apiPath}/upload?ticket=${encodeURIComponent(ticket)}`, body, {
+        signal: abort.signal,
+        onProgress: (sent, total) => setTransfer({ name, sent, total }),
+      });
+    } finally {
+      if (abortRef.current === abort) abortRef.current = null;
+      setTransfer(null);
+    }
+  }
+
+  async function sftpGetBytes(filePath: string) {
+    const ticket = await transferTicket("download", filePath);
+    const response = await fetch(`${apiPath}/download?ticket=${encodeURIComponent(ticket)}`, { credentials: "include" });
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(data.error || t("common.failed"));
+    }
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
   async function download(entry: GuestFileEntry) {
     if (via === "sftp") {
-      const creds = session;
-      if (!creds) {
-        toast.error(t("files.needConnect"));
-        return;
-      }
-      setBusy(true);
       try {
-        const result = await api<GuestFileResult>(apiPath, {
-          method: "POST",
-          body: JSON.stringify({
-            op: "download-ticket",
-            via: "sftp",
-            path: entry.path,
-            target: creds.target,
-            port: creds.port,
-            username: creds.username,
-            password: creds.password,
-          }),
-        });
-        if (!result.ticket) throw new Error(t("common.failed"));
+        const ticket = await transferTicket("download", entry.path);
         const a = document.createElement("a");
-        a.href = `${apiPath}/download?ticket=${encodeURIComponent(result.ticket)}`;
+        a.href = `${apiPath}/download?ticket=${encodeURIComponent(ticket)}`;
         a.download = entry.name;
         a.rel = "noopener";
         document.body.appendChild(a);
@@ -254,8 +295,6 @@ export function GuestFilesPanel({
         toast.success(t("files.downloadStarted"));
       } catch (error) {
         toast.error(error instanceof Error ? error.message : t("common.failed"));
-      } finally {
-        setBusy(false);
       }
       return;
     }
@@ -271,6 +310,26 @@ export function GuestFilesPanel({
   }
 
   async function edit(entry: GuestFileEntry) {
+    if (via === "sftp") {
+      if (entry.size > GUEST_FILE_EDITOR_WARN_BYTES) {
+        toast.message(t("files.editorHuge", { size: bytesToSize(entry.size) }));
+      }
+      setBusy(true);
+      try {
+        const bytes = await sftpGetBytes(entry.path);
+        if (!isProbablyTextFile(entry.name, bytes)) {
+          downloadBytes(entry.name, bytes);
+          toast.message(t("files.binary"));
+          return;
+        }
+        setEditor({ path: entry.path, name: entry.name, text: new TextDecoder().decode(bytes) });
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t("common.failed"));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     setBusy(true);
     try {
       const result = await call("read", { path: entry.path });
@@ -292,32 +351,54 @@ export function GuestFilesPanel({
     if (!editor) return;
     setSaving(true);
     try {
-      await call("write", { path: editor.path, contentBase64: bytesToBase64(new TextEncoder().encode(editor.text)) });
+      const bytes = new TextEncoder().encode(editor.text);
+      if (via === "sftp") {
+        await sftpPut(editor.path, new Blob([bytes]), editor.name);
+      } else {
+        await call("write", { path: editor.path, contentBase64: bytesToBase64(bytes) });
+      }
       toast.success(t("files.saved"));
       setEditor(null);
       if (via) await loadDir(path, via, session);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("common.failed"));
+      if (isAbortError(error)) toast.message(t("files.transferCancelled"));
+      else toast.error(error instanceof Error ? error.message : t("common.failed"));
     } finally {
       setSaving(false);
     }
   }
 
-  async function upload(file: File) {
-    if (file.size > maxBytes) {
-      toast.error(t("files.tooLarge", { size: bytesToSize(maxBytes) }));
+  async function uploadFiles(files: File[]) {
+    if (!files.length) return;
+    if (via === "agent") {
+      const file = files[0];
+      if (!file) return;
+      if (maxBytes && file.size > maxBytes) {
+        toast.error(t("files.tooLarge", { size: bytesToSize(maxBytes) }));
+        return;
+      }
+      setBusy(true);
+      try {
+        const buf = new Uint8Array(await file.arrayBuffer());
+        await call("write", { path: resolveGuestPath(path, file.name), contentBase64: bytesToBase64(buf) });
+        toast.success(t("files.uploaded"));
+        await loadDir(path, "agent", session);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t("common.failed"));
+      } finally {
+        setBusy(false);
+      }
       return;
     }
-    setBusy(true);
     try {
-      const buf = new Uint8Array(await file.arrayBuffer());
-      await call("write", { path: resolveGuestPath(path, file.name), contentBase64: bytesToBase64(buf) });
-      toast.success(t("files.uploaded"));
+      for (const file of files) {
+        await sftpPut(resolveGuestPath(path, file.name), file, file.name);
+      }
+      toast.success(files.length > 1 ? t("files.uploadedMany", { count: files.length }) : t("files.uploaded"));
       if (via) await loadDir(path, via, session);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("common.failed"));
-    } finally {
-      setBusy(false);
+      if (isAbortError(error)) toast.message(t("files.transferCancelled"));
+      else toast.error(error instanceof Error ? error.message : t("common.failed"));
     }
   }
 
@@ -343,13 +424,18 @@ export function GuestFilesPanel({
     setBusy(true);
     try {
       const dest = resolveGuestPath(path, name);
-      await call("write", { path: dest, contentBase64: "" });
+      if (via === "sftp") {
+        await sftpPut(dest, new Blob([]), name);
+      } else {
+        await call("write", { path: dest, contentBase64: "" });
+      }
       setNewFileName("");
       toast.success(t("files.saved"));
       if (via) await loadDir(path, via, session);
       setEditor({ path: dest, name, text: "" });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("common.failed"));
+      if (isAbortError(error)) toast.message(t("files.transferCancelled"));
+      else toast.error(error instanceof Error ? error.message : t("common.failed"));
     } finally {
       setBusy(false);
     }
@@ -385,7 +471,7 @@ export function GuestFilesPanel({
         </div>
         {connected ? (
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" disabled={busy} onClick={() => via && void loadDir(path, via, session)}>
+            <Button size="sm" variant="outline" disabled={busy || transferring} onClick={() => via && void loadDir(path, via, session)}>
               <RefreshCw className="h-4 w-4" />
               {t("common.refresh")}
             </Button>
@@ -394,11 +480,13 @@ export function GuestFilesPanel({
                 size="sm"
                 variant="outline"
                 onClick={() => {
+                  abortRef.current?.abort();
                   setSession(null);
                   setVia(null);
                   setEntries([]);
                   setPath("/");
                   setShowSsh(true);
+                  setTransfer(null);
                 }}
               >
                 {t("files.disconnect")}
@@ -493,7 +581,25 @@ export function GuestFilesPanel({
                 </button>
               ))}
             </nav>
-            <div className="min-w-0 flex-1">
+            <div
+              className={`min-w-0 flex-1 ${dragging ? "bg-primary/5" : ""}`}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                if (via === "sftp") setDragging(true);
+              }}
+              onDragOver={(e) => e.preventDefault()}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                setDragging(false);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragging(false);
+                if (via !== "sftp" || transferring) return;
+                const files = Array.from(e.dataTransfer.files);
+                if (files.length) void uploadFiles(files);
+              }}
+            >
               <div className="flex flex-wrap items-center gap-1 border-b border-border px-3 py-2">
                 <Button
                   size="icon"
@@ -522,32 +628,79 @@ export function GuestFilesPanel({
                 <input
                   ref={fileRef}
                   type="file"
+                  multiple={via === "sftp"}
                   className="hidden"
                   onChange={(e) => {
-                    const file = e.target.files?.[0];
+                    const files = Array.from(e.target.files ?? []);
                     e.target.value = "";
-                    if (file) void upload(file);
+                    if (files.length) void uploadFiles(files);
                   }}
                 />
-                <Button size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
+                <Button size="sm" disabled={busy || transferring} onClick={() => fileRef.current?.click()}>
                   <Upload className="h-4 w-4" />
                   {t("files.upload")}
                 </Button>
                 <div className="flex gap-1">
-                  <Input className="h-8 w-32" placeholder={t("files.folderName")} value={mkdirName} onChange={(e) => setMkdirName(e.target.value)} />
-                  <Button size="sm" variant="outline" disabled={busy || !mkdirName.trim()} onClick={() => void makeDir()}>
+                  <Input
+                    className="h-8 w-32"
+                    placeholder={t("files.folderName")}
+                    value={mkdirName}
+                    onChange={(e) => setMkdirName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void makeDir();
+                    }}
+                  />
+                  <Button size="sm" variant="outline" disabled={busy || transferring || !mkdirName.trim()} onClick={() => void makeDir()}>
                     <FolderPlus className="h-4 w-4" />
                     {t("files.mkdir")}
                   </Button>
                 </div>
                 <div className="flex gap-1">
-                  <Input className="h-8 w-32" placeholder={t("files.fileName")} value={newFileName} onChange={(e) => setNewFileName(e.target.value)} />
-                  <Button size="sm" variant="outline" disabled={busy || !newFileName.trim()} onClick={() => void makeFile()}>
+                  <Input
+                    className="h-8 w-32"
+                    placeholder={t("files.fileName")}
+                    value={newFileName}
+                    onChange={(e) => setNewFileName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void makeFile();
+                    }}
+                  />
+                  <Button size="sm" variant="outline" disabled={busy || transferring || !newFileName.trim()} onClick={() => void makeFile()}>
                     <FilePlus className="h-4 w-4" />
                     {t("files.newFile")}
                   </Button>
                 </div>
               </div>
+              {transfer ? (
+                <div className="flex items-center gap-3 border-b border-border px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs text-muted-foreground">
+                      {t("files.transferring", {
+                        name: transfer.name,
+                        done: bytesToSize(transfer.sent, 0),
+                        total: bytesToSize(transfer.total, 0),
+                      })}
+                    </p>
+                    <div className="mt-1 h-1 overflow-hidden rounded bg-muted">
+                      <div
+                        className="h-full bg-primary transition-[width]"
+                        style={{
+                          width: `${transfer.total ? Math.min(100, Math.round((transfer.sent / transfer.total) * 100)) : 0}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => abortRef.current?.abort()}
+                  >
+                    {t("files.cancelTransfer")}
+                  </Button>
+                </div>
+              ) : via === "sftp" ? (
+                <p className="border-b border-border px-3 py-1.5 text-xs text-muted-foreground">{t("files.dropHint")}</p>
+              ) : null}
               <div className="max-h-[28rem] overflow-auto">
                 <div className="sticky top-0 grid grid-cols-[1fr_7rem_10rem_auto] gap-2 border-b border-border bg-card px-3 py-1.5 text-xs text-muted-foreground">
                   <span>{t("files.colName")}</span>
@@ -569,7 +722,6 @@ export function GuestFilesPanel({
                         disabled={busy}
                         onClick={() => {
                           if (entry.type === "dir") void openDir(entry.path);
-                          else if (via === "sftp" && entry.size > GUEST_FILE_MAX_BYTES) void download(entry);
                           else void edit(entry);
                         }}
                       >
@@ -622,8 +774,19 @@ export function GuestFilesPanel({
             value={editor?.text ?? ""}
             onChange={(e) => setEditor((cur) => (cur ? { ...cur, text: e.target.value } : cur))}
           />
-          <div className="mt-3 flex justify-end gap-2">
-            <Button variant="outline" disabled={saving} onClick={() => setEditor(null)}>
+          <div className="mt-3 flex items-center justify-end gap-2">
+            {saving && transfer ? (
+              <span className="mr-auto truncate text-xs text-muted-foreground">
+                {bytesToSize(transfer.sent, 0)} / {bytesToSize(transfer.total, 0)}
+              </span>
+            ) : null}
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (saving) abortRef.current?.abort();
+                else setEditor(null);
+              }}
+            >
               {t("common.cancel")}
             </Button>
             <Button disabled={saving} onClick={() => void saveEditor()}>

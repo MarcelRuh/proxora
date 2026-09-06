@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.18] – 2026-09-06
+
+### Changed
+
+- Guest SFTP (LXC and SSH fallback) streams download, upload and editor save with no size cap. Files go SSH → HTTP without JSON/base64. Progress, drag-and-drop and multi-file upload. The in-browser editor still has to hold the text in RAM (warning above 32 MB). QEMU guest agent stays at 48 KB.
+
 ## [1.4.17] – 2026-09-06
 
 ### Added

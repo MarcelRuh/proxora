@@ -1,8 +1,9 @@
 import { isIpv4 } from "@/lib/create-ip";
 
+/** JSON read/write (QEMU agent and leftover SFTP JSON). Streams have no size cap. */
 export const GUEST_FILE_MAX_BYTES = 8 * 1024 * 1024;
-/** Streamed SFTP download (not the JSON editor). 4 GiB files must fit. */
-export const GUEST_FILE_STREAM_MAX_BYTES = 16 * 1024 * 1024 * 1024;
+/** Soft warning before opening a huge text file in the in-browser editor. */
+export const GUEST_FILE_EDITOR_WARN_BYTES = 32 * 1024 * 1024;
 export const GUEST_FILE_MAX_PATH = 4096;
 
 export type GuestFileKind = "file" | "dir" | "other";
@@ -31,6 +32,8 @@ export type GuestFileRequest = {
   contentBase64?: string;
 };
 
+export type GuestTransferMode = "download" | "upload";
+
 export type GuestFileResult = {
   path: string;
   via?: "agent" | "sftp";
@@ -40,6 +43,7 @@ export type GuestFileResult = {
   contentBase64?: string;
   fingerprint?: string;
   ticket?: string;
+  mode?: GuestTransferMode;
 };
 
 const TEXT_EXT =

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   attachmentDisposition,
   clampSftpPort,
-  GUEST_FILE_STREAM_MAX_BYTES,
+  GUEST_FILE_EDITOR_WARN_BYTES,
   guestFileName,
   guestPathCrumbs,
   guestPathParent,
@@ -11,7 +11,12 @@ import {
   parseGuestListOutput,
   resolveGuestPath,
 } from "@/lib/guest-files";
-import { createGuestDownloadTicket, takeGuestDownloadTicket } from "@/server/services/guest-file-tickets";
+import {
+  createGuestTransferTicket,
+  decodeGuestTransferMeta,
+  encodeGuestTransferMeta,
+  takeGuestTransferTicket,
+} from "@/server/services/guest-file-tickets";
 import { NotFoundError } from "@/lib/errors";
 import { encodeProxmoxFormBody } from "@/server/proxmox/http";
 import { shareHasPermission } from "@/lib/federation-access";
@@ -95,15 +100,21 @@ describe("guest file explorer helpers", () => {
   });
 });
 
-describe("guest file stream download", () => {
-  it("allows multi-gigabyte SFTP downloads and sets Content-Disposition", () => {
-    expect(GUEST_FILE_STREAM_MAX_BYTES).toBeGreaterThan(4 * 1024 * 1024 * 1024);
+describe("guest file stream transfer", () => {
+  it("keeps editor warning far above the old 8 MB JSON cap", () => {
+    expect(GUEST_FILE_EDITOR_WARN_BYTES).toBeGreaterThan(8 * 1024 * 1024);
     expect(attachmentDisposition("backup.tar.gz")).toContain('filename="backup.tar.gz"');
     expect(attachmentDisposition("äöü.bin")).toContain("filename*=UTF-8''");
   });
 
-  it("issues a one-time download ticket bound to the user", () => {
-    const issued = createGuestDownloadTicket({
+  it("round-trips federation upload meta without exposing JSON in the URL", () => {
+    const encoded = encodeGuestTransferMeta({ path: "/root/a.bin", password: "secret" });
+    expect(encoded).not.toContain("secret");
+    expect(decodeGuestTransferMeta(encoded)).toEqual({ path: "/root/a.bin", password: "secret" });
+  });
+
+  it("issues a one-time ticket bound to user and mode", () => {
+    const issued = createGuestTransferTicket({
       userId: "u1",
       hostId: "h1",
       kind: "lxc",
@@ -113,17 +124,30 @@ describe("guest file stream download", () => {
       target: "10.0.0.8",
       username: "root",
       password: "secret",
+      mode: "download",
     });
     expect(issued.path).toBe("/var/lib/backup.tar");
     expect(issued.name).toBe("backup.tar");
-    const row = takeGuestDownloadTicket(issued.ticket, "u1");
-    expect(row.vmid).toBe(101);
-    expect(row.username).toBe("root");
-    expect(() => takeGuestDownloadTicket(issued.ticket, "u1")).toThrow(NotFoundError);
+    expect(() => takeGuestTransferTicket(issued.ticket, "u1", "upload")).toThrow(NotFoundError);
+    const upload = createGuestTransferTicket({
+      userId: "u1",
+      hostId: "h1",
+      kind: "lxc",
+      node: "pve",
+      vmid: 101,
+      path: "/root/a.bin",
+      target: "10.0.0.8",
+      username: "root",
+      password: "secret",
+      mode: "upload",
+    });
+    const row = takeGuestTransferTicket(upload.ticket, "u1", "upload");
+    expect(row.mode).toBe("upload");
+    expect(() => takeGuestTransferTicket(upload.ticket, "u1", "upload")).toThrow(NotFoundError);
   });
 
-  it("rejects expired or foreign download tickets", () => {
-    const expired = createGuestDownloadTicket({
+  it("rejects expired or foreign transfer tickets", () => {
+    const expired = createGuestTransferTicket({
       userId: "u1",
       hostId: "h1",
       kind: "lxc",
@@ -133,10 +157,11 @@ describe("guest file stream download", () => {
       target: "10.0.0.8",
       username: "root",
       password: "secret",
+      mode: "upload",
       expiresAt: Date.now() - 1,
     });
-    expect(() => takeGuestDownloadTicket(expired.ticket, "u1")).toThrow(NotFoundError);
-    const fresh = createGuestDownloadTicket({
+    expect(() => takeGuestTransferTicket(expired.ticket, "u1", "upload")).toThrow(NotFoundError);
+    const fresh = createGuestTransferTicket({
       userId: "u1",
       hostId: "h1",
       kind: "lxc",
@@ -146,7 +171,8 @@ describe("guest file stream download", () => {
       target: "10.0.0.8",
       username: "root",
       password: "secret",
+      mode: "download",
     });
-    expect(() => takeGuestDownloadTicket(fresh.ticket, "other")).toThrow(NotFoundError);
+    expect(() => takeGuestTransferTicket(fresh.ticket, "other", "download")).toThrow(NotFoundError);
   });
 });

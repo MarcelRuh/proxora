@@ -1,10 +1,7 @@
 import { z } from "zod";
-import { HostOrigin } from "@prisma/client";
-import { prisma } from "@/lib/db";
-import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
+import { ValidationError } from "@/lib/errors";
 import { handleRouteError, json } from "@/server/http/respond";
-import { requireFederationPeer } from "@/server/services/federation-service";
-import { parseShareLevel, shareHasPermission } from "@/lib/federation-access";
+import { requireSharedGuestFiles } from "@/server/services/federation-service";
 import { guestSftp } from "@/server/services/guest-files";
 import { GUEST_FILE_MAX_BYTES } from "@/lib/guest-files";
 
@@ -23,18 +20,8 @@ const bodySchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const peer = await requireFederationPeer(request);
     const payload = bodySchema.parse(await request.json());
-    const share = await prisma.hostShare.findUnique({
-      where: { peerId_hostId: { peerId: peer.id, hostId: payload.remoteHostId } },
-      include: { host: true },
-    });
-    if (!share || share.host.origin !== HostOrigin.LOCAL) throw new NotFoundError("Host not shared");
-    const level = parseShareLevel(String(share.level)) ?? "view";
-    const needed = payload.kind === "vm" ? "vm.files" : "lxc.files";
-    if (!shareHasPermission(level, share.permissions, needed)) {
-      throw new ForbiddenError("This host is not shared at that level");
-    }
+    await requireSharedGuestFiles(request, payload.remoteHostId, payload.kind);
     if (!payload.target.trim()) throw new ValidationError("SSH host fehlt");
     const data = await guestSftp({
       kind: payload.kind,

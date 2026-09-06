@@ -37,6 +37,21 @@ export async function requireFederationPeer(request: Request): Promise<Wireguard
   return peer;
 }
 
+export async function requireSharedGuestFiles(request: Request, remoteHostId: string, kind: "vm" | "lxc") {
+  const peer = await requireFederationPeer(request);
+  const share = await prisma.hostShare.findUnique({
+    where: { peerId_hostId: { peerId: peer.id, hostId: remoteHostId } },
+    include: { host: true },
+  });
+  if (!share || share.host.origin !== HostOrigin.LOCAL) throw new NotFoundError("Host not shared");
+  const level = parseShareLevel(String(share.level)) ?? "view";
+  const needed = kind === "vm" ? "vm.files" : "lxc.files";
+  if (!shareHasPermission(level, share.permissions, needed)) {
+    throw new ForbiddenError("This host is not shared at that level");
+  }
+  return { peer, host: share.host };
+}
+
 function prismaLevel(level: PeerShareLevel): ShareLevel {
   return level.toLowerCase() as ShareLevel;
 }

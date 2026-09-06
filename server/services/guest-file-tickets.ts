@@ -1,10 +1,17 @@
 import { randomBytes } from "node:crypto";
 import { NotFoundError, ValidationError } from "@/lib/errors";
-import { clampSftpPort, guestFileName, isAllowedSftpTarget, resolveGuestPath } from "@/lib/guest-files";
+import {
+  clampSftpPort,
+  guestFileName,
+  isAllowedSftpTarget,
+  resolveGuestPath,
+  type GuestTransferMode,
+} from "@/lib/guest-files";
 
-export const GUEST_DOWNLOAD_TICKET_TTL_MS = 120_000;
+export const GUEST_TRANSFER_TICKET_TTL_MS = 120_000;
+export const GUEST_TRANSFER_META_HEADER = "x-proxora-guest-files";
 
-export type GuestDownloadTicket = {
+export type GuestTransferTicket = {
   id: string;
   userId: string;
   hostId: string;
@@ -16,10 +23,11 @@ export type GuestDownloadTicket = {
   port: number;
   username: string;
   password: string;
+  mode: GuestTransferMode;
   expiresAt: number;
 };
 
-const tickets = new Map<string, GuestDownloadTicket>();
+const tickets = new Map<string, GuestTransferTicket>();
 
 function pruneTickets(now = Date.now()) {
   for (const [id, row] of tickets) {
@@ -27,15 +35,18 @@ function pruneTickets(now = Date.now()) {
   }
 }
 
-export function createGuestDownloadTicket(
-  input: Omit<GuestDownloadTicket, "id" | "expiresAt" | "path" | "target" | "port"> & {
+export function createGuestTransferTicket(
+  input: Omit<GuestTransferTicket, "id" | "expiresAt" | "path" | "target" | "port"> & {
     path: string;
     target: string;
     port?: number;
     expiresAt?: number;
   },
-): { ticket: string; path: string; name: string } {
+): { ticket: string; path: string; name: string; mode: GuestTransferMode } {
   pruneTickets();
+  if (input.mode !== "download" && input.mode !== "upload") {
+    throw new ValidationError("Ungültiger Transfer");
+  }
   let path: string;
   let target: string;
   let port: number;
@@ -62,18 +73,46 @@ export function createGuestDownloadTicket(
     port,
     username,
     password: input.password,
-    expiresAt: input.expiresAt ?? Date.now() + GUEST_DOWNLOAD_TICKET_TTL_MS,
+    mode: input.mode,
+    expiresAt: input.expiresAt ?? Date.now() + GUEST_TRANSFER_TICKET_TTL_MS,
   });
-  return { ticket: id, path, name: guestFileName(path) };
+  return { ticket: id, path, name: guestFileName(path), mode: input.mode };
 }
 
-export function takeGuestDownloadTicket(id: string, userId: string): GuestDownloadTicket {
+export function takeGuestTransferTicket(id: string, userId: string, mode: GuestTransferMode): GuestTransferTicket {
   pruneTickets();
   const row = tickets.get(id);
-  if (!row || row.userId !== userId || row.expiresAt <= Date.now()) {
+  if (!row || row.userId !== userId || row.mode !== mode || row.expiresAt <= Date.now()) {
     tickets.delete(id);
-    throw new NotFoundError("Download abgelaufen oder ungültig");
+    throw new NotFoundError("Transfer abgelaufen oder ungültig");
   }
   tickets.delete(id);
   return row;
+}
+
+/** @deprecated use createGuestTransferTicket */
+export function createGuestDownloadTicket(
+  input: Omit<GuestTransferTicket, "id" | "expiresAt" | "path" | "target" | "port" | "mode"> & {
+    path: string;
+    target: string;
+    port?: number;
+    expiresAt?: number;
+  },
+) {
+  return createGuestTransferTicket({ ...input, mode: "download" });
+}
+
+/** @deprecated use takeGuestTransferTicket */
+export function takeGuestDownloadTicket(id: string, userId: string) {
+  return takeGuestTransferTicket(id, userId, "download");
+}
+
+export function encodeGuestTransferMeta(meta: unknown): string {
+  return Buffer.from(JSON.stringify(meta), "utf8").toString("base64url");
+}
+
+export function decodeGuestTransferMeta(raw: string): unknown {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > 16_384) throw new Error("Invalid transfer meta");
+  return JSON.parse(Buffer.from(trimmed, "base64url").toString("utf8"));
 }
