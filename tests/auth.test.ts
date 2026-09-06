@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { hashPassword, verifyPassword } from "@/lib/password";
-import { cookieSecure } from "@/server/auth/session-core";
+import { cookieSecure, sessionCookieMaxAgeSeconds, sessionCookieOptions } from "@/server/auth/session-core";
 
 const originalAppUrl = process.env.APP_URL;
 const originalCookieSecure = process.env.COOKIE_SECURE;
@@ -25,5 +25,15 @@ describe("authentication helpers", () => {
     expect(cookieSecure("https://proxora.example.com", undefined)).toBe(true);
     expect(cookieSecure("http://192.168.178.246:3000", "true")).toBe(true);
     expect(cookieSecure("https://proxora.example.com", "false")).toBe(false);
+  });
+
+  it("sets Max-Age so WebView can persist the session cookie", () => {
+    const now = 1_800_000_000_000;
+    const expiresAt = new Date(now + 7 * 24 * 60 * 60 * 1000);
+    expect(sessionCookieMaxAgeSeconds(expiresAt, now)).toBe(7 * 24 * 60 * 60);
+    const opts = sessionCookieOptions(new Date(Date.now() + 3_600_000));
+    expect(opts.maxAge).toBeGreaterThan(0);
+    expect(opts.expires).toBeInstanceOf(Date);
+    expect(opts.path).toBe("/");
   });
 });

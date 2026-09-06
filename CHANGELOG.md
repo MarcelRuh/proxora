@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.9] – 2026-09-06
+
+### Fixed
+
+- Android keeps the login session after the app is closed. Session cookies are snapshotted and restored, and the server cookie now includes Max-Age so WebView does not drop them.
+- Long-press actions on Android are two centered buttons (Reload / Change server) instead of a text list.
+
 ## [1.7.8] – 2026-09-06
 
 ### Fixed

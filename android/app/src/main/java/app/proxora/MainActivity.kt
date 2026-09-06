@@ -3,10 +3,13 @@ package app.proxora
 import android.app.Dialog
 import android.app.DownloadManager
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.os.Message
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -28,13 +31,13 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.LinearLayoutCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import com.google.android.material.button.MaterialButton
 import java.util.ArrayDeque
 
 class MainActivity : AppCompatActivity() {
@@ -181,11 +184,17 @@ class MainActivity : AppCompatActivity() {
   }
 
   override fun onPause() {
-    CookieManager.getInstance().flush()
+    snapshotCookies()
     super.onPause()
   }
 
+  override fun onStop() {
+    snapshotCookies()
+    super.onStop()
+  }
+
   override fun onDestroy() {
+    snapshotCookies()
     while (extraWindows.isNotEmpty()) extraWindows.removeLast().dismiss()
     webView.destroy()
     super.onDestroy()
@@ -269,14 +278,62 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun showQuickActions() {
-    AlertDialog.Builder(this, R.style.Theme_Proxora)
-      .setItems(arrayOf(getString(R.string.menu_reload), getString(R.string.menu_server))) { _, which ->
-        when (which) {
-          0 -> reloadPage()
-          1 -> setupLauncher.launch(Intent(this, SetupActivity::class.java))
-        }
-      }
-      .show()
+    val dialog = androidx.appcompat.app.AppCompatDialog(this, R.style.Theme_Proxora)
+    val reload = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonStyle).apply {
+      text = getString(R.string.menu_reload)
+      isAllCaps = false
+    }
+    val change = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+      text = getString(R.string.menu_server)
+      isAllCaps = false
+    }
+    val card = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      setBackgroundResource(R.drawable.quick_actions_card)
+      setPadding(dp(20), dp(20), dp(20), dp(20))
+      val buttonWidth = ViewGroup.LayoutParams.MATCH_PARENT
+      addView(reload, LinearLayout.LayoutParams(buttonWidth, ViewGroup.LayoutParams.WRAP_CONTENT))
+      addView(
+        change,
+        LinearLayout.LayoutParams(buttonWidth, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+          topMargin = dp(12)
+        },
+      )
+    }
+    val cardWidth = minOf(dp(320), (resources.displayMetrics.widthPixels * 0.86f).toInt())
+    val scrim = FrameLayout(this).apply {
+      setBackgroundColor(0x99000000.toInt())
+      setOnClickListener { dialog.dismiss() }
+      addView(
+        card,
+        FrameLayout.LayoutParams(cardWidth, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
+      )
+    }
+    card.setOnClickListener { /* keep taps on the card from closing */ }
+    reload.setOnClickListener {
+      dialog.dismiss()
+      reloadPage()
+    }
+    change.setOnClickListener {
+      dialog.dismiss()
+      setupLauncher.launch(Intent(this, SetupActivity::class.java))
+    }
+    dialog.setContentView(
+      scrim,
+      ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+    )
+    dialog.window?.apply {
+      setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+      setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+      setDimAmount(0.6f)
+      setGravity(Gravity.CENTER)
+    }
+    dialog.show()
+  }
+
+  private fun snapshotCookies() {
+    val url = Prefs.serverUrl(this) ?: return
+    OriginCookies.snapshot(this, url)
   }
 
   private fun loadServer(clearSessionIfChanged: Boolean) {
@@ -284,13 +341,16 @@ class MainActivity : AppCompatActivity() {
     val previous = loadedServer
     loadedServer = url
     if (clearSessionIfChanged && previous != null && previous != url) {
+      OriginCookies.clear(this)
       CookieManager.getInstance().removeAllCookies(null)
       CookieManager.getInstance().flush()
       webView.clearCache(true)
       webView.clearHistory()
     }
     hideError()
-    webView.loadUrl(url)
+    OriginCookies.restore(this, url) {
+      webView.loadUrl(url)
+    }
   }
 
   private fun attachClients(view: WebView) {
@@ -303,6 +363,10 @@ class MainActivity : AppCompatActivity() {
 
       override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
         if (view === webView) hideError()
+      }
+
+      override fun onPageFinished(view: WebView, url: String?) {
+        if (view === webView) snapshotCookies()
       }
 
       override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {

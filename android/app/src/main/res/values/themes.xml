@@ -5,5 +5,26 @@
     <item name="android:navigationBarColor">@color/proxora_bg</item>
     <item name="android:windowBackground">@color/proxora_bg</item>
     <item name="colorPrimary">@color/proxora_pink</item>
+    <item name="materialButtonStyle">@style/Widget.Proxora.Button</item>
+    <item name="materialButtonOutlinedStyle">@style/Widget.Proxora.Button.Outlined</item>
+  </style>
+
+  <style name="Widget.Proxora.Button" parent="Widget.Material3.Button">
+    <item name="android:minHeight">52dp</item>
+    <item name="android:textAllCaps">false</item>
+    <item name="android:textSize">16sp</item>
+    <item name="cornerRadius">10dp</item>
+    <item name="backgroundTint">@color/proxora_pink</item>
+    <item name="android:textColor">@color/proxora_fg</item>
+  </style>
+
+  <style name="Widget.Proxora.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+    <item name="android:minHeight">52dp</item>
+    <item name="android:textAllCaps">false</item>
+    <item name="android:textSize">16sp</item>
+    <item name="cornerRadius">10dp</item>
+    <item name="strokeColor">@color/proxora_pink</item>
+    <item name="strokeWidth">2dp</item>
+    <item name="android:textColor">@color/proxora_fg</item>
   </style>
 </resources>

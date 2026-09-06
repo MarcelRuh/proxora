@@ -23,7 +23,7 @@ The APK is `app/build/outputs/apk/release/app-release.apk`. CI on `main` also up
 
 Release builds are signed with `android/proxora-release.jks` (gitignored). Locally, copy `keystore.properties.example` to `keystore.properties` and fill in the passwords. Without that file, Gradle falls back to the debug key. Tagged GitHub releases require the `ANDROID_KEYSTORE_*` secrets.
 
-If you already installed a debug-signed APK (1.7.7 and earlier), uninstall it once before installing 1.7.8 — Android will not update over a different signing key.
+If you already installed a debug-signed APK (1.7.7 and earlier), uninstall it once before installing 1.7.8 or later — Android will not update over a different signing key.
 
 ## Use
 

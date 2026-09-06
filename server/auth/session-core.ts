@@ -156,6 +156,10 @@ export function cookieSecure(
   return (appUrl ?? "").trim().toLowerCase().startsWith("https://");
 }
 
+export function sessionCookieMaxAgeSeconds(expiresAt: Date, now = Date.now()): number {
+  return Math.max(0, Math.floor((expiresAt.getTime() - now) / 1000));
+}
+
 export function sessionCookieOptions(expiresAt: Date) {
   return {
     httpOnly: true,
@@ -163,5 +167,6 @@ export function sessionCookieOptions(expiresAt: Date) {
     secure: cookieSecure(),
     path: "/",
     expires: expiresAt,
+    maxAge: sessionCookieMaxAgeSeconds(expiresAt),
   };
 }
