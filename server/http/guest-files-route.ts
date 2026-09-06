@@ -85,6 +85,8 @@ export function guestFilesRoute(kind: "vm" | "lxc") {
         mode,
       });
       let partSize = 0;
+      let partPrefix: string | undefined;
+      let partExpectedSize: number | undefined;
       if (mode === "upload") {
         try {
           const state = await runGuestFileOp(host, {
@@ -102,6 +104,8 @@ export function guestFilesRoute(kind: "vm" | "lxc") {
             path: body.path,
           });
           partSize = Number(state.partSize ?? 0) || 0;
+          partPrefix = state.partPrefix;
+          partExpectedSize = state.partExpectedSize;
         } catch {
           partSize = 0;
         }
@@ -113,6 +117,8 @@ export function guestFilesRoute(kind: "vm" | "lxc") {
         mode: issued.mode,
         via: "sftp" as const,
         partSize,
+        partPrefix,
+        partExpectedSize,
       });
     }
     const result = await runGuestFileOp(host, {

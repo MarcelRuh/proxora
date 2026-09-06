@@ -16,8 +16,13 @@ import {
   shSingleQuote,
   uploadNameConflicts,
   guestUploadPartPath,
+  guestUploadMetaPath,
   guestUploadResumeOffset,
+  guestUploadIdentitiesMatch,
+  guestUploadPrefixHex,
+  isGuestUploadMetaName,
   isGuestUploadPartName,
+  parseGuestUploadMeta,
 } from "@/lib/guest-files";
 import { guestFileUploadWsUrl, isGuestFileTransferPath, isGuestFileUploadWsPath, parseGuestUploadPlan } from "@/lib/guest-file-http";
 import {
@@ -69,7 +74,9 @@ describe("guest file paths", () => {
   it("keeps stream uploads in a sidecar part file until size matches", () => {
     expect(guestUploadPartPath("/home/win.iso")).toBe("/home/win.iso.proxora-part");
     expect(isGuestUploadPartName("win.iso.proxora-part")).toBe(true);
-    expect(isGuestUploadPartName("win.iso")).toBe(false);
+    expect(isGuestUploadPartName("win.iso.proxora-part.meta")).toBe(false);
+    expect(isGuestUploadMetaName("win.iso.proxora-part.meta")).toBe(true);
+    expect(guestUploadMetaPath("/home/win.iso")).toBe("/home/win.iso.proxora-part.meta");
     expect(guestUploadResumeOffset(0, 100)).toBeNull();
     expect(guestUploadResumeOffset(40, 100)).toBe(40);
     expect(guestUploadResumeOffset(100, 100)).toBe(100);
@@ -79,6 +86,15 @@ describe("guest file paths", () => {
       expectedSize: 8000,
     });
     expect(parseGuestUploadPlan({ contentLength: "512" })).toEqual({ offset: 0, expectedSize: 512 });
+  });
+
+  it("resumes only when size and the first 64 KB match", async () => {
+    const prefix = await guestUploadPrefixHex(new TextEncoder().encode("iso-head"));
+    const stored = parseGuestUploadMeta(JSON.stringify({ size: 8000, prefix }));
+    expect(stored).toEqual({ size: 8000, prefix });
+    expect(guestUploadIdentitiesMatch(stored, { size: 8000, prefix })).toBe(true);
+    expect(guestUploadIdentitiesMatch(stored, { size: 8000, prefix: "a".repeat(64) })).toBe(false);
+    expect(guestUploadIdentitiesMatch(null, { size: 8000, prefix })).toBe(true);
   });
 
   it("rejects loopback and metadata SSH targets", () => {
@@ -106,6 +122,8 @@ describe("guest file permissions", () => {
     expect(hasPermission(ROLE_PRESETS.viewer.permissions, "vm.files")).toBe(false);
     expect(hasPermission(ROLE_PRESETS.operator.permissions, "lxc.files")).toBe(true);
     expect(hasPermission(ROLE_PRESETS.operator.permissions, "vm.files")).toBe(true);
+    expect(hasPermission(ROLE_PRESETS.administrator.permissions, "lxc.files")).toBe(true);
+    expect(hasPermission(ROLE_PRESETS.administrator.permissions, "vm.files")).toBe(true);
   });
 
   it("does not include SFTP in view-level host shares", () => {

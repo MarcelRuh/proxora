@@ -49,6 +49,9 @@ export type GuestFileResult = {
   ticket?: string;
   mode?: GuestTransferMode;
   partSize?: number;
+  partPrefix?: string;
+  partExpectedSize?: number;
+  partials?: GuestUploadPartial[];
 };
 
 const TEXT_EXT =
@@ -92,9 +95,30 @@ export function guestFileName(path: string): string {
 }
 
 export const GUEST_UPLOAD_PART_SUFFIX = ".proxora-part";
+export const GUEST_UPLOAD_META_SUFFIX = ".proxora-part.meta";
+export const GUEST_UPLOAD_PREFIX_BYTES = 64 * 1024;
+export const GUEST_UPLOAD_PART_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
+export type GuestUploadIdentity = {
+  size: number;
+  prefix: string;
+};
+
+export type GuestUploadPartial = {
+  name: string;
+  path: string;
+  partSize: number;
+  mtime: number | null;
+  size?: number;
+  prefix?: string;
+};
 
 export function isGuestUploadPartName(name: string): boolean {
-  return name.endsWith(GUEST_UPLOAD_PART_SUFFIX);
+  return name.endsWith(GUEST_UPLOAD_PART_SUFFIX) && !name.endsWith(GUEST_UPLOAD_META_SUFFIX);
+}
+
+export function isGuestUploadMetaName(name: string): boolean {
+  return name.endsWith(GUEST_UPLOAD_META_SUFFIX);
 }
 
 /** Sidecar written during a stream upload; renamed onto `dest` only after the size check. */
@@ -104,11 +128,61 @@ export function guestUploadPartPath(dest: string): string {
   return `${path}${GUEST_UPLOAD_PART_SUFFIX}`;
 }
 
+export function guestUploadMetaPath(dest: string): string {
+  return `${guestUploadPartPath(dest)}.meta`;
+}
+
 /** Bytes already on the guest that can be skipped, or `null` to start over. */
 export function guestUploadResumeOffset(partSize: number, fileSize: number): number | null {
   if (!Number.isFinite(partSize) || !Number.isFinite(fileSize)) return null;
   if (partSize <= 0 || fileSize < 0 || partSize > fileSize) return null;
   return Math.floor(partSize);
+}
+
+export function parseGuestUploadMeta(raw: string): GuestUploadIdentity | null {
+  try {
+    const json = JSON.parse(raw) as { size?: unknown; prefix?: unknown };
+    const size = Number(json.size);
+    const prefix = typeof json.prefix === "string" ? json.prefix.trim().toLowerCase() : "";
+    if (!Number.isFinite(size) || size < 0) return null;
+    if (prefix && !/^[0-9a-f]{64}$/.test(prefix)) return null;
+    return { size: Math.floor(size), prefix };
+  } catch {
+    return null;
+  }
+}
+
+export function serializeGuestUploadMeta(identity: GuestUploadIdentity): string {
+  return JSON.stringify({ v: 1, size: identity.size, prefix: identity.prefix });
+}
+
+/** Missing stored prefix (older part files) still allows size-based resume. */
+export function guestUploadIdentitiesMatch(
+  stored: GuestUploadIdentity | null | undefined,
+  local: GuestUploadIdentity,
+): boolean {
+  if (!stored?.prefix) return true;
+  if (!local.prefix) return false;
+  return stored.size === local.size && stored.prefix === local.prefix;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  let out = "";
+  for (const b of bytes) out += b.toString(16).padStart(2, "0");
+  return out;
+}
+
+export async function guestUploadPrefixHex(data: ArrayBuffer | Uint8Array): Promise<string> {
+  const view = data instanceof Uint8Array ? data : new Uint8Array(data);
+  const copy = new Uint8Array(view.byteLength);
+  copy.set(view);
+  const digest = await crypto.subtle.digest("SHA-256", copy);
+  return bytesToHex(new Uint8Array(digest));
+}
+
+export async function guestUploadIdentityFromBlob(file: Blob): Promise<GuestUploadIdentity> {
+  const buf = await file.slice(0, GUEST_UPLOAD_PREFIX_BYTES).arrayBuffer();
+  return { size: file.size, prefix: await guestUploadPrefixHex(buf) };
 }
 
 /** POSIX sh single-quote, safe for `cat > …` over SSH exec. */

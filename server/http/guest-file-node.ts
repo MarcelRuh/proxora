@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
 import { SESSION_COOKIE } from "@/lib/env";
-import { isGuestFileTransferPath, parseGuestUploadPlan } from "@/lib/guest-file-http";
+import { isGuestFileTransferPath, parseGuestUploadPlan, parseGuestUploadPrefix } from "@/lib/guest-file-http";
 import { userHasAnyPermission } from "@/lib/permissions";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from "@/lib/errors";
@@ -148,6 +148,11 @@ export async function handleNodeGuestFileTransfer(req: IncomingMessage, res: Ser
             : (req.headers["content-length"] ?? null),
           expectedSize: plan.expectedSize,
           offset: plan.offset,
+          prefix: parseGuestUploadPrefix(
+            Array.isArray(req.headers["x-proxora-upload-prefix"])
+              ? req.headers["x-proxora-upload-prefix"][0]
+              : (req.headers["x-proxora-upload-prefix"] ?? null),
+          ),
         });
         await writeAuditLog({
           userId: session.user.id,

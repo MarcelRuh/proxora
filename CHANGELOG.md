@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.5.8] – 2026-09-06
+
+### Changed
+
+- Guest upload resume matches the same file (size plus SHA-256 of the first 64 KB), not just the destination name.
+- Incomplete `.proxora-part` files show in the folder with Discard; parts older than 14 days are removed on listing. Deleting the destination also clears leftover sidecars if the ISO never landed.
+
 ## [1.5.7] – 2026-09-06
 
 ### Changed

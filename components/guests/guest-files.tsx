@@ -51,9 +51,12 @@ import {
   resolveGuestPath,
   uploadNameConflicts,
   guestUploadResumeOffset,
+  guestUploadIdentitiesMatch,
+  guestUploadIdentityFromBlob,
   type GuestFileEntry,
   type GuestFileResult,
   type GuestTransferMode,
+  type GuestUploadPartial,
 } from "@/lib/guest-files";
 
 type Session = {
@@ -168,6 +171,7 @@ export function GuestFilesPanel({
   const [rename, setRename] = useState<{ path: string; name: string } | null>(null);
   const [renameTo, setRenameTo] = useState("");
   const [overwrite, setOverwrite] = useState<{ files: File[]; conflicts: string[] } | null>(null);
+  const [partials, setPartials] = useState<GuestUploadPartial[]>([]);
   const [resumeAsk, setResumeAsk] = useState<{ name: string; done: number; total: number } | null>(null);
   const resumeRef = useRef<{
     resolve: (choice: "resume" | "restart") => void;
@@ -225,6 +229,7 @@ export function GuestFilesPanel({
       setVia(mode);
       setPath(result.path || nextPath);
       setEntries(result.entries ?? []);
+      setPartials(result.partials ?? []);
       setAgentError("");
       if (mode === "agent") setShowSsh(false);
       return true;
@@ -316,9 +321,13 @@ export function GuestFilesPanel({
     const ticket = ticketResult.ticket;
     if (!ticket) throw new Error(t("common.failed"));
     const fileSize = body.size;
+    const identity = body.size > 0 ? await guestUploadIdentityFromBlob(body) : { size: body.size, prefix: "" };
+    const stored = ticketResult.partPrefix
+      ? { size: Number(ticketResult.partExpectedSize ?? fileSize), prefix: ticketResult.partPrefix }
+      : null;
     const resumable = guestUploadResumeOffset(Number(ticketResult.partSize ?? 0) || 0, fileSize);
     let offset = 0;
-    if (resumable != null && resumable > 0 && fileSize > 0) {
+    if (resumable != null && resumable > 0 && fileSize > 0 && guestUploadIdentitiesMatch(stored, identity)) {
       offset = (await askResume(name, resumable, fileSize)) === "resume" ? resumable : 0;
     }
     abortRef.current?.abort();
@@ -332,6 +341,7 @@ export function GuestFilesPanel({
         signal: abort.signal,
         offset,
         total: fileSize,
+        prefix: identity.prefix || undefined,
         onProgress: (sent, total) => reportProgress(name, sent, total),
       });
       reportProgress(name, fileSize, fileSize, true);
@@ -586,6 +596,19 @@ export function GuestFilesPanel({
     try {
       await call("delete", { path: entry.path });
       toast.success(t("files.deleted"));
+      if (via) await loadDir(path, via, session);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("common.failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function discardPartial(item: GuestUploadPartial) {
+    setBusy(true);
+    try {
+      await call("delete", { path: item.path });
+      toast.success(t("files.partialCleared"));
       if (via) await loadDir(path, via, session);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("common.failed"));
@@ -933,6 +956,29 @@ export function GuestFilesPanel({
               ) : via === "sftp" ? (
                 <p className="border-b border-border px-3 py-1.5 text-xs text-muted-foreground">{t("files.dropHint")}</p>
               ) : null}
+              {via === "sftp" && partials.length
+                ? partials.map((item) => (
+                    <div
+                      key={item.path}
+                      className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground"
+                    >
+                      <p className="min-w-0 flex-1 truncate">
+                        {t("files.partialHint", {
+                          name: item.name,
+                          size: bytesToSize(item.partSize, 2),
+                        })}
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy || transferring}
+                        onClick={() => void discardPartial(item)}
+                      >
+                        {t("files.partialDiscard")}
+                      </Button>
+                    </div>
+                  ))
+                : null}
               <div className={fill ? "min-h-0 flex-1 overflow-auto" : "max-h-[28rem] overflow-auto"}>
                 <div className="sticky top-0 grid grid-cols-[1fr_8rem_10rem_auto] gap-2 border-b border-border bg-card px-3 py-1.5 text-xs text-muted-foreground">
                   <span>{t("files.colName")}</span>

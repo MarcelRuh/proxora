@@ -8,13 +8,21 @@ import {
   attachmentDisposition,
   clampSftpPort,
   decodeGuestFileContent,
+  GUEST_UPLOAD_PART_MAX_AGE_MS,
+  GUEST_UPLOAD_PART_SUFFIX,
   guestFileName,
   guestPathParent,
+  guestUploadMetaPath,
   guestUploadPartPath,
   hasGuestSshAuth,
   isAllowedSftpTarget,
+  isGuestUploadMetaName,
   isGuestUploadPartName,
   looksLikeSshPrivateKey,
+  parseGuestUploadMeta,
+  serializeGuestUploadMeta,
+  type GuestUploadIdentity,
+  type GuestUploadPartial,
   resolveGuestPath,
   shSingleQuote,
   type GuestFileEntry,
@@ -25,7 +33,7 @@ import {
 } from "@/lib/guest-files";
 import { shareHasPermission, type ShareLevel } from "@/lib/federation-access";
 import { outboundToken, peerHttpBase } from "@/server/services/wireguard-service";
-import { GUEST_UPLOAD_OFFSET_HEADER, GUEST_UPLOAD_SIZE_HEADER } from "@/lib/guest-file-http";
+import { GUEST_UPLOAD_OFFSET_HEADER, GUEST_UPLOAD_PREFIX_HEADER, GUEST_UPLOAD_SIZE_HEADER } from "@/lib/guest-file-http";
 import { clientForHost } from "@/server/services/host-service";
 import { guestAgentFiles } from "@/server/services/guest-agent-files";
 import {
@@ -214,7 +222,7 @@ async function listDir(sftp: SFTPWrapper, path: string): Promise<GuestFileEntry[
   for (const item of listing) {
     const name = item.filename;
     if (!name || name === "." || name === "..") continue;
-    if (isGuestUploadPartName(name)) continue;
+    if (isGuestUploadPartName(name) || isGuestUploadMetaName(name)) continue;
     const child = resolveGuestPath(path, name);
     entries.push({
       name,
@@ -718,6 +726,60 @@ function unlinkQuiet(sftp: SFTPWrapper, path: string): Promise<void> {
   });
 }
 
+async function readUploadMeta(sftp: SFTPWrapper, destPath: string): Promise<GuestUploadIdentity | null> {
+  try {
+    const buf = await readFile(sftp, guestUploadMetaPath(destPath));
+    return parseGuestUploadMeta(buf.toString("utf8"));
+  } catch (error) {
+    if (isMissingPath(error)) return null;
+    return null;
+  }
+}
+
+async function writeUploadMeta(sftp: SFTPWrapper, destPath: string, identity: GuestUploadIdentity): Promise<void> {
+  await writeFile(sftp, guestUploadMetaPath(destPath), Buffer.from(serializeGuestUploadMeta(identity), "utf8"));
+}
+
+async function clearUploadSidecars(sftp: SFTPWrapper, destPath: string): Promise<void> {
+  await unlinkQuiet(sftp, guestUploadPartPath(destPath));
+  await unlinkQuiet(sftp, guestUploadMetaPath(destPath));
+}
+
+async function collectUploadPartials(sftp: SFTPWrapper, dir: string): Promise<GuestUploadPartial[]> {
+  const listing = await new Promise<Array<{ filename: string; attrs?: { size?: number; mtime?: number } }>>(
+    (resolve, reject) => {
+      sftp.readdir(dir, (err, list) => {
+        if (err) reject(err);
+        else resolve(list ?? []);
+      });
+    },
+  );
+  const now = Date.now();
+  const partials: GuestUploadPartial[] = [];
+  for (const item of listing) {
+    const name = item.filename;
+    if (!name || !isGuestUploadPartName(name)) continue;
+    const destName = name.slice(0, -GUEST_UPLOAD_PART_SUFFIX.length);
+    if (!destName) continue;
+    const destPath = resolveGuestPath(dir, destName);
+    const mtime = item.attrs?.mtime ? item.attrs.mtime * 1000 : null;
+    if (mtime && now - mtime > GUEST_UPLOAD_PART_MAX_AGE_MS) {
+      await clearUploadSidecars(sftp, destPath);
+      continue;
+    }
+    const meta = await readUploadMeta(sftp, destPath);
+    partials.push({
+      name: destName,
+      path: destPath,
+      partSize: Number(item.attrs?.size ?? 0),
+      mtime,
+      size: meta?.size,
+      prefix: meta?.prefix,
+    });
+  }
+  return partials;
+}
+
 async function finalizeGuestUploadPart(
   sftp: SFTPWrapper,
   partPath: string,
@@ -736,6 +798,7 @@ async function finalizeGuestUploadPart(
       sftp.rename(partPath, destPath, (err) => (err ? reject(err) : resolve()));
     });
   }
+  await unlinkQuiet(sftp, guestUploadMetaPath(destPath));
   return size;
 }
 
@@ -743,6 +806,7 @@ export async function sftpUploadFromStream(input: StreamCreds & {
   body: GuestUploadBody;
   expectedSize?: number | null;
   offset?: number;
+  prefix?: string | null;
 }): Promise<{
   path: string;
   name: string;
@@ -756,17 +820,24 @@ export async function sftpUploadFromStream(input: StreamCreds & {
   let handle: Buffer | null = null;
   try {
     const have = (await statSize(session.sftp, partPath)) ?? 0;
-    if (offset === 0) {
-      if (have > 0) await unlinkQuiet(session.sftp, partPath);
-    } else if (have !== offset) {
-      throw new ValidationError("Teil-Upload passt nicht — Datei neu starten");
-    }
+    const stored = await readUploadMeta(session.sftp, creds.path);
+    const prefix = input.prefix?.trim().toLowerCase() || "";
     const expected =
       input.expectedSize != null && Number.isFinite(Number(input.expectedSize))
         ? Math.floor(Number(input.expectedSize))
         : null;
     if (expected != null && offset > expected) {
       throw new ValidationError("Ungültiger Upload-Offset");
+    }
+    if (offset === 0) {
+      await clearUploadSidecars(session.sftp, creds.path);
+      if (expected != null && prefix) {
+        await writeUploadMeta(session.sftp, creds.path, { size: expected, prefix });
+      }
+    } else if (have !== offset) {
+      throw new ValidationError("Teil-Upload passt nicht — Datei neu starten");
+    } else if (prefix && stored?.prefix && (stored.prefix !== prefix || (expected != null && stored.size !== expected))) {
+      throw new ValidationError("Andere Datei als der abgebrochene Upload — neu starten");
     }
     const skipWrite = expected != null && expected > 0 && offset === expected;
     if (skipWrite) {
@@ -890,6 +961,7 @@ async function proxyGuestFileUploadToPeer(
     contentLength?: string | null;
     expectedSize?: number | null;
     offset?: number;
+    prefix?: string | null;
   },
 ): Promise<{ path: string; name: string; size: number }> {
   if (!host.peerId || !host.remoteHostId) throw new ValidationError("Peer host is incomplete");
@@ -910,6 +982,7 @@ async function proxyGuestFileUploadToPeer(
   if (input.contentLength) headers["Content-Length"] = input.contentLength;
   if (input.expectedSize != null) headers[GUEST_UPLOAD_SIZE_HEADER] = String(input.expectedSize);
   if (input.offset) headers[GUEST_UPLOAD_OFFSET_HEADER] = String(input.offset);
+  if (input.prefix) headers[GUEST_UPLOAD_PREFIX_HEADER] = input.prefix;
   const response = await fetch(`${peerHttpBase(peer)}/api/federation/guest-files/upload`, {
     method: "POST",
     headers,
@@ -943,6 +1016,7 @@ export async function streamGuestFileUpload(
     contentLength?: string | null;
     expectedSize?: number | null;
     offset?: number;
+    prefix?: string | null;
   },
 ): Promise<{ path: string; name: string; size: number }> {
   if (host.origin === HostOrigin.PEER) return proxyGuestFileUploadToPeer(host, input);
@@ -966,7 +1040,8 @@ export async function guestSftp(input: GuestFileRequest): Promise<GuestFileResul
     switch (input.op) {
       case "list": {
         const entries = await listDir(sftp, path);
-        return { path, via: "sftp", entries, fingerprint };
+        const partials = await collectUploadPartials(sftp, path);
+        return { path, via: "sftp", entries, partials, fingerprint };
       }
       case "read": {
         const buf = await readFile(sftp, path);
@@ -989,8 +1064,12 @@ export async function guestSftp(input: GuestFileRequest): Promise<GuestFileResul
         return { path, via: "sftp", fingerprint };
       }
       case "delete": {
-        await remove(sftp, path);
-        await unlinkQuiet(sftp, guestUploadPartPath(path));
+        try {
+          await remove(sftp, path);
+        } catch (error) {
+          if (!isMissingPath(error)) throw error;
+        }
+        await clearUploadSidecars(sftp, path);
         return { path, via: "sftp", fingerprint };
       }
       case "rename": {
@@ -1008,7 +1087,15 @@ export async function guestSftp(input: GuestFileRequest): Promise<GuestFileResul
       }
       case "upload-state": {
         const partSize = (await statSize(sftp, guestUploadPartPath(path))) ?? 0;
-        return { path, via: "sftp", partSize, fingerprint };
+        const meta = await readUploadMeta(sftp, path);
+        return {
+          path,
+          via: "sftp",
+          partSize,
+          partPrefix: meta?.prefix,
+          partExpectedSize: meta?.size,
+          fingerprint,
+        };
       }
     }
   });

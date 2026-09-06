@@ -1,6 +1,7 @@
 export const GUEST_FILE_UPLOAD_WS_PATH = "/ws/guest-file";
 export const GUEST_UPLOAD_SIZE_HEADER = "x-proxora-upload-size";
 export const GUEST_UPLOAD_OFFSET_HEADER = "x-proxora-upload-offset";
+export const GUEST_UPLOAD_PREFIX_HEADER = "x-proxora-upload-prefix";
 
 function parseUnsignedHeader(raw: string | null | undefined): number | null {
   if (raw == null || raw === "") return null;
@@ -21,6 +22,12 @@ export function parseGuestUploadPlan(input: {
   if (size != null) return { offset, expectedSize: size };
   if (length != null) return { offset, expectedSize: offset + length };
   return { offset, expectedSize: null };
+}
+
+export function parseGuestUploadPrefix(raw: string | null | undefined): string | null {
+  const value = raw?.trim().toLowerCase() ?? "";
+  if (!/^[0-9a-f]{64}$/.test(value)) return null;
+  return value;
 }
 
 /** True for guest file stream routes that must not pass Next.js proxy (it clones the body). */

@@ -68,6 +68,7 @@ function putBlobOverXhr(
     signal?: AbortSignal;
     offset?: number;
     total?: number;
+    prefix?: string;
   },
 ): Promise<{ path?: string; name?: string; size?: number }> {
   const offset = opts?.offset ?? 0;
@@ -79,6 +80,7 @@ function putBlobOverXhr(
     xhr.responseType = "text";
     xhr.setRequestHeader("x-proxora-upload-size", String(total));
     xhr.setRequestHeader("x-proxora-upload-offset", String(offset));
+    if (opts?.prefix) xhr.setRequestHeader("x-proxora-upload-prefix", opts.prefix);
     xhr.upload.onprogress = (event) => {
       if (!opts?.onProgress) return;
       const loaded = event.loaded;
@@ -145,6 +147,7 @@ function putBlobOverWebSocket(
     signal?: AbortSignal;
     offset?: number;
     total?: number;
+    prefix?: string;
   },
 ): Promise<{ path?: string; name?: string; size?: number }> {
   const origin = globalThis.location?.origin;
@@ -205,7 +208,7 @@ function putBlobOverWebSocket(
       }
       if (msg.type === "ready") {
         if (ws.readyState !== WebSocket.OPEN) return;
-        ws.send(JSON.stringify({ type: "start", size: total, offset }));
+        ws.send(JSON.stringify({ type: "start", size: total, offset, prefix: opts?.prefix ?? "" }));
         return;
       }
       if (msg.type === "go") {
@@ -264,6 +267,7 @@ export async function putBlobWithProgress(
     signal?: AbortSignal;
     offset?: number;
     total?: number;
+    prefix?: string;
   },
 ): Promise<{ path?: string; name?: string; size?: number }> {
   const ticket = ticketFromUploadUrl(url);

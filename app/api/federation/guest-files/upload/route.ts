@@ -4,7 +4,7 @@ import { handleRouteError, json } from "@/server/http/respond";
 import { requireSharedGuestFiles } from "@/server/services/federation-service";
 import { sftpUploadFromStream } from "@/server/services/guest-files";
 import { decodeGuestTransferMeta, GUEST_TRANSFER_META_HEADER } from "@/server/services/guest-file-tickets";
-import { GUEST_UPLOAD_OFFSET_HEADER, GUEST_UPLOAD_SIZE_HEADER, parseGuestUploadPlan } from "@/lib/guest-file-http";
+import { GUEST_UPLOAD_OFFSET_HEADER, GUEST_UPLOAD_PREFIX_HEADER, GUEST_UPLOAD_SIZE_HEADER, parseGuestUploadPlan, parseGuestUploadPrefix } from "@/lib/guest-file-http";
 import { GUEST_SSH_KEY_MAX, hasGuestSshAuth } from "@/lib/guest-files";
 
 const metaSchema = z
@@ -57,6 +57,7 @@ export async function POST(request: Request) {
       body: request.body,
       expectedSize: plan.expectedSize,
       offset: plan.offset,
+      prefix: parseGuestUploadPrefix(request.headers.get(GUEST_UPLOAD_PREFIX_HEADER)),
     });
     return json({ ...result, via: "sftp" });
   } catch (error) {

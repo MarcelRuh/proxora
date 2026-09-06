@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { PassThrough } from "node:stream";
 import { WebSocket, type WebSocketServer } from "ws";
 import { SESSION_COOKIE } from "@/lib/env";
-import { isGuestFileUploadWsPath } from "@/lib/guest-file-http";
+import { isGuestFileUploadWsPath, parseGuestUploadPrefix } from "@/lib/guest-file-http";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from "@/lib/errors";
 import { userHasAnyPermission } from "@/lib/permissions";
@@ -127,9 +127,9 @@ async function handleUploadSocket(ws: WebSocket, req: IncomingMessage) {
   let inputClosed = false;
   let started = false;
   let accepted = false;
-  let startResolve: ((plan: { size: number; offset: number }) => void) | null = null;
+      let startResolve: ((plan: { size: number; offset: number; prefix: string | null }) => void) | null = null;
   let startReject: ((error: unknown) => void) | null = null;
-  const startPromise = new Promise<{ size: number; offset: number }>((resolve, reject) => {
+  const startPromise = new Promise<{ size: number; offset: number; prefix: string | null }>((resolve, reject) => {
     startResolve = resolve;
     startReject = reject;
   });
@@ -158,7 +158,7 @@ async function handleUploadSocket(ws: WebSocket, req: IncomingMessage) {
     if (inputClosed) return;
     if (!accepted) {
       if (isBinary) return;
-      let msg: { type?: string; size?: number; offset?: number } = {};
+      let msg: { type?: string; size?: number; offset?: number; prefix?: string } = {};
       try {
         msg = JSON.parse(wsPayloadToBuffer(data as Buffer | ArrayBuffer | Buffer[] | string).toString("utf8")) as typeof msg;
       } catch {
@@ -173,7 +173,7 @@ async function handleUploadSocket(ws: WebSocket, req: IncomingMessage) {
         return;
       }
       accepted = true;
-      startResolve?.({ size, offset });
+      startResolve?.({ size, offset, prefix: parseGuestUploadPrefix(msg.prefix ?? "") });
       return;
     }
     if (!isBinary) {
@@ -211,7 +211,7 @@ async function handleUploadSocket(ws: WebSocket, req: IncomingMessage) {
     sendJson(ws, { type: "ready" });
     const plan = await Promise.race([
       startPromise,
-      new Promise<{ size: number; offset: number }>((_, reject) => {
+      new Promise<{ size: number; offset: number; prefix: string | null }>((_, reject) => {
         setTimeout(() => reject(new ValidationError("Upload-Start ausbleibend")), 20_000);
       }),
     ]);
@@ -230,6 +230,7 @@ async function handleUploadSocket(ws: WebSocket, req: IncomingMessage) {
       contentLength: null,
       expectedSize: plan.size,
       offset: plan.offset,
+      prefix: plan.prefix,
     });
     sendJson(ws, { type: "go", offset: plan.offset, size: plan.size });
     const result = await upload;
