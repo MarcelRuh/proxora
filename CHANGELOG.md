@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.5.2] – 2026-09-06
+
+### Changed
+
+- Guest SFTP uploads (and downloads) pipeline many 32 KB SSH writes/reads at once, so large files like an ISO are no longer limited to one packet per round-trip.
+- Transfer progress shows throughput (MB/s) and estimated remaining time for upload and download.
+
 ## [1.5.1] – 2026-09-06
 
 ### Fixed

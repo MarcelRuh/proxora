@@ -26,7 +26,16 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import { api, ApiRequestError } from "@/lib/api";
 import { bytesToSize, formatPercent } from "@/lib/utils";
 import { formatGuestFileText, prettyGuestFileOnOpen } from "@/lib/guest-file-format";
-import { isAbortError, putBlobWithProgress } from "@/lib/guest-file-transfer";
+import {
+  createRateTracker,
+  formatByteRate,
+  formatEtaSeconds,
+  isAbortError,
+  putBlobWithProgress,
+  saveUrlWithProgress,
+  canStreamDownloadProgress,
+  triggerBrowserDownload,
+} from "@/lib/guest-file-transfer";
 import {
   AGENT_FILE_MAX_BYTES,
   GUEST_FILE_EDITOR_WARN_BYTES,
@@ -69,7 +78,13 @@ type Transfer = {
   name: string;
   sent: number;
   total: number;
+  bytesPerSec: number;
+  etaSeconds: number | null;
 };
+
+function transferPercent(transfer: Transfer): number {
+  return transfer.total ? Math.min(100, (transfer.sent / transfer.total) * 100) : 0;
+}
 
 const selectClass =
   "mt-1 h-9 w-full rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm";
@@ -87,10 +102,7 @@ function downloadBytes(name: string, bytes: Uint8Array) {
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
   const url = URL.createObjectURL(new Blob([copy]));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
+  triggerBrowserDownload(url, name);
   URL.revokeObjectURL(url);
 }
 
@@ -155,6 +167,8 @@ export function GuestFilesPanel({
   const [renameTo, setRenameTo] = useState("");
   const [overwrite, setOverwrite] = useState<{ files: File[]; conflicts: string[] } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const rateRef = useRef<ReturnType<typeof createRateTracker> | null>(null);
+  const lastUiRef = useRef(0);
   const opened = useRef(false);
 
   const apiPath = `/api/hosts/${hostId}/${kind === "vm" ? "vms" : "lxc"}/${encodeURIComponent(node)}/${vmid}/files`;
@@ -276,17 +290,32 @@ export function GuestFilesPanel({
     return result.ticket;
   }
 
+  function beginTransfer(name: string, total: number) {
+    rateRef.current = createRateTracker();
+    lastUiRef.current = 0;
+    setTransfer({ name, sent: 0, total, bytesPerSec: 0, etaSeconds: null });
+  }
+
+  function reportProgress(name: string, sent: number, total: number, force = false) {
+    const sample = rateRef.current?.update(sent, total) ?? { bytesPerSec: 0, etaSeconds: null };
+    const now = Date.now();
+    if (!force && now - lastUiRef.current < 150 && sent < total) return;
+    lastUiRef.current = now;
+    setTransfer({ name, sent, total, bytesPerSec: sample.bytesPerSec, etaSeconds: sample.etaSeconds });
+  }
+
   async function sftpPut(filePath: string, body: Blob, name: string) {
     const ticket = await transferTicket("upload", filePath);
     abortRef.current?.abort();
     const abort = new AbortController();
     abortRef.current = abort;
-    setTransfer({ name, sent: 0, total: body.size });
+    beginTransfer(name, body.size);
     try {
       await putBlobWithProgress(`${apiPath}/upload?ticket=${encodeURIComponent(ticket)}`, body, {
         signal: abort.signal,
-        onProgress: (sent, total) => setTransfer({ name, sent, total }),
+        onProgress: (sent, total) => reportProgress(name, sent, total),
       });
+      reportProgress(name, body.size, body.size, true);
     } finally {
       if (abortRef.current === abort) abortRef.current = null;
       setTransfer(null);
@@ -307,15 +336,32 @@ export function GuestFilesPanel({
     if (via === "sftp") {
       try {
         const ticket = await transferTicket("download", entry.path);
-        const a = document.createElement("a");
-        a.href = `${apiPath}/download?ticket=${encodeURIComponent(ticket)}`;
-        a.download = entry.name;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        toast.success(t("files.downloadStarted"));
+        const url = `${apiPath}/download?ticket=${encodeURIComponent(ticket)}`;
+        if (!canStreamDownloadProgress(entry.size)) {
+          triggerBrowserDownload(url, entry.name);
+          toast.success(t("files.downloadInBrowser"));
+          return;
+        }
+        abortRef.current?.abort();
+        const abort = new AbortController();
+        abortRef.current = abort;
+        beginTransfer(entry.name, entry.size);
+        try {
+          const result = await saveUrlWithProgress(url, entry.name, entry.size, {
+            signal: abort.signal,
+            onProgress: (sent, total) => reportProgress(entry.name, sent, total),
+          });
+          if (result === "browser") {
+            triggerBrowserDownload(url, entry.name);
+            toast.success(t("files.downloadInBrowser"));
+          }
+        } finally {
+          if (abortRef.current === abort) abortRef.current = null;
+          setTransfer(null);
+        }
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : t("common.failed"));
+        if (isAbortError(error)) toast.message(t("files.transferCancelled"));
+        else toast.error(error instanceof Error ? error.message : t("common.failed"));
       }
       return;
     }
@@ -819,21 +865,25 @@ export function GuestFilesPanel({
                         name: transfer.name,
                         done: bytesToSize(transfer.sent, 2),
                         total: bytesToSize(transfer.total, 2),
-                        percent: formatPercent(transfer.total ? Math.min(100, (transfer.sent / transfer.total) * 100) : 0),
+                        percent: formatPercent(transferPercent(transfer)),
+                      })}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {t("files.transferMeta", {
+                        rate: formatByteRate(transfer.bytesPerSec),
+                        eta: formatEtaSeconds(transfer.etaSeconds, t),
                       })}
                     </p>
                     <div className="mt-1 h-1 overflow-hidden rounded bg-muted">
                       <div
                         className="h-full bg-primary transition-[width]"
                         style={{
-                          width: `${transfer.total ? Math.min(100, Math.round((transfer.sent / transfer.total) * 1000) / 10) : 0}%`,
+                          width: `${Math.min(100, Math.round(transferPercent(transfer) * 10) / 10)}%`,
                         }}
                       />
                     </div>
                   </div>
-                  <span className="shrink-0 text-sm font-medium tabular-nums">
-                    {formatPercent(transfer.total ? Math.min(100, (transfer.sent / transfer.total) * 100) : 0)}
-                  </span>
+                  <span className="shrink-0 text-sm font-medium tabular-nums">{formatPercent(transferPercent(transfer))}</span>
                   <Button
                     size="sm"
                     variant="outline"
@@ -894,7 +944,7 @@ export function GuestFilesPanel({
                           <Pencil className="h-4 w-4" />
                         </Button>
                         {entry.type === "file" ? (
-                          <Button size="icon" variant="ghost" disabled={busy} onClick={() => void download(entry)} aria-label={t("files.download")}>
+                          <Button size="icon" variant="ghost" disabled={busy || transferring} onClick={() => void download(entry)} aria-label={t("files.download")}>
                             <Download className="h-4 w-4" />
                           </Button>
                         ) : null}
@@ -933,8 +983,11 @@ export function GuestFilesPanel({
           <div className="mt-3 flex items-center justify-end gap-2">
             {saving && transfer ? (
               <span className="mr-auto truncate text-xs text-muted-foreground">
-                {bytesToSize(transfer.sent, 2)} / {bytesToSize(transfer.total, 2)} ·{" "}
-                {formatPercent(transfer.total ? Math.min(100, (transfer.sent / transfer.total) * 100) : 0)}
+                {bytesToSize(transfer.sent, 2)} / {bytesToSize(transfer.total, 2)} · {formatPercent(transferPercent(transfer))} ·{" "}
+                {t("files.transferMeta", {
+                  rate: formatByteRate(transfer.bytesPerSec),
+                  eta: formatEtaSeconds(transfer.etaSeconds, t),
+                })}
               </span>
             ) : (
               <Button variant="outline" className="mr-auto" disabled={saving || !editor} onClick={() => formatEditor()}>

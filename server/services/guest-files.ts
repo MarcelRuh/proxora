@@ -1,5 +1,4 @@
-import { Readable, Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { PassThrough, Readable } from "node:stream";
 import { Client, type SFTPWrapper } from "ssh2";
 import { HostOrigin, type Host } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -335,6 +334,197 @@ async function parseStreamCreds(input: StreamCreds) {
   }
 }
 
+const SFTP_CHUNK = 32 * 1024;
+const SFTP_IN_FLIGHT = 64;
+
+function openHandle(sftp: SFTPWrapper, remotePath: string, flags: "r" | "w"): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const done = (err: Error | undefined, handle: Buffer) => {
+      if (err || !handle) reject(err ?? new ValidationError("SFTP-Datei konnte nicht geöffnet werden"));
+      else resolve(handle);
+    };
+    if (flags === "w") sftp.open(remotePath, "w", { mode: 0o644 }, done);
+    else sftp.open(remotePath, "r", done);
+  });
+}
+
+function closeHandle(sftp: SFTPWrapper, handle: Buffer | null | undefined): Promise<void> {
+  if (!handle) return Promise.resolve();
+  return new Promise((resolve) => {
+    sftp.close(handle, () => resolve());
+  });
+}
+
+function writeAt(sftp: SFTPWrapper, handle: Buffer, chunk: Buffer, position: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    sftp.write(handle, chunk, 0, chunk.length, position, (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
+
+/** Pipelined SFTP writes (ssh2 WriteStream is one packet per RTT). */
+async function sftpPipelineWrite(
+  sftp: SFTPWrapper,
+  handle: Buffer,
+  body: ReadableStream<Uint8Array> | null,
+): Promise<number> {
+  if (!body) return 0;
+  const reader = body.getReader();
+  const pending = new Set<Promise<void>>();
+  let firstError: unknown;
+  let pos = 0;
+  let rest = Buffer.alloc(0);
+
+  const launch = (chunk: Buffer, at: number) => {
+    const p = writeAt(sftp, handle, chunk, at)
+      .catch((err) => {
+        firstError ??= err;
+      })
+      .finally(() => {
+        pending.delete(p);
+      });
+    pending.add(p);
+  };
+
+  const waitSlot = async () => {
+    while (pending.size >= SFTP_IN_FLIGHT) {
+      await Promise.race(pending);
+      if (firstError) throw firstError;
+    }
+  };
+
+  const flushRest = async (all: boolean) => {
+    while (rest.length >= SFTP_CHUNK || (all && rest.length > 0)) {
+      await waitSlot();
+      const n = all && rest.length < SFTP_CHUNK ? rest.length : Math.min(SFTP_CHUNK, rest.length);
+      const chunk = rest.subarray(0, n);
+      rest = rest.subarray(n);
+      const at = pos;
+      pos += n;
+      launch(chunk, at);
+    }
+  };
+
+  try {
+    while (true) {
+      if (firstError) throw firstError;
+      const { done, value } = await reader.read();
+      if (value?.byteLength) {
+        const incoming = Buffer.from(value);
+        rest = rest.length ? Buffer.concat([rest, incoming]) : incoming;
+        await flushRest(false);
+      }
+      if (done) break;
+    }
+    await flushRest(true);
+    if (pending.size) await Promise.all([...pending]);
+    if (firstError) throw firstError;
+    return pos;
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      /* already released */
+    }
+  }
+}
+
+async function pumpSftpReads(sftp: SFTPWrapper, handle: Buffer, size: number, dest: PassThrough): Promise<void> {
+  if (size <= 0) return;
+  let nextIssue = 0;
+  let nextEmit = 0;
+  const ready = new Map<number, Buffer>();
+  let inFlight = 0;
+  let paused = false;
+  let stopped = false;
+
+  await new Promise<void>((resolve, reject) => {
+    const stop = (err?: unknown) => {
+      if (stopped) return;
+      stopped = true;
+      dest.off("drain", onDrain);
+      dest.off("close", onClose);
+      dest.off("error", onDestError);
+      if (err) reject(err);
+      else resolve();
+    };
+
+    const onClose = () => stop();
+    const onDestError = (err: Error) => stop(err);
+    const onDrain = () => {
+      paused = false;
+      flush();
+      issue();
+    };
+
+    dest.once("close", onClose);
+    dest.once("error", onDestError);
+    dest.on("drain", onDrain);
+
+    function issue() {
+      if (stopped) return;
+      while (!paused && inFlight < SFTP_IN_FLIGHT && nextIssue < size) {
+        const at = nextIssue;
+        const len = Math.min(SFTP_CHUNK, size - at);
+        nextIssue += len;
+        inFlight++;
+        const buf = Buffer.allocUnsafe(len);
+        sftp.read(handle, buf, 0, len, at, (err, bytesRead, data) => {
+          inFlight--;
+          if (stopped) return;
+          if (err) {
+            stop(err);
+            return;
+          }
+          const n = bytesRead || 0;
+          if (n !== len && at + n < size) {
+            stop(new ValidationError("SFTP-Lesen unvollständig"));
+            return;
+          }
+          ready.set(at, n === data.length ? data : data.subarray(0, n));
+          flush();
+          issue();
+        });
+      }
+      if (nextEmit >= size && inFlight === 0) stop();
+    }
+
+    function flush() {
+      if (stopped) return;
+      while (ready.has(nextEmit)) {
+        const chunk = ready.get(nextEmit)!;
+        ready.delete(nextEmit);
+        nextEmit += chunk.length;
+        if (!chunk.length) continue;
+        try {
+          if (!dest.write(chunk)) paused = true;
+        } catch (err) {
+          stop(err);
+          return;
+        }
+        if (paused) break;
+      }
+      if (nextEmit >= size && inFlight === 0) stop();
+    }
+
+    issue();
+  });
+}
+
+function sftpPipelineReadStream(sftp: SFTPWrapper, handle: Buffer, size: number): PassThrough {
+  const dest = new PassThrough({ highWaterMark: 1024 * 1024 });
+  void pumpSftpReads(sftp, handle, size, dest)
+    .then(() => {
+      if (!dest.destroyed) dest.end();
+    })
+    .catch((err) => {
+      dest.destroy(err instanceof Error ? err : new Error(String(err)));
+    });
+  return dest;
+}
+
 function sshWire(auth: {
   target: string;
   port: number;
@@ -365,13 +555,19 @@ export async function sftpDownloadResponse(input: StreamCreds): Promise<Response
       });
     });
     if (modeType(attrs.mode) === "dir") throw new ValidationError("Ist ein Ordner");
-    const nodeStream = session.sftp.createReadStream(creds.path, { highWaterMark: 512 * 1024 });
+    const handle = await openHandle(session.sftp, creds.path, "r");
+    const nodeStream = sftpPipelineReadStream(session.sftp, handle, attrs.size);
+    let ended = false;
     const endClient = () => {
-      try {
-        session.client.end();
-      } catch {
-        /* ignore */
-      }
+      if (ended) return;
+      ended = true;
+      void closeHandle(session.sftp, handle).finally(() => {
+        try {
+          session.client.end();
+        } catch {
+          /* ignore */
+        }
+      });
     };
     nodeStream.on("close", endClient);
     nodeStream.on("error", endClient);
@@ -402,28 +598,15 @@ export async function sftpUploadFromStream(input: StreamCreds & { body: Readable
 }> {
   const creds = await parseStreamCreds(input);
   const session = await openSftp(creds);
-  let total = 0;
-  const out = session.sftp.createWriteStream(creds.path, { flags: "w", mode: 0o644 });
+  let handle: Buffer | null = null;
   try {
-    if (!input.body) {
-      await new Promise<void>((resolve, reject) => {
-        out.on("error", reject);
-        out.on("close", () => resolve());
-        out.end();
-      });
-    } else {
-      const counter = new Transform({
-        highWaterMark: 512 * 1024,
-        transform(chunk, _enc, cb) {
-          total += (chunk as Buffer).length;
-          cb(null, chunk);
-        },
-      });
-      const nodeIn = Readable.fromWeb(input.body as import("node:stream/web").ReadableStream<Uint8Array>);
-      await pipeline(nodeIn, counter, out);
-    }
+    handle = await openHandle(session.sftp, creds.path, "w");
+    const total = await sftpPipelineWrite(session.sftp, handle, input.body);
+    await closeHandle(session.sftp, handle);
+    handle = null;
     return { path: creds.path, name: guestFileName(creds.path), size: total };
   } catch (error) {
+    await closeHandle(session.sftp, handle);
     await new Promise<void>((resolve) => {
       session.sftp.unlink(creds.path, () => resolve());
     });
