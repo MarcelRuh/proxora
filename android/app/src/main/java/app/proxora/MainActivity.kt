@@ -21,7 +21,6 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -37,16 +36,17 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
-import com.google.android.material.button.MaterialButton
 import java.util.ArrayDeque
 
 class MainActivity : AppCompatActivity() {
   private lateinit var webView: WebView
   private lateinit var progress: ProgressBar
-  private lateinit var errorPanel: LinearLayout
+  private lateinit var errorPanel: FrameLayout
   private lateinit var errorTitle: TextView
   private lateinit var errorBody: TextView
   private var showingError = false
+  private var pendingReload = false
+  private var restoreBundle: Bundle? = null
   private var fileCallback: ValueCallback<Array<Uri>>? = null
   private var loadedServer: String? = null
   private val extraWindows = ArrayDeque<Dialog>()
@@ -74,6 +74,7 @@ class MainActivity : AppCompatActivity() {
       navigationBarStyle = SystemBarStyle.dark(barColor),
     )
     super.onCreate(savedInstanceState)
+    restoreBundle = savedInstanceState
     if (Prefs.serverUrl(this).isNullOrBlank()) {
       setupLauncher.launch(Intent(this, SetupActivity::class.java))
     }
@@ -81,7 +82,7 @@ class MainActivity : AppCompatActivity() {
     progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
       isIndeterminate = false
       max = 100
-      minimumHeight = (3 * resources.displayMetrics.density).toInt()
+      minimumHeight = dp(3)
     }
     webView = WebView(this).apply {
       setOnLongClickListener {
@@ -115,7 +116,7 @@ class MainActivity : AppCompatActivity() {
       )
       addView(
         progress,
-        FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (3 * resources.displayMetrics.density).toInt()),
+        FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(3)),
       )
       addView(
         errorPanel,
@@ -171,6 +172,11 @@ class MainActivity : AppCompatActivity() {
     if (savedInstanceState == null) handleShortcut(intent)
   }
 
+  override fun onSaveInstanceState(outState: Bundle) {
+    super.onSaveInstanceState(outState)
+    webView.saveState(outState)
+  }
+
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
@@ -184,17 +190,17 @@ class MainActivity : AppCompatActivity() {
   }
 
   override fun onPause() {
-    snapshotCookies()
+    snapshotSession()
     super.onPause()
   }
 
   override fun onStop() {
-    snapshotCookies()
+    snapshotSession()
     super.onStop()
   }
 
   override fun onDestroy() {
-    snapshotCookies()
+    snapshotSession()
     while (extraWindows.isNotEmpty()) extraWindows.removeLast().dismiss()
     webView.destroy()
     super.onDestroy()
@@ -211,12 +217,10 @@ class MainActivity : AppCompatActivity() {
   private fun statusBarFallbackPx(): Int {
     val id = resources.getIdentifier("status_bar_height", "dimen", "android")
     if (id > 0) return resources.getDimensionPixelSize(id)
-    return (24 * resources.displayMetrics.density).toInt()
+    return dp(24)
   }
 
-  private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
-
-  private fun buildErrorPanel(): LinearLayout {
+  private fun buildErrorPanel(): FrameLayout {
     errorTitle = TextView(this).apply {
       setTextColor(getColor(R.color.proxora_fg))
       textSize = 22f
@@ -225,23 +229,26 @@ class MainActivity : AppCompatActivity() {
       setTextColor(getColor(R.color.proxora_muted))
       setPadding(0, dp(10), 0, dp(22))
     }
-    val retry = Button(this).apply {
-      text = getString(R.string.error_retry)
-      setOnClickListener { retryLoad() }
+    val retry = proxoraFilledButton(getString(R.string.error_retry)) { retryLoad() }
+    val change = proxoraOutlinedButton(getString(R.string.menu_server)) {
+      setupLauncher.launch(Intent(this, SetupActivity::class.java))
     }
-    val change = Button(this).apply {
-      text = getString(R.string.menu_server)
-      setOnClickListener { setupLauncher.launch(Intent(this@MainActivity, SetupActivity::class.java)) }
-    }
-    return LinearLayout(this).apply {
+    val card = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
-      visibility = View.GONE
-      setBackgroundColor(getColor(R.color.proxora_bg))
-      setPadding(dp(20), dp(28), dp(20), dp(20))
+      setBackgroundResource(R.drawable.quick_actions_card)
+      setPadding(dp(20), dp(20), dp(20), dp(20))
       addView(errorTitle)
       addView(errorBody)
-      addView(retry)
-      addView(change.apply { setPadding(0, dp(8), 0, 0) })
+      addView(retry, buttonRowParams())
+      addView(change, buttonRowParams(dp(12)))
+    }
+    return FrameLayout(this).apply {
+      visibility = View.GONE
+      setBackgroundColor(getColor(R.color.proxora_bg))
+      addView(
+        card,
+        FrameLayout.LayoutParams(proxoraCardWidth(), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
+      )
     }
   }
 
@@ -268,7 +275,10 @@ class MainActivity : AppCompatActivity() {
 
   private fun handleShortcut(intent: Intent?) {
     if (intent?.action != ACTION_RELOAD) return
-    if (webView.url.isNullOrBlank()) return
+    if (webView.url.isNullOrBlank()) {
+      pendingReload = true
+      return
+    }
     reloadPage()
   }
 
@@ -279,45 +289,30 @@ class MainActivity : AppCompatActivity() {
 
   private fun showQuickActions() {
     val dialog = androidx.appcompat.app.AppCompatDialog(this, R.style.Theme_Proxora)
-    val reload = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonStyle).apply {
-      text = getString(R.string.menu_reload)
-      isAllCaps = false
+    val reload = proxoraFilledButton(getString(R.string.menu_reload)) {
+      dialog.dismiss()
+      reloadPage()
     }
-    val change = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-      text = getString(R.string.menu_server)
-      isAllCaps = false
+    val change = proxoraOutlinedButton(getString(R.string.menu_server)) {
+      dialog.dismiss()
+      setupLauncher.launch(Intent(this, SetupActivity::class.java))
     }
     val card = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
       setBackgroundResource(R.drawable.quick_actions_card)
       setPadding(dp(20), dp(20), dp(20), dp(20))
-      val buttonWidth = ViewGroup.LayoutParams.MATCH_PARENT
-      addView(reload, LinearLayout.LayoutParams(buttonWidth, ViewGroup.LayoutParams.WRAP_CONTENT))
-      addView(
-        change,
-        LinearLayout.LayoutParams(buttonWidth, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-          topMargin = dp(12)
-        },
-      )
+      addView(reload, buttonRowParams())
+      addView(change, buttonRowParams(dp(12)))
     }
-    val cardWidth = minOf(dp(320), (resources.displayMetrics.widthPixels * 0.86f).toInt())
     val scrim = FrameLayout(this).apply {
       setBackgroundColor(0x99000000.toInt())
       setOnClickListener { dialog.dismiss() }
       addView(
         card,
-        FrameLayout.LayoutParams(cardWidth, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
+        FrameLayout.LayoutParams(proxoraCardWidth(), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
       )
     }
-    card.setOnClickListener { /* keep taps on the card from closing */ }
-    reload.setOnClickListener {
-      dialog.dismiss()
-      reloadPage()
-    }
-    change.setOnClickListener {
-      dialog.dismiss()
-      setupLauncher.launch(Intent(this, SetupActivity::class.java))
-    }
+    card.isClickable = true
     dialog.setContentView(
       scrim,
       ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
@@ -331,9 +326,10 @@ class MainActivity : AppCompatActivity() {
     dialog.show()
   }
 
-  private fun snapshotCookies() {
+  private fun snapshotSession() {
     val url = Prefs.serverUrl(this) ?: return
     OriginCookies.snapshot(this, url)
+    webView.url?.let { Prefs.saveLastPageUrl(this, url, it) }
   }
 
   private fun loadServer(clearSessionIfChanged: Boolean) {
@@ -348,8 +344,13 @@ class MainActivity : AppCompatActivity() {
       webView.clearHistory()
     }
     hideError()
+    val bundle = restoreBundle
+    restoreBundle = null
     OriginCookies.restore(this, url) {
-      webView.loadUrl(url)
+      val restored = bundle?.let { webView.restoreState(it) }
+      if (restored == null || restored.size == 0) {
+        webView.loadUrl(Prefs.lastPageUrl(this, url) ?: url)
+      }
     }
   }
 
@@ -366,7 +367,12 @@ class MainActivity : AppCompatActivity() {
       }
 
       override fun onPageFinished(view: WebView, url: String?) {
-        if (view === webView) snapshotCookies()
+        if (view !== webView) return
+        snapshotSession()
+        if (pendingReload && !webView.url.isNullOrBlank()) {
+          pendingReload = false
+          webView.reload()
+        }
       }
 
       override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {

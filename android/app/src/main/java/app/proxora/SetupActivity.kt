@@ -1,10 +1,11 @@
 package app.proxora
 
 import android.os.Bundle
+import android.text.InputType
 import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
+import android.view.inputmethod.EditorInfo
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -40,24 +41,31 @@ class SetupActivity : AppCompatActivity() {
       setBackgroundColor(getColor(R.color.proxora_surface))
       setPadding(dp(12), dp(14), dp(12), dp(14))
       isSingleLine = true
-      inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI
+      inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+      imeOptions = EditorInfo.IME_ACTION_GO
     }
     val insecure = CheckBox(this).apply {
       text = getString(R.string.setup_insecure)
       setTextColor(getColor(R.color.proxora_muted))
       isChecked = Prefs.allowInsecureTls(this@SetupActivity)
     }
-    val connect = Button(this).apply {
-      text = getString(R.string.setup_connect)
-      setOnClickListener {
-        val normalized = ServerUrl.normalize(url.text.toString())
-        if (normalized == null) {
-          Toast.makeText(this@SetupActivity, R.string.setup_invalid, Toast.LENGTH_LONG).show()
-          return@setOnClickListener
-        }
-        Prefs.save(this@SetupActivity, normalized, insecure.isChecked)
-        setResult(RESULT_OK)
-        finish()
+    fun submit() {
+      val normalized = ServerUrl.normalize(url.text.toString())
+      if (normalized == null) {
+        Toast.makeText(this, R.string.setup_invalid, Toast.LENGTH_LONG).show()
+        return
+      }
+      Prefs.save(this, normalized, insecure.isChecked)
+      setResult(RESULT_OK)
+      finish()
+    }
+    val connect = proxoraFilledButton(getString(R.string.setup_connect)) { submit() }
+    url.setOnEditorActionListener { _, actionId, _ ->
+      if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
+        submit()
+        true
+      } else {
+        false
       }
     }
 
@@ -76,7 +84,7 @@ class SetupActivity : AppCompatActivity() {
       })
       addView(url)
       addView(insecure.apply { setPadding(0, dp(12), 0, dp(16)) })
-      addView(connect)
+      addView(connect, buttonRowParams())
     }
 
     val statusSpacer = View(this).apply {
@@ -130,8 +138,6 @@ class SetupActivity : AppCompatActivity() {
   private fun statusBarFallbackPx(): Int {
     val id = resources.getIdentifier("status_bar_height", "dimen", "android")
     if (id > 0) return resources.getDimensionPixelSize(id)
-    return (24 * resources.displayMetrics.density).toInt()
+    return dp(24)
   }
-
-  private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 }

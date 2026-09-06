@@ -45,6 +45,6 @@ object OriginCookies {
         if (left.decrementAndGet() <= 0) main.post(complete)
       }
     }
-    main.postDelayed(complete, 800)
+    main.postDelayed(complete, 2_000)
   }
 }

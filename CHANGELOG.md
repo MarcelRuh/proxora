@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.10] – 2026-09-06
+
+### Fixed
+
+- Android restores cookies before the first page load (no 800ms race) and writes the session with `commit()`.
+- The last open page is restored after a cold start (not only the dashboard).
+- Long-press reload from the app icon works even if the WebView has not loaded yet.
+- The server URL field uses a proper URI keyboard.
+- Unused `POST_NOTIFICATIONS` permission removed.
+
+### Changed
+
+- Error screen and server-setup use the same centered Material buttons as long-press actions.
+
 ## [1.7.9] – 2026-09-06
 
 ### Fixed

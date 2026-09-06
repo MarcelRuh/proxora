@@ -9,44 +9,71 @@ object Prefs {
   private const val KEY_INSECURE = "allow_insecure_tls"
   private const val KEY_COOKIES = "origin_cookies"
   private const val KEY_COOKIES_URL = "origin_cookies_url"
+  private const val KEY_LAST_URL = "last_page_url"
+
+  private fun prefs(context: Context) = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
   fun serverUrl(context: Context): String? =
-    context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(KEY_URL, null)?.takeIf { it.isNotBlank() }
+    prefs(context).getString(KEY_URL, null)?.takeIf { it.isNotBlank() }
 
   fun allowInsecureTls(context: Context): Boolean =
-    context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(KEY_INSECURE, false)
+    prefs(context).getBoolean(KEY_INSECURE, false)
 
   fun save(context: Context, url: String, allowInsecureTls: Boolean) {
-    context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+    val previous = serverUrl(context)
+    val editor = prefs(context).edit()
       .putString(KEY_URL, url)
       .putBoolean(KEY_INSECURE, allowInsecureTls)
-      .apply()
+    if (previous != url) {
+      editor.remove(KEY_COOKIES).remove(KEY_COOKIES_URL).remove(KEY_LAST_URL)
+    }
+    editor.commit()
   }
 
   fun clear(context: Context) {
-    context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().clear().apply()
+    prefs(context).edit().clear().commit()
   }
 
   fun saveCookies(context: Context, url: String, header: String) {
     if (header.isBlank()) return
-    context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+    prefs(context).edit()
       .putString(KEY_COOKIES, header)
       .putString(KEY_COOKIES_URL, url)
-      .apply()
+      .commit()
   }
 
   fun cookieHeader(context: Context, url: String): String? {
-    val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-    if (prefs.getString(KEY_COOKIES_URL, null) != url) return null
-    return prefs.getString(KEY_COOKIES, null)?.takeIf { it.isNotBlank() }
+    val stored = prefs(context)
+    if (stored.getString(KEY_COOKIES_URL, null) != url) return null
+    return stored.getString(KEY_COOKIES, null)?.takeIf { it.isNotBlank() }
   }
 
   fun clearCookies(context: Context) {
-    context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
-      .remove(KEY_COOKIES)
-      .remove(KEY_COOKIES_URL)
-      .apply()
+    prefs(context).edit().remove(KEY_COOKIES).remove(KEY_COOKIES_URL).commit()
   }
+
+  fun lastPageUrl(context: Context, server: String): String? {
+    val page = prefs(context).getString(KEY_LAST_URL, null) ?: return null
+    return persistablePageUrl(server, page)
+  }
+
+  fun saveLastPageUrl(context: Context, server: String, page: String) {
+    val persistable = persistablePageUrl(server, page) ?: return
+    prefs(context).edit().putString(KEY_LAST_URL, persistable).commit()
+  }
+}
+
+fun pageBelongsToServer(server: String, page: String): Boolean {
+  if (page == server) return true
+  return page.startsWith("$server/") || page.startsWith("$server?") || page.startsWith("$server#")
+}
+
+fun persistablePageUrl(server: String, page: String): String? {
+  if (!page.startsWith("http://") && !page.startsWith("https://")) return null
+  if (!pageBelongsToServer(server, page)) return null
+  val path = Uri.parse(page).path.orEmpty()
+  if (path == "/login" || path.startsWith("/login/")) return null
+  return page
 }
 
 object ServerUrl {
