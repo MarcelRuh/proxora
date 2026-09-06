@@ -193,11 +193,13 @@ export const GuestTable = memo(function GuestTable({
 
   function canBulk(g: Guest, action: BulkGuestAction): boolean {
     const hid = g.hostId ?? hostId ?? "";
-    const prefix = rowKind(g) === "vm" ? "vm" : "lxc";
-    if (action === "start") return userHasPermission(user, `${prefix}.start` as Permission, hid);
-    if (action === "shutdown") return userHasPermission(user, `${prefix}.shutdown` as Permission, hid);
-    if (action === "reboot") return userHasPermission(user, `${prefix}.reboot` as Permission, hid);
-    if (action === "stop") return userHasPermission(user, `${prefix}.force-stop` as Permission, hid);
+    const row = rowKind(g);
+    const prefix = row === "vm" ? "vm" : "lxc";
+    const guest = { hostId: hid, kind: row, vmid: g.vmid };
+    if (action === "start") return userHasPermission(user, `${prefix}.start` as Permission, hid, guest);
+    if (action === "shutdown") return userHasPermission(user, `${prefix}.shutdown` as Permission, hid, guest);
+    if (action === "reboot") return userHasPermission(user, `${prefix}.reboot` as Permission, hid, guest);
+    if (action === "stop") return userHasPermission(user, `${prefix}.force-stop` as Permission, hid, guest);
     return false;
   }
 

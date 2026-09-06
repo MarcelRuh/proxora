@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.6.1] – 2026-09-06
+
+### Fixed
+
+- Per-guest rights now apply to start/stop/console (API, bulk actions, console window), not only the file explorer.
+
 ## [1.6.0] – 2026-09-06
 
 ### Added

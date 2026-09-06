@@ -21,7 +21,8 @@ type GuestPayload = {
 export function GuestConsoleWindow({ kind }: { kind: "vm" | "lxc" }) {
   const { t } = useI18n();
   const params = useParams<{ hostId: string; node: string; vmid: string }>();
-  const can = useCan(kind === "vm" ? "vm.console" : "lxc.console", params.hostId);
+  const guest = { hostId: params.hostId, kind, vmid: Number(params.vmid) };
+  const can = useCan(kind === "vm" ? "vm.console" : "lxc.console", params.hostId, guest);
   const [mode, setMode] = useState<"vga" | "serial">(kind === "vm" ? "vga" : "serial");
   const path = `/api/hosts/${params.hostId}/${kind === "vm" ? "vms" : "lxc"}/${params.node}/${params.vmid}`;
   const { data, isLoading, error, refetch } = useQuery({

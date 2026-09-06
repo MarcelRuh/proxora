@@ -144,6 +144,7 @@ describe("RBAC", () => {
     expect(userHasPermission(holder, "lxc.start", "h1", guest)).toBe(false);
     expect(userHasPermission(holder, "lxc.start", "h1", { hostId: "h1", kind: "lxc", vmid: 100 })).toBe(true);
     expect(userHasPermission(holder, "lxc.files.read", "h1", { hostId: "h1", kind: "lxc", vmid: 100 })).toBe(false);
+    expect(userHasPermission(holder, "lxc.start", "h1")).toBe(true);
   });
 
   it("treats files-only guest grants as view plus files", () => {

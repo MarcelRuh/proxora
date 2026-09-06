@@ -74,7 +74,12 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
         : kind === "vm"
           ? "vm.console"
           : "lxc.console";
-  if (!userHasPermission(session.user, permission, hostId)) {
+  const guestVmid = Number(vmid);
+  const guest =
+    (kind === "vm" || kind === "lxc") && Number.isInteger(guestVmid) && guestVmid >= 1
+      ? { hostId, kind, vmid: guestVmid }
+      : null;
+  if (!userHasPermission(session.user, permission, hostId, guest)) {
     browser.close(4403, "Forbidden");
     return;
   }

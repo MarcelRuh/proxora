@@ -89,13 +89,13 @@ export const GET = apiRoute("lxc.view", async (req, session, params) => {
 export const POST = apiRoute("lxc.view", async (req, session, params) => {
   const body = actionSchema.parse(await req.json());
   const needed = permissionForGuestAction("lxc", body.action);
-  if (!userHasPermission(session.user, needed, params.id)) {
+  const vmid = Number(params.vmid);
+  if (!userHasPermission(session.user, needed, params.id, { hostId: params.id, kind: "lxc", vmid })) {
     throw new ForbiddenError();
   }
   if (body.action === "delete" && body.confirm !== true) {
     throw new ValidationError("Confirmation required");
   }
-  const vmid = Number(params.vmid);
   assertGuestAccess(session.user, params.id, "lxc", vmid);
   let hostName = "";
   let guestName: string | undefined;
