@@ -216,7 +216,7 @@ class MainActivity : AppCompatActivity() {
         transport.webView = child
         resultMsg.sendToTarget()
 
-        val dialog = Dialog(this@MainActivity, R.style.Theme.Proxora)
+        val dialog = Dialog(this@MainActivity, R.style.Theme_Proxora)
         dialog.setContentView(
           child,
           ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
