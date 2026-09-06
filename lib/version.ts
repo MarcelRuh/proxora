@@ -1,5 +1,5 @@
 export const APP_NAME = "Proxora";
-export const APP_VERSION = "1.7.10";
+export const APP_VERSION = "1.7.11";
 export const DEFAULT_GITHUB_REPO = "MarcelRuh/proxora";
 export const DEFAULT_GITHUB_BRANCH = "main";
 

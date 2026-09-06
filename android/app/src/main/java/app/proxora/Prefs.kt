@@ -10,6 +10,7 @@ object Prefs {
   private const val KEY_COOKIES = "origin_cookies"
   private const val KEY_COOKIES_URL = "origin_cookies_url"
   private const val KEY_LAST_URL = "last_page_url"
+  private const val KEY_INBOX_SEEN = "inbox_seen_id"
 
   private fun prefs(context: Context) = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
@@ -25,7 +26,7 @@ object Prefs {
       .putString(KEY_URL, url)
       .putBoolean(KEY_INSECURE, allowInsecureTls)
     if (previous != url) {
-      editor.remove(KEY_COOKIES).remove(KEY_COOKIES_URL).remove(KEY_LAST_URL)
+      editor.remove(KEY_COOKIES).remove(KEY_COOKIES_URL).remove(KEY_LAST_URL).remove(KEY_INBOX_SEEN)
     }
     editor.commit()
   }
@@ -60,6 +61,15 @@ object Prefs {
   fun saveLastPageUrl(context: Context, server: String, page: String) {
     val persistable = persistablePageUrl(server, page) ?: return
     prefs(context).edit().putString(KEY_LAST_URL, persistable).commit()
+  }
+
+  fun inboxSeenId(context: Context): String? =
+    prefs(context).getString(KEY_INBOX_SEEN, null)?.takeIf { it.isNotBlank() }
+
+  fun setInboxSeenId(context: Context, id: String?) {
+    val editor = prefs(context).edit()
+    if (id.isNullOrBlank()) editor.remove(KEY_INBOX_SEEN) else editor.putString(KEY_INBOX_SEEN, id)
+    editor.commit()
   }
 }
 

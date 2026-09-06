@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.11] – 2026-09-06
+
+### Added
+
+- Android shows system notifications for the same inbox events as Discord (host offline, backups, disks, peer updates, …). Polls while the app is running and every 15 minutes in the background. Tap opens the related page.
+
 ## [1.7.10] – 2026-09-06
 
 ### Fixed

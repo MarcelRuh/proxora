@@ -1,11 +1,14 @@
 package app.proxora
 
+import android.Manifest
 import android.app.Dialog
 import android.app.DownloadManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Message
@@ -46,6 +49,7 @@ class MainActivity : AppCompatActivity() {
   private lateinit var errorBody: TextView
   private var showingError = false
   private var pendingReload = false
+  private var pendingOpen: String? = null
   private var restoreBundle: Bundle? = null
   private var fileCallback: ValueCallback<Array<Uri>>? = null
   private var loadedServer: String? = null
@@ -54,6 +58,8 @@ class MainActivity : AppCompatActivity() {
   companion object {
     const val ACTION_RELOAD = "app.proxora.RELOAD"
   }
+
+  private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
   private val filePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
     val uris = result.data?.let { extractUris(it) }
@@ -169,7 +175,11 @@ class MainActivity : AppCompatActivity() {
     )
 
     if (!Prefs.serverUrl(this).isNullOrBlank()) loadServer(clearSessionIfChanged = false)
-    if (savedInstanceState == null) handleShortcut(intent)
+    if (savedInstanceState == null) {
+      handleShortcut(intent)
+      handleOpen(intent)
+    }
+    requestNotifyPermission()
   }
 
   override fun onSaveInstanceState(outState: Bundle) {
@@ -181,15 +191,19 @@ class MainActivity : AppCompatActivity() {
     super.onNewIntent(intent)
     setIntent(intent)
     handleShortcut(intent)
+    handleOpen(intent)
   }
 
   override fun onResume() {
     super.onResume()
+    AppForeground.resumed = true
     val server = Prefs.serverUrl(this)
     if (!server.isNullOrBlank() && server != loadedServer) loadServer(clearSessionIfChanged = true)
+    Thread { InboxPoller.poll(applicationContext, notify = false) }.start()
   }
 
   override fun onPause() {
+    AppForeground.resumed = false
     snapshotSession()
     super.onPause()
   }
@@ -282,6 +296,26 @@ class MainActivity : AppCompatActivity() {
     reloadPage()
   }
 
+  private fun handleOpen(intent: Intent?) {
+    val path = intent?.getStringExtra(InboxNotifier.EXTRA_PATH) ?: return
+    val server = Prefs.serverUrl(this) ?: return
+    val target =
+      if (path.startsWith("http://") || path.startsWith("https://")) path
+      else server.trimEnd('/') + if (path.startsWith("/")) path else "/$path"
+    Prefs.saveLastPageUrl(this, server, target)
+    if (::webView.isInitialized && !webView.url.isNullOrBlank()) {
+      webView.loadUrl(target)
+    } else {
+      pendingOpen = target
+    }
+  }
+
+  private fun requestNotifyPermission() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+    if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+    notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+  }
+
   private fun reloadPage() {
     hideError()
     webView.reload()
@@ -347,6 +381,12 @@ class MainActivity : AppCompatActivity() {
     val bundle = restoreBundle
     restoreBundle = null
     OriginCookies.restore(this, url) {
+      val open = pendingOpen
+      pendingOpen = null
+      if (open != null) {
+        webView.loadUrl(open)
+        return@restore
+      }
       val restored = bundle?.let { webView.restoreState(it) }
       if (restored == null || restored.size == 0) {
         webView.loadUrl(Prefs.lastPageUrl(this, url) ?: url)
