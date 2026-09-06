@@ -8,11 +8,12 @@ import { ValidationError } from "@/lib/errors";
 import { assertGuestAccess } from "@/server/auth/session-core";
 import { getHostOrThrow } from "@/server/services/host-service";
 import { runGuestFileOp, type GuestFileOp } from "@/server/services/guest-files";
+import { createGuestDownloadTicket } from "@/server/services/guest-file-tickets";
 import { GUEST_FILE_MAX_BYTES } from "@/lib/guest-files";
 
 const bodySchema = z
   .object({
-    op: z.enum(["list", "read", "write", "mkdir", "delete"]),
+    op: z.enum(["list", "read", "write", "mkdir", "delete", "download-ticket"]),
     via: z.enum(["agent", "sftp"]).optional(),
     target: z.string().min(1).max(253).optional(),
     port: z.number().int().min(1).max(65535).optional(),
@@ -51,6 +52,29 @@ export function guestFilesRoute(kind: "vm" | "lxc") {
       throw new ValidationError("Path fehlt");
     }
     const host = await getHostOrThrow(params.id, session.user);
+    if (body.op === "download-ticket") {
+      if (via !== "sftp") {
+        throw new ValidationError("Stream-Download nur per SFTP");
+      }
+      const issued = createGuestDownloadTicket({
+        userId: session.user.id,
+        hostId: host.id,
+        kind,
+        node: params.node,
+        vmid,
+        path: body.path,
+        target: body.target ?? "",
+        port: body.port,
+        username: body.username ?? "",
+        password: body.password ?? "",
+      });
+      return json({
+        ticket: issued.ticket,
+        path: issued.path,
+        name: issued.name,
+        via: "sftp" as const,
+      });
+    }
     const result = await runGuestFileOp(host, {
       kind,
       node: params.node,

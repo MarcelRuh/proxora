@@ -223,6 +223,42 @@ export function GuestFilesPanel({
   }
 
   async function download(entry: GuestFileEntry) {
+    if (via === "sftp") {
+      const creds = session;
+      if (!creds) {
+        toast.error(t("files.needConnect"));
+        return;
+      }
+      setBusy(true);
+      try {
+        const result = await api<GuestFileResult>(apiPath, {
+          method: "POST",
+          body: JSON.stringify({
+            op: "download-ticket",
+            via: "sftp",
+            path: entry.path,
+            target: creds.target,
+            port: creds.port,
+            username: creds.username,
+            password: creds.password,
+          }),
+        });
+        if (!result.ticket) throw new Error(t("common.failed"));
+        const a = document.createElement("a");
+        a.href = `${apiPath}/download?ticket=${encodeURIComponent(result.ticket)}`;
+        a.download = entry.name;
+        a.rel = "noopener";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        toast.success(t("files.downloadStarted"));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t("common.failed"));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     setBusy(true);
     try {
       const result = await call("read", { path: entry.path });
@@ -533,6 +569,7 @@ export function GuestFilesPanel({
                         disabled={busy}
                         onClick={() => {
                           if (entry.type === "dir") void openDir(entry.path);
+                          else if (via === "sftp" && entry.size > GUEST_FILE_MAX_BYTES) void download(entry);
                           else void edit(entry);
                         }}
                       >

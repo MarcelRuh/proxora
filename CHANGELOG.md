@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.17] – 2026-09-06
+
+### Added
+
+- LXC/SFTP guest file download streams over SSH (one-time ticket + HTTP GET). Files up to 16 GB (e.g. 4 GB) go to the browser download, not through JSON/base64. Edit and upload stay at 8 MB.
+
 ## [1.4.16] – 2026-09-06
 
 ### Added

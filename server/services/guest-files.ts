@@ -1,9 +1,12 @@
+import { Readable, Transform } from "node:stream";
 import { Client, type SFTPWrapper } from "ssh2";
 import { HostOrigin, type Host } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ForbiddenError, HostUnreachableError, ValidationError } from "@/lib/errors";
 import {
   GUEST_FILE_MAX_BYTES,
+  GUEST_FILE_STREAM_MAX_BYTES,
+  attachmentDisposition,
   clampSftpPort,
   decodeGuestFileContent,
   guestFileName,
@@ -230,6 +233,195 @@ async function remove(sftp: SFTPWrapper, path: string): Promise<void> {
     if (modeType(stat.mode) === "dir") sftp.rmdir(path, done);
     else sftp.unlink(path, done);
   });
+}
+
+function limitSftpBytes(source: NodeJS.ReadableStream, max: number): Transform {
+  let total = 0;
+  const limiter = new Transform({
+    highWaterMark: 512 * 1024,
+    transform(chunk, _enc, cb) {
+      total += (chunk as Buffer).length;
+      if (total > max) {
+        cb(new ValidationError(`Datei größer als ${Math.round(max / (1024 * 1024 * 1024))} GB`));
+        return;
+      }
+      cb(null, chunk);
+    },
+  });
+  source.on("error", (err) => limiter.destroy(err as Error));
+  source.pipe(limiter);
+  return limiter;
+}
+
+/** Stream a guest file over SFTP. SSH stays open until the HTTP body ends. */
+export async function sftpDownloadResponse(input: {
+  target: string;
+  port?: number;
+  username: string;
+  password: string;
+  path: string;
+}): Promise<Response> {
+  let path: string;
+  let port: number;
+  let host: string;
+  try {
+    path = resolveGuestPath(input.path || "/");
+    port = clampSftpPort(input.port ?? 22);
+    host = isAllowedSftpTarget(input.target);
+  } catch (error) {
+    throw new ValidationError(error instanceof Error ? error.message : "Invalid path");
+  }
+  const user = input.username.trim();
+  const password = input.password;
+  if (!user || user.length > 64) throw new ValidationError("SSH-Benutzer fehlt");
+  if (!password || password.length > 512) throw new ValidationError("SSH-Passwort fehlt");
+
+  return new Promise((resolve, reject) => {
+    const client = new Client();
+    let settled = false;
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      try {
+        client.end();
+      } catch {
+        /* ignore */
+      }
+      reject(fileError(error, "SSH fehlgeschlagen"));
+    };
+    const timer = setTimeout(
+      () => fail(new ValidationError("SSH-Zeitüberschreitung — Gast erreichbar? SSH aktiv?")),
+      CONNECT_MS + 2_000,
+    );
+
+    client.on("keyboard-interactive", (_name, _instr, _lang, prompts, done) => {
+      done(prompts.map(() => password));
+    });
+    client.on("ready", () => {
+      client.sftp((err, sftp) => {
+        if (err || !sftp) {
+          clearTimeout(timer);
+          fail(err ?? new ValidationError("SFTP nicht verfügbar"));
+          return;
+        }
+        sftp.stat(path, (statErr, attrs) => {
+          if (statErr) {
+            clearTimeout(timer);
+            fail(statErr);
+            return;
+          }
+          if (modeType(Number(attrs.mode ?? 0)) === "dir") {
+            clearTimeout(timer);
+            fail(new ValidationError("Ist ein Ordner"));
+            return;
+          }
+          const size = Number(attrs.size ?? 0);
+          if (Number.isFinite(size) && size > GUEST_FILE_STREAM_MAX_BYTES) {
+            clearTimeout(timer);
+            fail(new ValidationError(`Datei größer als ${Math.round(GUEST_FILE_STREAM_MAX_BYTES / (1024 * 1024 * 1024))} GB`));
+            return;
+          }
+          clearTimeout(timer);
+          const nodeStream = sftp.createReadStream(path, { highWaterMark: 512 * 1024 });
+          const limited = limitSftpBytes(nodeStream, GUEST_FILE_STREAM_MAX_BYTES);
+          const endClient = () => {
+            try {
+              client.end();
+            } catch {
+              /* ignore */
+            }
+          };
+          limited.on("close", endClient);
+          limited.on("error", endClient);
+          const web = Readable.toWeb(limited) as unknown as ReadableStream<Uint8Array>;
+          const headers = new Headers();
+          headers.set("Content-Type", "application/octet-stream");
+          headers.set("Content-Disposition", attachmentDisposition(guestFileName(path)));
+          headers.set("Cache-Control", "no-store");
+          if (Number.isFinite(size) && size > 0) {
+            headers.set("Content-Length", String(size));
+          }
+          settled = true;
+          resolve(new Response(web, { status: 200, headers }));
+        });
+      });
+    });
+    client.on("error", (error) => {
+      clearTimeout(timer);
+      fail(error);
+    });
+    client.connect({
+      host,
+      port,
+      username: user,
+      password,
+      readyTimeout: CONNECT_MS,
+      tryKeyboard: true,
+      hostVerifier: () => true,
+    });
+  });
+}
+
+async function proxyGuestFileDownloadToPeer(
+  host: Host,
+  input: { target: string; port: number; username: string; password: string; path: string; kind: "vm" | "lxc"; vmid: number },
+): Promise<Response> {
+  if (!host.peerId || !host.remoteHostId) throw new ValidationError("Peer host is incomplete");
+  const peer = await prisma.wireguardPeer.findUnique({ where: { id: host.peerId } });
+  if (!peer?.address) throw new HostUnreachableError(host.name, "Set the colleague's Proxora IP first");
+  const url = `${peerHttpBase(peer)}/api/federation/guest-files/download`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/octet-stream",
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${outboundToken(peer)}`,
+    },
+    body: JSON.stringify({
+      remoteHostId: host.remoteHostId,
+      kind: input.kind,
+      vmid: input.vmid,
+      target: input.target,
+      port: input.port,
+      username: input.username,
+      password: input.password,
+      path: input.path,
+    }),
+  });
+  if (!response.ok || !response.body) {
+    const json = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new ValidationError(json.error || `Peer Proxora error (${response.status})`);
+  }
+  const headers = new Headers();
+  const type = response.headers.get("content-type");
+  headers.set("Content-Type", type || "application/octet-stream");
+  const disposition = response.headers.get("content-disposition");
+  if (disposition) headers.set("Content-Disposition", disposition);
+  const length = response.headers.get("content-length");
+  if (length) headers.set("Content-Length", length);
+  headers.set("Cache-Control", "no-store");
+  return new Response(response.body, { status: 200, headers });
+}
+
+export async function streamGuestFileDownload(
+  host: Host,
+  input: {
+    kind: "vm" | "lxc";
+    vmid: number;
+    target: string;
+    port: number;
+    username: string;
+    password: string;
+    path: string;
+  },
+): Promise<Response> {
+  if (host.origin === HostOrigin.PEER) return proxyGuestFileDownloadToPeer(host, input);
+  try {
+    return await sftpDownloadResponse(input);
+  } catch (error) {
+    if (error instanceof ValidationError || error instanceof ForbiddenError) throw error;
+    throw fileError(error, "SSH fehlgeschlagen");
+  }
 }
 
 export async function guestSftp(input: GuestFileRequest): Promise<GuestFileResult> {

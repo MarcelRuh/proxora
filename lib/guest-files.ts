@@ -1,6 +1,8 @@
 import { isIpv4 } from "@/lib/create-ip";
 
 export const GUEST_FILE_MAX_BYTES = 8 * 1024 * 1024;
+/** Streamed SFTP download (not the JSON editor). 4 GiB files must fit. */
+export const GUEST_FILE_STREAM_MAX_BYTES = 16 * 1024 * 1024 * 1024;
 export const GUEST_FILE_MAX_PATH = 4096;
 
 export type GuestFileKind = "file" | "dir" | "other";
@@ -37,6 +39,7 @@ export type GuestFileResult = {
   size?: number;
   contentBase64?: string;
   fingerprint?: string;
+  ticket?: string;
 };
 
 const TEXT_EXT =
@@ -77,6 +80,12 @@ export function guestFileName(path: string): string {
   const resolved = resolveGuestPath(path);
   if (resolved === "/") return "/";
   return resolved.slice(resolved.lastIndexOf("/") + 1);
+}
+
+export function attachmentDisposition(name: string): string {
+  const fallback =
+    name.replace(/[^\x20-\x7E]+/g, "_").replace(/["\\;\r\n]/g, "_").slice(0, 150).trim() || "download";
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }
 
 export function isAllowedSftpTarget(host: string): string {

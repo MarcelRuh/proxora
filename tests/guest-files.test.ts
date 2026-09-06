@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  attachmentDisposition,
   clampSftpPort,
+  GUEST_FILE_STREAM_MAX_BYTES,
   guestFileName,
   guestPathCrumbs,
   guestPathParent,
@@ -9,6 +11,8 @@ import {
   parseGuestListOutput,
   resolveGuestPath,
 } from "@/lib/guest-files";
+import { createGuestDownloadTicket, takeGuestDownloadTicket } from "@/server/services/guest-file-tickets";
+import { NotFoundError } from "@/lib/errors";
 import { encodeProxmoxFormBody } from "@/server/proxmox/http";
 import { shareHasPermission } from "@/lib/federation-access";
 import { hasPermission, ROLE_PRESETS } from "@/lib/permissions";
@@ -88,5 +92,61 @@ describe("guest file explorer helpers", () => {
     expect(encodeProxmoxFormBody({ command: ["ls", "-1Ap", "--", "/etc"] })).toBe(
       "command=ls&command=-1Ap&command=--&command=%2Fetc",
     );
+  });
+});
+
+describe("guest file stream download", () => {
+  it("allows multi-gigabyte SFTP downloads and sets Content-Disposition", () => {
+    expect(GUEST_FILE_STREAM_MAX_BYTES).toBeGreaterThan(4 * 1024 * 1024 * 1024);
+    expect(attachmentDisposition("backup.tar.gz")).toContain('filename="backup.tar.gz"');
+    expect(attachmentDisposition("äöü.bin")).toContain("filename*=UTF-8''");
+  });
+
+  it("issues a one-time download ticket bound to the user", () => {
+    const issued = createGuestDownloadTicket({
+      userId: "u1",
+      hostId: "h1",
+      kind: "lxc",
+      node: "pve",
+      vmid: 101,
+      path: "/var/lib/backup.tar",
+      target: "10.0.0.8",
+      username: "root",
+      password: "secret",
+    });
+    expect(issued.path).toBe("/var/lib/backup.tar");
+    expect(issued.name).toBe("backup.tar");
+    const row = takeGuestDownloadTicket(issued.ticket, "u1");
+    expect(row.vmid).toBe(101);
+    expect(row.username).toBe("root");
+    expect(() => takeGuestDownloadTicket(issued.ticket, "u1")).toThrow(NotFoundError);
+  });
+
+  it("rejects expired or foreign download tickets", () => {
+    const expired = createGuestDownloadTicket({
+      userId: "u1",
+      hostId: "h1",
+      kind: "lxc",
+      node: "pve",
+      vmid: 101,
+      path: "/root/a.bin",
+      target: "10.0.0.8",
+      username: "root",
+      password: "secret",
+      expiresAt: Date.now() - 1,
+    });
+    expect(() => takeGuestDownloadTicket(expired.ticket, "u1")).toThrow(NotFoundError);
+    const fresh = createGuestDownloadTicket({
+      userId: "u1",
+      hostId: "h1",
+      kind: "lxc",
+      node: "pve",
+      vmid: 101,
+      path: "/root/a.bin",
+      target: "10.0.0.8",
+      username: "root",
+      password: "secret",
+    });
+    expect(() => takeGuestDownloadTicket(fresh.ticket, "other")).toThrow(NotFoundError);
   });
 });
