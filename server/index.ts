@@ -6,6 +6,7 @@ import { WebSocketServer } from "ws";
 import { logger } from "@/lib/logger";
 import { attachConsoleProxy } from "@/server/ws/console-proxy";
 import { attachGuestFileUpload } from "@/server/ws/guest-file-upload";
+import { attachPushSocket, PUSH_WS_PATH } from "@/server/ws/push-ws";
 import { handleNodeGuestFileTransfer } from "@/server/http/guest-file-node";
 import { GUEST_FILE_UPLOAD_WS_PATH } from "@/lib/guest-file-http";
 import { startAptRefreshScheduler } from "@/server/services/apt-refresh";
@@ -52,11 +53,19 @@ async function main() {
     perMessageDeflate: false,
     maxPayload: 8 * 1024 * 1024,
   });
+  const pushWss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
   attachConsoleProxy(wss);
   attachGuestFileUpload(uploadWss);
+  attachPushSocket(pushWss);
 
   server.on("upgrade", (req, socket, head) => {
     const { pathname } = parse(req.url ?? "");
+    if (pathname === PUSH_WS_PATH) {
+      pushWss.handleUpgrade(req, socket, head, (ws) => {
+        pushWss.emit("connection", ws, req);
+      });
+      return;
+    }
     if (pathname === GUEST_FILE_UPLOAD_WS_PATH) {
       uploadWss.handleUpgrade(req, socket, head, (ws) => {
         uploadWss.emit("connection", ws, req);

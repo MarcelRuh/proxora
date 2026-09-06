@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.12] – 2026-09-07
+
+### Changed
+
+- Inbox alerts are pushed from the instance when an event happens (Web Push in the browser, WebSocket in the Android app). The app no longer polls `/api/inbox`.
+
 ## [1.7.11] – 2026-09-06
 
 ### Added

@@ -69,10 +69,11 @@ model User {
   updatedAt    DateTime   @updatedAt
   roleId       String
   role         Role       @relation(fields: [roleId], references: [id])
-  sessions     Session[]
-  auditLogs    AuditLog[]
-  hostAccess   UserHostAccess[]
-  guestAccess  UserGuestAccess[]
+  sessions           Session[]
+  auditLogs          AuditLog[]
+  hostAccess         UserHostAccess[]
+  guestAccess        UserGuestAccess[]
+  pushSubscriptions  PushSubscription[]
 }
 
 model Role {
@@ -217,6 +218,20 @@ model InboxEvent {
   @@index([createdAt])
   @@index([readAt])
   @@index([hostId])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model Job {

@@ -13,11 +13,18 @@ import {
   type NotificationTopic,
 } from "@/lib/notification-topics";
 import { recordInboxEvent } from "@/server/services/inbox-service";
+import { sendInboxPush } from "@/server/services/push-service";
 
 export async function dispatchNotification(event: NotificationEvent): Promise<void> {
-  await recordInboxEvent(event).catch((error) => {
+  const row = await recordInboxEvent(event).catch((error) => {
     logger.warn({ err: error, topic: event.topic }, "Inbox persist failed");
+    return null;
   });
+  if (row) {
+    await sendInboxPush(row).catch((error) => {
+      logger.warn({ err: error, topic: event.topic }, "Inbox push failed");
+    });
+  }
   const channels = await prisma.notificationChannel.findMany({ where: { enabled: true } });
   if (channels.length === 0) return;
   await Promise.all(

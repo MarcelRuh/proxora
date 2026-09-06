@@ -199,7 +199,6 @@ class MainActivity : AppCompatActivity() {
     AppForeground.resumed = true
     val server = Prefs.serverUrl(this)
     if (!server.isNullOrBlank() && server != loadedServer) loadServer(clearSessionIfChanged = true)
-    Thread { InboxPoller.poll(applicationContext, notify = false) }.start()
   }
 
   override fun onPause() {
@@ -381,6 +380,7 @@ class MainActivity : AppCompatActivity() {
     val bundle = restoreBundle
     restoreBundle = null
     OriginCookies.restore(this, url) {
+      PushClient.restart()
       val open = pendingOpen
       pendingOpen = null
       if (open != null) {
@@ -409,6 +409,7 @@ class MainActivity : AppCompatActivity() {
       override fun onPageFinished(view: WebView, url: String?) {
         if (view !== webView) return
         snapshotSession()
+        PushClient.onSessionReady()
         if (pendingReload && !webView.url.isNullOrBlank()) {
           pendingReload = false
           webView.reload()

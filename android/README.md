@@ -36,4 +36,4 @@ Consoles and the file explorer open in the same view (Android has no desktop pop
 
 The system status bar (clock, battery) stays visible. Long-press the app icon (or long-press in the app) for **Reload** or **Change server**.
 
-Inbox events (host down, backup failed, disk full, …) also appear as Android notifications. Allow notifications when the app asks; tap a notification to open the related page.
+Inbox events (host down, backup failed, disk full, …) appear as Android notifications as soon as the instance records them — no background polling. Allow notifications when the app asks; tap a notification to open the related page. The socket runs while the app process is alive; swipe it away and you will get the next events after you open Proxora again.

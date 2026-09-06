@@ -6,7 +6,7 @@ class ProxoraApp : Application() {
   override fun onCreate() {
     super.onCreate()
     instance = this
-    InboxPoller.start(this)
+    PushClient.start(this)
   }
 
   companion object {

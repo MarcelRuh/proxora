@@ -9,6 +9,13 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
+data class InboxEvent(
+  val id: String,
+  val title: String,
+  val message: String,
+  val href: String?,
+)
+
 object InboxNotifier {
   const val CHANNEL_ID = "proxora_inbox"
   const val ACTION_OPEN = "app.proxora.OPEN"

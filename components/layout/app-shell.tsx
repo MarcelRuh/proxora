@@ -40,6 +40,7 @@ import type { SelfUpdateStatus } from "@/components/settings/self-update-section
 import { ProgressBar } from "@/components/ui/misc";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { LocaleSwitch } from "@/components/i18n/locale-switch";
+import { PushSubscriber } from "@/components/push/push-subscriber";
 import { UiThemeSelect } from "@/components/theme/ui-theme-select";
 import type { MessageKey } from "@/lib/i18n/messages";
 
@@ -97,6 +98,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
   return (
     <div className="app-shell relative flex h-dvh overflow-hidden bg-background">
       <UiAtmosphere />
+      <PushSubscriber />
       <aside
         className={cn(
           "app-sidebar fixed inset-y-0 left-0 z-40 flex h-dvh shrink-0 flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground backdrop-blur-md transition-transform lg:static lg:inset-auto lg:h-auto lg:self-stretch lg:translate-x-0",
