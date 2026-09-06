@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.4] – 2026-09-06
+
+### Changed
+
+- Android no longer uses pull-to-refresh. Reload is long-press (in the app or on the icon).
+
 ## [1.7.3] – 2026-09-06
 
 ### Changed

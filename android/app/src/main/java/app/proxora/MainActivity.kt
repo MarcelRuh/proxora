@@ -30,13 +30,11 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import java.util.ArrayDeque
 
 class MainActivity : AppCompatActivity() {
   private lateinit var webView: WebView
   private lateinit var progress: ProgressBar
-  private lateinit var swipe: SwipeRefreshLayout
   private var fileCallback: ValueCallback<Array<Uri>>? = null
   private var loadedServer: String? = null
   private val extraWindows = ArrayDeque<Dialog>()
@@ -69,7 +67,6 @@ class MainActivity : AppCompatActivity() {
       minimumHeight = (3 * resources.displayMetrics.density).toInt()
     }
     webView = WebView(this).apply {
-      overScrollMode = View.OVER_SCROLL_NEVER
       setOnLongClickListener {
         val type = hitTestResult.type
         if (
@@ -88,22 +85,10 @@ class MainActivity : AppCompatActivity() {
     ProxoraWeb.configure(webView)
     attachClients(webView)
 
-    swipe = object : SwipeRefreshLayout(this) {
-      override fun canChildScrollUp(): Boolean = webView.canScrollVertically(-1)
-    }.apply {
-      setColorSchemeColors(getColor(R.color.proxora_pink))
-      setProgressBackgroundColorSchemeColor(getColor(R.color.proxora_surface))
-      setOnRefreshListener { reloadPage() }
-      addView(
-        webView,
-        ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
-      )
-    }
-
     val root = FrameLayout(this).apply {
       setBackgroundColor(getColor(R.color.proxora_bg))
       addView(
-        swipe,
+        webView,
         FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
       )
       addView(
@@ -183,7 +168,6 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun reloadPage() {
-    swipe.isRefreshing = true
     webView.reload()
   }
 
@@ -210,16 +194,6 @@ class MainActivity : AppCompatActivity() {
     webView.loadUrl(url)
   }
 
-  private fun pullReloadAllowed(): Boolean {
-    val path = Uri.parse(webView.url ?: return true).path.orEmpty()
-    return !path.contains("/console")
-  }
-
-  private fun syncPullToRefresh() {
-    swipe.isEnabled = pullReloadAllowed()
-    if (!swipe.isEnabled) swipe.isRefreshing = false
-  }
-
   private fun attachClients(view: WebView) {
     view.webViewClient = object : WebViewClient() {
       @Suppress("OVERRIDE_DEPRECATION")
@@ -227,15 +201,6 @@ class MainActivity : AppCompatActivity() {
 
       override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
         handleUrl(request.url.toString())
-
-      override fun onPageFinished(view: WebView, url: String?) {
-        swipe.isRefreshing = false
-        syncPullToRefresh()
-      }
-
-      override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
-        syncPullToRefresh()
-      }
 
       override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: android.net.http.SslError) {
         if (Prefs.allowInsecureTls(this@MainActivity)) {
@@ -250,7 +215,6 @@ class MainActivity : AppCompatActivity() {
       override fun onProgressChanged(view: WebView, newProgress: Int) {
         progress.progress = newProgress
         progress.visibility = if (newProgress in 1..99) View.VISIBLE else View.GONE
-        if (newProgress >= 100) swipe.isRefreshing = false
       }
 
       override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {

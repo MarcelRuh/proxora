@@ -30,4 +30,4 @@ The APK is `app/build/outputs/apk/release/app-release.apk`. CI on `main` also up
 
 Consoles and the file explorer open in the same view (Android has no desktop popups). Use the system back button to return.
 
-Pull down from the top of a page to reload. Long-press the app icon (or long-press in the app) for **Reload** or **Change server**.
+Long-press the app icon (or long-press in the app) for **Reload** or **Change server**.
