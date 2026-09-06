@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { Play, Square, RotateCcw, Terminal, Camera, Trash2 } from "lucide-react";
+import { Play, Square, RotateCcw, Terminal, FolderOpen, Camera, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import { useSessionUser } from "@/components/auth/session-user";
 import { userHasPermission, type Permission } from "@/lib/permissions";
 import { invalidateDashboardQueries, applyGuestIpsToCache } from "@/components/dashboard/use-dashboard";
+import { openGuestToolWindow } from "@/lib/guest-tool-window";
 
 export const GuestTable = memo(function GuestTable({
   kind,
@@ -390,6 +391,7 @@ export const GuestTable = memo(function GuestTable({
                   reboot: userHasPermission(user, `${prefix}.reboot` as Permission, hid),
                   stop: userHasPermission(user, `${prefix}.force-stop` as Permission, hid),
                   console: userHasPermission(user, `${prefix}.console` as Permission, hid),
+                  files: userHasPermission(user, `${prefix}.files` as Permission, hid),
                   snapshot: userHasPermission(user, `${prefix}.snapshot.create` as Permission, hid),
                   delete: userHasPermission(user, `${prefix}.delete` as Permission, hid),
                 };
@@ -514,10 +516,41 @@ export const GuestTable = memo(function GuestTable({
                           </Button>
                         ) : null}
                         {perms.console ? (
-                          <Button size="icon" variant="ghost" asChild title={t("guest.console")}>
-                            <Link href={`/${detailBase}/${hid}/${g.node}/${g.vmid}?console=1`}>
-                              <Terminal className="h-4 w-4" />
-                            </Link>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title={t("guest.console")}
+                            aria-label={t("guest.console")}
+                            onClick={() =>
+                              openGuestToolWindow({
+                                kind: row,
+                                hostId: hid,
+                                node: g.node,
+                                vmid: g.vmid,
+                                tool: "console",
+                              })
+                            }
+                          >
+                            <Terminal className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                        {perms.files ? (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title={t("files.show")}
+                            aria-label={t("files.show")}
+                            onClick={() =>
+                              openGuestToolWindow({
+                                kind: row,
+                                hostId: hid,
+                                node: g.node,
+                                vmid: g.vmid,
+                                tool: "files",
+                              })
+                            }
+                          >
+                            <FolderOpen className="h-4 w-4" />
                           </Button>
                         ) : null}
                         {perms.delete ? (

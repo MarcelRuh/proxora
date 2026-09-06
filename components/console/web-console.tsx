@@ -164,8 +164,8 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
   return (
     <div
       className={cn(
-        "flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-[#020617]",
-        fill && "h-[min(calc(100dvh-11rem),880px)]",
+        "flex flex-col overflow-hidden rounded-xl border border-border bg-[#020617]",
+        fill ? "h-full min-h-0" : "min-h-[420px]",
       )}
     >
       <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2 text-xs text-slate-300">

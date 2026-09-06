@@ -118,6 +118,7 @@ export function GuestFilesPanel({
   ips,
   running,
   agentEnabled,
+  fill,
 }: {
   hostId: string;
   node: string;
@@ -126,6 +127,7 @@ export function GuestFilesPanel({
   ips: string[];
   running: boolean;
   agentEnabled?: boolean;
+  fill?: boolean;
 }) {
   const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -555,10 +557,10 @@ export function GuestFilesPanel({
   }
 
   return (
-    <Card className="overflow-hidden">
+    <Card className={fill ? "flex h-full min-h-0 flex-col overflow-hidden rounded-none border-0 shadow-none" : "overflow-hidden"}>
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div>
-          <h2 className="text-base font-semibold">{t("files.title")}</h2>
+          {fill ? null : <h2 className="text-base font-semibold">{t("files.title")}</h2>}
           <p className="text-xs text-muted-foreground">
             {via === "agent"
               ? t("files.viaAgent")
@@ -596,7 +598,7 @@ export function GuestFilesPanel({
         ) : null}
       </div>
 
-      <CardContent className="p-0">
+      <CardContent className={fill ? "flex min-h-0 flex-1 flex-col overflow-hidden p-0" : "p-0"}>
         {!running ? <p className="px-4 py-3 text-sm text-muted-foreground">{t("files.stopped")}</p> : null}
         {kind === "vm" && running && !agentEnabled && !connected ? (
           <p className="px-4 py-3 text-sm text-muted-foreground">{t("files.agentOff")}</p>
@@ -703,7 +705,7 @@ export function GuestFilesPanel({
         ) : null}
 
         {connected ? (
-          <div className="flex min-h-[28rem] flex-col md:flex-row">
+          <div className={`flex flex-col md:flex-row ${fill ? "min-h-0 flex-1" : "min-h-[28rem]"}`}>
             <nav className="w-full shrink-0 border-b border-border p-2 md:w-44 md:border-b-0 md:border-r">
               {GUEST_FILE_SHORTCUTS.map((item) => (
                 <button
@@ -721,7 +723,7 @@ export function GuestFilesPanel({
               ))}
             </nav>
             <div
-              className={`min-w-0 flex-1 ${dragging ? "bg-primary/5" : ""}`}
+              className={`flex min-w-0 flex-1 flex-col ${fill ? "min-h-0" : ""} ${dragging ? "bg-primary/5" : ""}`}
               onDragEnter={(e) => {
                 e.preventDefault();
                 if (via === "sftp") setDragging(true);
@@ -844,7 +846,7 @@ export function GuestFilesPanel({
               ) : via === "sftp" ? (
                 <p className="border-b border-border px-3 py-1.5 text-xs text-muted-foreground">{t("files.dropHint")}</p>
               ) : null}
-              <div className="max-h-[28rem] overflow-auto">
+              <div className={fill ? "min-h-0 flex-1 overflow-auto" : "max-h-[28rem] overflow-auto"}>
                 <div className="sticky top-0 grid grid-cols-[1fr_8rem_10rem_auto] gap-2 border-b border-border bg-card px-3 py-1.5 text-xs text-muted-foreground">
                   <span>{t("files.colName")}</span>
                   <span>{t("files.colSize")}</span>
@@ -919,7 +921,7 @@ export function GuestFilesPanel({
       </CardContent>
 
       <Dialog open={Boolean(editor)} onOpenChange={(open) => !open && !saving && setEditor(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className={fill ? "flex h-[min(96dvh,56rem)] max-w-5xl flex-col" : "max-w-3xl"}>
           <DialogHeader>
             <DialogTitle>{editor?.name}</DialogTitle>
             <DialogDescription className="font-mono">{editor?.path}</DialogDescription>

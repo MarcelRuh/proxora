@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.5.0] – 2026-09-06
+
+### Changed
+
+- Guest console and files open in a small extra browser window instead of expanding on the guest page. The same window is reused if it is already open. Console (VGA/serial) and the file explorer fill that window.
+
 ## [1.4.20] – 2026-09-06
 
 ### Added

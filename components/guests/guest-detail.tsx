@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -12,10 +12,7 @@ import { ProgressBar } from "@/components/ui/misc";
 import { GuestStateBadge } from "@/components/status-badge";
 import { ConfirmAction } from "@/components/confirm-action";
 import { GuestDeleteDialog } from "@/components/guests/guest-delete-dialog";
-import { WebConsole } from "@/components/console/web-console";
-import { VncConsole } from "@/components/console/vnc-console";
 import { GuestConfigForm } from "@/components/guests/guest-config-form";
-import { GuestFilesPanel } from "@/components/guests/guest-files";
 import { CloneDialog } from "@/components/guests/clone-dialog";
 import { MigrateDialog } from "@/components/guests/migrate-dialog";
 import { BackupNowDialog } from "@/components/backups/backup-now-dialog";
@@ -28,11 +25,11 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
 import { PageSkeleton } from "@/components/layout/page-skeleton";
 import { QueryGate } from "@/components/layout/query-gate";
-import { vmHasGraphics } from "@/lib/guest-console";
 import { parseGuestConfigIps } from "@/lib/create-ip";
 import { invalidateDashboardQueries } from "@/components/dashboard/use-dashboard";
 import { peerHostAllowsPermission } from "@/lib/federation-access";
 import { hostAllowsMigrate } from "@/lib/guest-migrate";
+import { openGuestToolWindow } from "@/lib/guest-tool-window";
 
 type GuestPayload = {
   status: Record<string, unknown>;
@@ -75,13 +72,11 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     restore: useCan("backup.restore", hostId),
   };
   const search = useSearchParams();
+  const pathname = usePathname();
   const listPath = kind === "vm" ? "/vms" : "/containers";
   const kindLabel = kind === "vm" ? "VM" : "LXC";
   const [snap, setSnap] = useState("");
   const [saving, setSaving] = useState(false);
-  const [consoleOpen, setConsoleOpen] = useState(search.get("tab") === "console" || search.get("console") === "1");
-  const [filesOpen, setFilesOpen] = useState(search.get("tab") === "files" || search.get("files") === "1");
-  const [consoleMode, setConsoleMode] = useState<"vga" | "serial">(kind === "vm" ? "vga" : "serial");
   const path = `/api/hosts/${params.hostId}/${kind === "vm" ? "vms" : "lxc"}/${params.node}/${params.vmid}`;
   const { data, refetch, isLoading, error } = useQuery({
     queryKey: ["guest", kind, params.hostId, params.node, params.vmid],
@@ -107,6 +102,26 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     staleTime: 20_000,
   });
   const [restoreFile, setRestoreFile] = useState<BackupFile | null>(null);
+
+  useEffect(() => {
+    const tab = search.get("tab");
+    const tool =
+      search.get("console") === "1" || tab === "console"
+        ? "console"
+        : search.get("files") === "1" || tab === "files"
+          ? "files"
+          : null;
+    if (!tool) return;
+    openGuestToolWindow({
+      kind,
+      hostId: params.hostId,
+      node: params.node,
+      vmid: params.vmid,
+      tool,
+    });
+    router.replace(pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once from old ?console=1 links
+  }, []);
   const { data: backupOverview } = useQuery({
     queryKey: ["backups", params.hostId],
     queryFn: () => api<BackupOverview>(`/api/hosts/${params.hostId}/backups`),
@@ -148,10 +163,6 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const running = runState === "running";
   const paused = runState === "paused";
   const stopped = !running && !paused;
-  const hasGraphics = kind !== "vm" || vmHasGraphics(config.vga);
-  useEffect(() => {
-    if (kind === "vm" && data?.config && !hasGraphics) setConsoleMode("serial");
-  }, [kind, data?.config, hasGraphics]);
   const name = String(config.name ?? config.hostname ?? status.name ?? params.vmid);
   const hostName = hosts?.hosts.find((h) => h.id === params.hostId)?.name ?? params.hostId;
   const cores = num(status.cpus) || num(config.cores) * Math.max(1, num(config.sockets) || 1) || num(config.cores);
@@ -309,13 +320,35 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           </Button>
         ) : null}
         {can.console ? (
-          <Button variant={consoleOpen ? "default" : "outline"} onClick={() => setConsoleOpen((v) => !v)}>
-            {consoleOpen ? t("guest.consoleHide") : t("guest.console")}
+          <Button
+            variant="outline"
+            onClick={() =>
+              openGuestToolWindow({
+                kind,
+                hostId: params.hostId,
+                node: params.node,
+                vmid: params.vmid,
+                tool: "console",
+              })
+            }
+          >
+            {t("guest.console")}
           </Button>
         ) : null}
         {canFiles ? (
-          <Button variant={filesOpen ? "default" : "outline"} onClick={() => setFilesOpen((v) => !v)}>
-            {filesOpen ? t("files.hide") : t("files.show")}
+          <Button
+            variant="outline"
+            onClick={() =>
+              openGuestToolWindow({
+                kind,
+                hostId: params.hostId,
+                node: params.node,
+                vmid: params.vmid,
+                tool: "files",
+              })
+            }
+          >
+            {t("files.show")}
           </Button>
         ) : null}
         {can.delete ? (
@@ -361,53 +394,6 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           </CardContent>
         </Card>
       </div>
-
-      {consoleOpen && can.console ? (
-        <div className="space-y-2">
-          {kind === "vm" ? (
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant={consoleMode === "vga" ? "default" : "outline"}
-                onClick={() => setConsoleMode("vga")}
-              >
-                {t("guest.consoleVga")}
-              </Button>
-              <Button
-                size="sm"
-                variant={consoleMode === "serial" ? "default" : "outline"}
-                onClick={() => setConsoleMode("serial")}
-              >
-                {t("guest.consoleSerial")}
-              </Button>
-            </div>
-          ) : null}
-          {kind === "vm" && consoleMode === "vga" ? (
-            <VncConsole
-              hostId={params.hostId}
-              node={params.node}
-              vmid={Number(params.vmid)}
-              running={running || paused}
-            />
-          ) : (
-            <WebConsole hostId={params.hostId} node={params.node} kind={kind} vmid={Number(params.vmid)} />
-          )}
-        </div>
-      ) : null}
-
-      {filesOpen && canFiles ? (
-        <GuestFilesPanel
-          hostId={params.hostId}
-          node={params.node}
-          vmid={Number(params.vmid)}
-          kind={kind}
-          ips={ips}
-          running={running}
-          agentEnabled={Boolean(data?.agentEnabled)}
-        />
-      ) : null}
-
-      {isLoading ? <p className="text-sm text-muted-foreground">{t("common.loading")}</p> : null}
 
       {data?.config ? (
         <GuestConfigForm

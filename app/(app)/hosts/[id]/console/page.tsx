@@ -91,7 +91,9 @@ export default function HostConsolePage() {
         }}
       >
         {node && shareAllowsConsole ? (
-          <WebConsole key={node} hostId={params.id} node={node} kind="node" fill />
+          <div className="min-h-[min(calc(100dvh-11rem),880px)]">
+            <WebConsole key={node} hostId={params.id} node={node} kind="node" fill />
+          </div>
         ) : (
           <div className="proxora-panel p-6">
             <p className="font-medium">{t("hosts.terminalNoNode")}</p>

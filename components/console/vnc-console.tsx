@@ -6,12 +6,14 @@ import { ClipboardCopy, Maximize2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { disableQemuExtendedKeys, grabRfbKeyboard, rfbKeysymFromKeyboardEvent, sendClipboardAsKeys } from "@/lib/vnc-input";
+import { cn } from "@/lib/utils";
 
 type Props = {
   hostId: string;
   node: string;
   vmid: number;
   running: boolean;
+  fill?: boolean;
 };
 
 type RfbInstance = InstanceType<typeof import("@novnc/novnc/lib/rfb.js").default>;
@@ -28,7 +30,7 @@ function focusRfb(container: HTMLElement | null, rfb: RfbInstance | null) {
   rfb.focus();
 }
 
-export function VncConsole({ hostId, node, vmid, running }: Props) {
+export function VncConsole({ hostId, node, vmid, running, fill }: Props) {
   const { t } = useI18n();
   const shellRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -233,7 +235,10 @@ export function VncConsole({ hostId, node, vmid, running }: Props) {
   return (
     <div
       ref={shellRef}
-      className="vnc-shell flex h-[min(70vh,720px)] min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-[#020617]"
+      className={cn(
+        "vnc-shell flex flex-col overflow-hidden rounded-xl border border-border bg-[#020617]",
+        fill ? "h-full min-h-0" : "h-[min(70vh,720px)] min-h-[420px]",
+      )}
     >
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2 text-xs text-slate-300">
         <span
