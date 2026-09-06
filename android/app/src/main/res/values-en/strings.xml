@@ -10,5 +10,5 @@
   <string name="menu_reload">Reload</string>
   <string name="menu_server">Change server</string>
   <string name="download_started">Download: %1$s</string>
-  <string name="ssl_blocked">Certificate rejected. You can allow self-signed certificates under Change server.</string>
+  <string name="ssl_blocked">Certificate rejected. Long-press the app icon → Change server, then allow self-signed certificates.</string>
 </resources>

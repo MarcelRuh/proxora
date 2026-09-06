@@ -7,8 +7,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.os.Message
-import android.view.Menu
-import android.view.MenuItem
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.SslErrorHandler
@@ -22,18 +21,23 @@ import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import java.util.ArrayDeque
 
 class MainActivity : AppCompatActivity() {
   private lateinit var webView: WebView
   private lateinit var progress: ProgressBar
+  private lateinit var swipe: SwipeRefreshLayout
   private var fileCallback: ValueCallback<Array<Uri>>? = null
+  private var loadedServer: String? = null
   private val extraWindows = ArrayDeque<Dialog>()
 
   private val filePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -48,56 +52,54 @@ class MainActivity : AppCompatActivity() {
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    enableEdgeToEdge()
     super.onCreate(savedInstanceState)
     if (Prefs.serverUrl(this).isNullOrBlank()) {
       setupLauncher.launch(Intent(this, SetupActivity::class.java))
     }
-
-    val toolbar = Toolbar(this).apply {
-      setBackgroundColor(getColor(R.color.proxora_bg))
-      setTitleTextColor(getColor(R.color.proxora_fg))
-      title = getString(R.string.app_name)
-    }
-    setSupportActionBar(toolbar)
 
     progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
       isIndeterminate = false
       max = 100
       minimumHeight = (3 * resources.displayMetrics.density).toInt()
     }
-    webView = WebView(this)
+    webView = WebView(this).apply {
+      overScrollMode = View.OVER_SCROLL_NEVER
+    }
     ProxoraWeb.configure(webView)
     attachClients(webView)
 
-    val content = FrameLayout(this).apply {
-      addView(webView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+    swipe = object : SwipeRefreshLayout(this) {
+      override fun canChildScrollUp(): Boolean = webView.canScrollVertically(-1)
+    }.apply {
+      setColorSchemeColors(getColor(R.color.proxora_pink))
+      setProgressBackgroundColorSchemeColor(getColor(R.color.proxora_surface))
+      setOnRefreshListener { webView.reload() }
+      addView(
+        webView,
+        ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+      )
+    }
+
+    val root = FrameLayout(this).apply {
+      setBackgroundColor(getColor(R.color.proxora_bg))
+      addView(
+        swipe,
+        FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+      )
       addView(
         progress,
         FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (3 * resources.displayMetrics.density).toInt()),
       )
     }
-    val root = androidx.appcompat.widget.LinearLayoutCompat(this).apply {
-      orientation = androidx.appcompat.widget.LinearLayoutCompat.VERTICAL
-      setBackgroundColor(getColor(R.color.proxora_bg))
-      addView(toolbar, androidx.appcompat.widget.LinearLayoutCompat.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        ViewGroup.LayoutParams.WRAP_CONTENT,
-      ))
-      addView(
-        content,
-        androidx.appcompat.widget.LinearLayoutCompat.LayoutParams(
-          ViewGroup.LayoutParams.MATCH_PARENT,
-          0,
-          1f,
-        ),
-      )
-    }
     ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
-      val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-      view.updatePadding(top = bars.top)
+      val nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+      val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
+      view.updatePadding(left = cutout.left, right = cutout.right, bottom = nav.bottom)
       insets
     }
     setContentView(root)
+    hideSystemBars()
 
     webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
       startDownload(url, userAgent, contentDisposition, mimeType)
@@ -120,23 +122,16 @@ class MainActivity : AppCompatActivity() {
     if (!Prefs.serverUrl(this).isNullOrBlank()) loadServer(reset = savedInstanceState == null)
   }
 
-  override fun onCreateOptionsMenu(menu: Menu): Boolean {
-    menuInflater.inflate(R.menu.main, menu)
-    return true
+  override fun onResume() {
+    super.onResume()
+    hideSystemBars()
+    val server = Prefs.serverUrl(this)
+    if (!server.isNullOrBlank() && server != loadedServer) loadServer(reset = true)
   }
 
-  override fun onOptionsItemSelected(item: MenuItem): Boolean {
-    when (item.itemId) {
-      R.id.action_reload -> {
-        webView.reload()
-        return true
-      }
-      R.id.action_server -> {
-        setupLauncher.launch(Intent(this, SetupActivity::class.java))
-        return true
-      }
-    }
-    return super.onOptionsItemSelected(item)
+  override fun onWindowFocusChanged(hasFocus: Boolean) {
+    super.onWindowFocusChanged(hasFocus)
+    if (hasFocus) hideSystemBars()
   }
 
   override fun onDestroy() {
@@ -145,8 +140,19 @@ class MainActivity : AppCompatActivity() {
     super.onDestroy()
   }
 
+  private fun hideSystemBars() {
+    WindowCompat.setDecorFitsSystemWindows(window, false)
+    WindowCompat.getInsetsController(window, window.decorView).apply {
+      hide(WindowInsetsCompat.Type.statusBars())
+      systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+      isAppearanceLightStatusBars = false
+      isAppearanceLightNavigationBars = false
+    }
+  }
+
   private fun loadServer(reset: Boolean) {
     val url = Prefs.serverUrl(this) ?: return
+    loadedServer = url
     if (reset) {
       CookieManager.getInstance().removeAllCookies(null)
       CookieManager.getInstance().flush()
@@ -156,6 +162,16 @@ class MainActivity : AppCompatActivity() {
     webView.loadUrl(url)
   }
 
+  private fun pullReloadAllowed(): Boolean {
+    val path = Uri.parse(webView.url ?: return true).path.orEmpty()
+    return !path.contains("/console")
+  }
+
+  private fun syncPullToRefresh() {
+    swipe.isEnabled = pullReloadAllowed()
+    if (!swipe.isEnabled) swipe.isRefreshing = false
+  }
+
   private fun attachClients(view: WebView) {
     view.webViewClient = object : WebViewClient() {
       @Suppress("OVERRIDE_DEPRECATION")
@@ -163,6 +179,15 @@ class MainActivity : AppCompatActivity() {
 
       override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
         handleUrl(request.url.toString())
+
+      override fun onPageFinished(view: WebView, url: String?) {
+        swipe.isRefreshing = false
+        syncPullToRefresh()
+      }
+
+      override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
+        syncPullToRefresh()
+      }
 
       override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: android.net.http.SslError) {
         if (Prefs.allowInsecureTls(this@MainActivity)) {
@@ -176,7 +201,8 @@ class MainActivity : AppCompatActivity() {
     view.webChromeClient = object : WebChromeClient() {
       override fun onProgressChanged(view: WebView, newProgress: Int) {
         progress.progress = newProgress
-        progress.visibility = if (newProgress in 1..99) android.view.View.VISIBLE else android.view.View.GONE
+        progress.visibility = if (newProgress in 1..99) View.VISIBLE else View.GONE
+        if (newProgress >= 100) swipe.isRefreshing = false
       }
 
       override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
@@ -190,7 +216,7 @@ class MainActivity : AppCompatActivity() {
         transport.webView = child
         resultMsg.sendToTarget()
 
-        val dialog = Dialog(this@MainActivity, R.style.Theme_Proxora)
+        val dialog = Dialog(this@MainActivity, R.style.Theme.Proxora)
         dialog.setContentView(
           child,
           ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),

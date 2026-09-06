@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.2] – 2026-09-06
+
+### Changed
+
+- Android client is fullscreen (no top app bar or status bar). Pull down at the top of a page to reload; long-press the app icon to change the server URL.
+
 ## [1.7.1] – 2026-09-06
 
 ### Changed

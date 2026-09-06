@@ -30,4 +30,4 @@ The APK is `app/build/outputs/apk/release/app-release.apk`. CI on `main` also up
 
 Consoles and the file explorer open in the same view (Android has no desktop popups). Use the system back button to return.
 
-Change the server anytime via the menu (top right).
+Pull down from the top of a page to reload. Change the server anytime by long-pressing the app icon and choosing **Change server**.

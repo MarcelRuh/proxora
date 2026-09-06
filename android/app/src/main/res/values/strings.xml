@@ -10,5 +10,5 @@
   <string name="menu_reload">Neu laden</string>
   <string name="menu_server">Server ändern</string>
   <string name="download_started">Download: %1$s</string>
-  <string name="ssl_blocked">Zertifikat abgelehnt. Unter Server ändern kannst du selbstsignierte Zertifikate erlauben.</string>
+  <string name="ssl_blocked">Zertifikat abgelehnt. App-Icon lange drücken → Server ändern, dann selbstsignierte Zertifikate erlauben.</string>
 </resources>
