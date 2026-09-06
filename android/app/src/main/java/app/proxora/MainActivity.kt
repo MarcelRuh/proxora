@@ -28,7 +28,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
 import java.util.ArrayDeque
 
@@ -97,13 +96,18 @@ class MainActivity : AppCompatActivity() {
       )
     }
     ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
-      val nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+      val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
       val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
-      view.updatePadding(left = cutout.left, right = cutout.right, bottom = nav.bottom)
+      view.updatePadding(
+        left = maxOf(bars.left, cutout.left),
+        top = maxOf(bars.top, cutout.top),
+        right = maxOf(bars.right, cutout.right),
+        bottom = maxOf(bars.bottom, cutout.bottom),
+      )
       insets
     }
     setContentView(root)
-    hideSystemBars()
+    applySystemBars()
 
     webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
       startDownload(url, userAgent, contentDisposition, mimeType)
@@ -135,14 +139,8 @@ class MainActivity : AppCompatActivity() {
 
   override fun onResume() {
     super.onResume()
-    hideSystemBars()
     val server = Prefs.serverUrl(this)
     if (!server.isNullOrBlank() && server != loadedServer) loadServer(reset = true)
-  }
-
-  override fun onWindowFocusChanged(hasFocus: Boolean) {
-    super.onWindowFocusChanged(hasFocus)
-    if (hasFocus) hideSystemBars()
   }
 
   override fun onDestroy() {
@@ -151,11 +149,10 @@ class MainActivity : AppCompatActivity() {
     super.onDestroy()
   }
 
-  private fun hideSystemBars() {
+  private fun applySystemBars() {
     WindowCompat.setDecorFitsSystemWindows(window, false)
     WindowCompat.getInsetsController(window, window.decorView).apply {
-      hide(WindowInsetsCompat.Type.statusBars())
-      systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+      show(WindowInsetsCompat.Type.statusBars())
       isAppearanceLightStatusBars = false
       isAppearanceLightNavigationBars = false
     }

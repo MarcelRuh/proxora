@@ -6,10 +6,4 @@
     <item name="android:windowBackground">@color/proxora_bg</item>
     <item name="colorPrimary">@color/proxora_pink</item>
   </style>
-
-  <style name="Theme.Proxora.Fullscreen" parent="Theme.Proxora">
-    <item name="android:windowFullscreen">true</item>
-    <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
-    <item name="android:statusBarColor">@android:color/transparent</item>
-  </style>
 </resources>
