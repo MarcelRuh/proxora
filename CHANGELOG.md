@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.14] – 2026-09-06
+
+### Added
+
+- Guest file panel (SFTP): browse, edit, upload, download, mkdir and delete on a running VM or LXC. Proxora SSHs to the guest IP (not the PVE datastore). Requires SSH in the guest. Cap 8 MB. New permissions `vm.files` / `lxc.files`. Colleague hosts proxy the SSH through the owning Proxora. Custom WireGuard share checkboxes need the new permission ticked.
+
 ## [1.4.13] – 2026-09-06
 
 ### Changed

@@ -15,6 +15,7 @@ import { GuestDeleteDialog } from "@/components/guests/guest-delete-dialog";
 import { WebConsole } from "@/components/console/web-console";
 import { VncConsole } from "@/components/console/vnc-console";
 import { GuestConfigForm } from "@/components/guests/guest-config-form";
+import { GuestFilesPanel } from "@/components/guests/guest-files";
 import { CloneDialog } from "@/components/guests/clone-dialog";
 import { MigrateDialog } from "@/components/guests/migrate-dialog";
 import { BackupNowDialog } from "@/components/backups/backup-now-dialog";
@@ -30,6 +31,7 @@ import { QueryGate } from "@/components/layout/query-gate";
 import { vmHasGraphics } from "@/lib/guest-console";
 import { parseGuestConfigIps } from "@/lib/create-ip";
 import { invalidateDashboardQueries } from "@/components/dashboard/use-dashboard";
+import { peerHostAllowsPermission } from "@/lib/federation-access";
 
 type GuestPayload = {
   status: Record<string, unknown>;
@@ -66,6 +68,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     migrate: useCan(kind === "vm" ? "vm.migrate" : "lxc.migrate", hostId),
     delete: useCan(kind === "vm" ? "vm.delete" : "lxc.delete", hostId),
     console: useCan(kind === "vm" ? "vm.console" : "lxc.console", hostId),
+    files: useCan(kind === "vm" ? "vm.files" : "lxc.files", hostId),
     config: useCan(kind === "vm" ? "vm.config" : "lxc.config", hostId),
     backup: useCan("backup.run", hostId),
     restore: useCan("backup.restore", hostId),
@@ -76,6 +79,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const [snap, setSnap] = useState("");
   const [saving, setSaving] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(search.get("tab") === "console" || search.get("console") === "1");
+  const [filesOpen, setFilesOpen] = useState(search.get("tab") === "files" || search.get("files") === "1");
   const [consoleMode, setConsoleMode] = useState<"vga" | "serial">(kind === "vm" ? "vga" : "serial");
   const path = `/api/hosts/${params.hostId}/${kind === "vm" ? "vms" : "lxc"}/${params.node}/${params.vmid}`;
   const { data, refetch, isLoading, error } = useQuery({
@@ -152,6 +156,10 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const netin = num(status.netin);
   const netout = num(status.netout);
   const ips = data?.ips?.length ? data.ips : parseGuestConfigIps(config);
+  const hostMeta = hosts?.hosts.find((h) => h.id === params.hostId);
+  const canFiles =
+    can.files &&
+    peerHostAllowsPermission(hostMeta ?? { origin: "LOCAL" }, kind === "vm" ? "vm.files" : "lxc.files");
 
   if (isLoading) return <PageSkeleton />;
   if (error) {
@@ -296,6 +304,11 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             {consoleOpen ? t("guest.consoleHide") : t("guest.console")}
           </Button>
         ) : null}
+        {canFiles ? (
+          <Button variant={filesOpen ? "default" : "outline"} onClick={() => setFilesOpen((v) => !v)}>
+            {filesOpen ? t("files.hide") : t("files.show")}
+          </Button>
+        ) : null}
         {can.delete ? (
           <GuestDeleteDialog
             hostId={params.hostId}
@@ -371,6 +384,17 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             <WebConsole hostId={params.hostId} node={params.node} kind={kind} vmid={Number(params.vmid)} />
           )}
         </div>
+      ) : null}
+
+      {filesOpen && canFiles ? (
+        <GuestFilesPanel
+          hostId={params.hostId}
+          node={params.node}
+          vmid={Number(params.vmid)}
+          kind={kind}
+          ips={ips}
+          running={running}
+        />
       ) : null}
 
       {isLoading ? <p className="text-sm text-muted-foreground">{t("common.loading")}</p> : null}

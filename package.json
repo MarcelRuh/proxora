@@ -1,6 +1,6 @@
 {
   "name": "proxora",
-  "version": "1.4.13",
+  "version": "1.4.14",
   "private": true,
   "description": "Proxora – central management for independent Proxmox VE hosts",
   "license": "MIT",
@@ -51,6 +51,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "sonner": "^2.0.8",
+    "ssh2": "^1.17.0",
     "tailwind-merge": "^3.6.0",
     "undici": "^8.10.0",
     "ws": "^8.21.3",
@@ -63,6 +64,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ssh2": "^1.15.6",
     "@types/ws": "^8.18.1",
     "concurrently": "^10.0.5",
     "esbuild": "^0.28.2",

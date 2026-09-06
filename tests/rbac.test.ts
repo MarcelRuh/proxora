@@ -50,6 +50,7 @@ describe("RBAC", () => {
     expect(hasPermission(granted, "vm.shutdown")).toBe(true);
     expect(hasPermission(granted, "vm.force-stop")).toBe(true);
     expect(hasPermission(granted, "lxc.console")).toBe(true);
+    expect(hasPermission(granted, "lxc.files")).toBe(true);
     expect(hasPermission(granted, "tasks.cancel")).toBe(true);
     expect(hasPermission(granted, "storage.delete")).toBe(false);
     expect(hasPermission(granted, "vm.reset")).toBe(false);
