@@ -4,6 +4,7 @@ import { handleRouteError, json } from "@/server/http/respond";
 import { requireSharedGuestFiles } from "@/server/services/federation-service";
 import { sftpUploadFromStream } from "@/server/services/guest-files";
 import { decodeGuestTransferMeta, GUEST_TRANSFER_META_HEADER } from "@/server/services/guest-file-tickets";
+import { GUEST_UPLOAD_OFFSET_HEADER, GUEST_UPLOAD_SIZE_HEADER, parseGuestUploadPlan } from "@/lib/guest-file-http";
 import { GUEST_SSH_KEY_MAX, hasGuestSshAuth } from "@/lib/guest-files";
 
 const metaSchema = z
@@ -40,6 +41,11 @@ export async function POST(request: Request) {
     const payload = metaSchema.parse(parsed);
     await requireSharedGuestFiles(request, payload.remoteHostId, payload.kind);
     if (!payload.target.trim()) throw new ValidationError("SSH host fehlt");
+    const plan = parseGuestUploadPlan({
+      sizeHeader: request.headers.get(GUEST_UPLOAD_SIZE_HEADER),
+      offsetHeader: request.headers.get(GUEST_UPLOAD_OFFSET_HEADER),
+      contentLength: request.headers.get("content-length"),
+    });
     const result = await sftpUploadFromStream({
       target: payload.target,
       port: payload.port,
@@ -49,6 +55,8 @@ export async function POST(request: Request) {
       passphrase: payload.passphrase,
       path: payload.path,
       body: request.body,
+      expectedSize: plan.expectedSize,
+      offset: plan.offset,
     });
     return json({ ...result, via: "sftp" });
   } catch (error) {

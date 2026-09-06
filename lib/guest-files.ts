@@ -17,7 +17,7 @@ export type GuestFileEntry = {
   mtime: number | null;
 };
 
-export type GuestFileOp = "list" | "read" | "write" | "mkdir" | "delete" | "rename";
+export type GuestFileOp = "list" | "read" | "write" | "mkdir" | "delete" | "rename" | "upload-state";
 
 export type GuestFileRequest = {
   kind: "vm" | "lxc";
@@ -48,6 +48,7 @@ export type GuestFileResult = {
   fingerprint?: string;
   ticket?: string;
   mode?: GuestTransferMode;
+  partSize?: number;
 };
 
 const TEXT_EXT =
@@ -88,6 +89,26 @@ export function guestFileName(path: string): string {
   const resolved = resolveGuestPath(path);
   if (resolved === "/") return "/";
   return resolved.slice(resolved.lastIndexOf("/") + 1);
+}
+
+export const GUEST_UPLOAD_PART_SUFFIX = ".proxora-part";
+
+export function isGuestUploadPartName(name: string): boolean {
+  return name.endsWith(GUEST_UPLOAD_PART_SUFFIX);
+}
+
+/** Sidecar written during a stream upload; renamed onto `dest` only after the size check. */
+export function guestUploadPartPath(dest: string): string {
+  const path = resolveGuestPath(dest);
+  if (isGuestUploadPartName(guestFileName(path))) return path;
+  return `${path}${GUEST_UPLOAD_PART_SUFFIX}`;
+}
+
+/** Bytes already on the guest that can be skipped, or `null` to start over. */
+export function guestUploadResumeOffset(partSize: number, fileSize: number): number | null {
+  if (!Number.isFinite(partSize) || !Number.isFinite(fileSize)) return null;
+  if (partSize <= 0 || fileSize < 0 || partSize > fileSize) return null;
+  return Math.floor(partSize);
 }
 
 /** POSIX sh single-quote, safe for `cat > …` over SSH exec. */

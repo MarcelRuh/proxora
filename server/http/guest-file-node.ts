@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
 import { SESSION_COOKIE } from "@/lib/env";
-import { isGuestFileTransferPath } from "@/lib/guest-file-http";
+import { isGuestFileTransferPath, parseGuestUploadPlan } from "@/lib/guest-file-http";
 import { userHasAnyPermission } from "@/lib/permissions";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from "@/lib/errors";
@@ -121,6 +121,17 @@ export async function handleNodeGuestFileTransfer(req: IncomingMessage, res: Ser
     const meta = { path: ticket.path, sshHost: ticket.target, sshUser: ticket.username, mode: ticket.mode };
     try {
       if (parsed.mode === "upload") {
+        const plan = parseGuestUploadPlan({
+          sizeHeader: Array.isArray(req.headers["x-proxora-upload-size"])
+            ? req.headers["x-proxora-upload-size"][0]
+            : (req.headers["x-proxora-upload-size"] ?? null),
+          offsetHeader: Array.isArray(req.headers["x-proxora-upload-offset"])
+            ? req.headers["x-proxora-upload-offset"][0]
+            : (req.headers["x-proxora-upload-offset"] ?? null),
+          contentLength: Array.isArray(req.headers["content-length"])
+            ? req.headers["content-length"][0]
+            : (req.headers["content-length"] ?? null),
+        });
         const result = await streamGuestFileUpload(host, {
           kind: ticket.kind,
           vmid: ticket.vmid,
@@ -135,6 +146,8 @@ export async function handleNodeGuestFileTransfer(req: IncomingMessage, res: Ser
           contentLength: Array.isArray(req.headers["content-length"])
             ? req.headers["content-length"][0]
             : (req.headers["content-length"] ?? null),
+          expectedSize: plan.expectedSize,
+          offset: plan.offset,
         });
         await writeAuditLog({
           userId: session.user.id,

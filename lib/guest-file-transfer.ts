@@ -66,17 +66,23 @@ function putBlobOverXhr(
   opts?: {
     onProgress?: (sent: number, total: number) => void;
     signal?: AbortSignal;
+    offset?: number;
+    total?: number;
   },
 ): Promise<{ path?: string; name?: string; size?: number }> {
+  const offset = opts?.offset ?? 0;
+  const total = opts?.total ?? body.size + offset;
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
     xhr.withCredentials = true;
     xhr.responseType = "text";
+    xhr.setRequestHeader("x-proxora-upload-size", String(total));
+    xhr.setRequestHeader("x-proxora-upload-offset", String(offset));
     xhr.upload.onprogress = (event) => {
       if (!opts?.onProgress) return;
-      const total = event.lengthComputable ? event.total : body.size;
-      opts.onProgress(event.loaded, total || body.size);
+      const loaded = event.loaded;
+      opts.onProgress(offset + loaded, total);
     };
     xhr.onload = () => {
       const raw = xhr.responseText || "";
@@ -106,6 +112,17 @@ function putBlobOverXhr(
   });
 }
 
+class GuestUploadWsError extends Error {
+  constructor() {
+    super("UPLOAD_WS");
+    this.name = "GuestUploadWsError";
+  }
+}
+
+export function isGuestUploadWsError(error: unknown): boolean {
+  return error instanceof Error && error.name === "GuestUploadWsError";
+}
+
 class WsHandshakeError extends Error {
   constructor(message: string) {
     super(message);
@@ -126,20 +143,24 @@ function putBlobOverWebSocket(
   opts?: {
     onProgress?: (sent: number, total: number) => void;
     signal?: AbortSignal;
+    offset?: number;
+    total?: number;
   },
 ): Promise<{ path?: string; name?: string; size?: number }> {
   const origin = globalThis.location?.origin;
   if (!origin || typeof WebSocket === "undefined" || typeof body.stream !== "function") {
     return Promise.reject(new WsHandshakeError("No WebSocket"));
   }
+  const offset = opts?.offset ?? 0;
+  const total = opts?.total ?? body.size + offset;
   const url = guestFileUploadWsUrl(ticket, origin);
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(url);
     ws.binaryType = "arraybuffer";
     let settled = false;
-    let ready = false;
+    let pumping = false;
     const handshake = setTimeout(() => {
-      if (!ready) fail(new WsHandshakeError("WebSocket handshake timeout"));
+      if (!pumping) fail(new WsHandshakeError("WebSocket handshake timeout"));
     }, WS_HANDSHAKE_MS);
 
     const fail = (error: unknown) => {
@@ -164,10 +185,10 @@ function putBlobOverWebSocket(
     }
 
     ws.onerror = () => {
-      fail(ready ? new Error("Upload fehlgeschlagen") : new WsHandshakeError("WebSocket failed"));
+      fail(pumping ? new Error("Upload fehlgeschlagen") : new WsHandshakeError("WebSocket failed"));
     };
     ws.onclose = () => {
-      if (!settled) fail(ready ? new Error("Upload abgebrochen") : new WsHandshakeError("WebSocket closed"));
+      if (!settled) fail(pumping ? new Error("Upload abgebrochen") : new WsHandshakeError("WebSocket closed"));
     };
     ws.onmessage = (event) => {
       if (typeof event.data !== "string") return;
@@ -183,8 +204,13 @@ function putBlobOverWebSocket(
         return;
       }
       if (msg.type === "ready") {
-        if (ready) return;
-        ready = true;
+        if (ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({ type: "start", size: total, offset }));
+        return;
+      }
+      if (msg.type === "go") {
+        if (pumping) return;
+        pumping = true;
         clearTimeout(handshake);
         void pump();
         return;
@@ -193,7 +219,7 @@ function putBlobOverWebSocket(
         if (settled) return;
         settled = true;
         clearTimeout(handshake);
-        opts?.onProgress?.(body.size, body.size);
+        opts?.onProgress?.(total, total);
         resolve({ path: msg.path, name: msg.name, size: msg.size });
         try {
           ws.close();
@@ -205,7 +231,7 @@ function putBlobOverWebSocket(
 
     async function pump() {
       try {
-        opts?.onProgress?.(0, body.size);
+        opts?.onProgress?.(offset, total);
         const reader = body.stream().getReader();
         let sent = 0;
         while (true) {
@@ -217,10 +243,10 @@ function putBlobOverWebSocket(
           if (!value?.byteLength) continue;
           ws.send(value);
           sent += value.byteLength;
-          opts?.onProgress?.(Math.max(0, sent - ws.bufferedAmount), body.size);
+          opts?.onProgress?.(Math.min(total, offset + Math.max(0, sent - ws.bufferedAmount)), total);
         }
         await waitWsBuffered(ws, opts?.signal);
-        opts?.onProgress?.(body.size, body.size);
+        opts?.onProgress?.(total, total);
         if (ws.readyState !== WebSocket.OPEN) throw new Error("Upload abgebrochen");
         ws.send(JSON.stringify({ type: "end" }));
       } catch (error) {
@@ -236,14 +262,19 @@ export async function putBlobWithProgress(
   opts?: {
     onProgress?: (sent: number, total: number) => void;
     signal?: AbortSignal;
+    offset?: number;
+    total?: number;
   },
 ): Promise<{ path?: string; name?: string; size?: number }> {
   const ticket = ticketFromUploadUrl(url);
-  if (ticket && body.size >= WS_UPLOAD_MIN_BYTES) {
+  const total = opts?.total ?? body.size + (opts?.offset ?? 0);
+  if (ticket && total >= WS_UPLOAD_MIN_BYTES) {
     try {
       return await putBlobOverWebSocket(ticket, body, opts);
     } catch (error) {
-      if (isAbortError(error) || !(error instanceof WsHandshakeError)) throw error;
+      if (isAbortError(error)) throw error;
+      if (error instanceof WsHandshakeError) throw new GuestUploadWsError();
+      throw error;
     }
   }
   return putBlobOverXhr(url, body, opts);

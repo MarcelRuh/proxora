@@ -1,4 +1,27 @@
 export const GUEST_FILE_UPLOAD_WS_PATH = "/ws/guest-file";
+export const GUEST_UPLOAD_SIZE_HEADER = "x-proxora-upload-size";
+export const GUEST_UPLOAD_OFFSET_HEADER = "x-proxora-upload-offset";
+
+function parseUnsignedHeader(raw: string | null | undefined): number | null {
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > Number.MAX_SAFE_INTEGER) return null;
+  return Math.floor(n);
+}
+
+/** Total dest size and resume offset for a PUT/WS upload. */
+export function parseGuestUploadPlan(input: {
+  sizeHeader?: string | null;
+  offsetHeader?: string | null;
+  contentLength?: string | null;
+}): { offset: number; expectedSize: number | null } {
+  const offset = parseUnsignedHeader(input.offsetHeader) ?? 0;
+  const size = parseUnsignedHeader(input.sizeHeader);
+  const length = parseUnsignedHeader(input.contentLength);
+  if (size != null) return { offset, expectedSize: size };
+  if (length != null) return { offset, expectedSize: offset + length };
+  return { offset, expectedSize: null };
+}
 
 /** True for guest file stream routes that must not pass Next.js proxy (it clones the body). */
 export function isGuestFileTransferPath(pathname: string): boolean {

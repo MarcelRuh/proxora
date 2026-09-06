@@ -126,6 +126,13 @@ async function handleUploadSocket(ws: WebSocket, req: IncomingMessage) {
   const socket = (ws as unknown as { _socket?: { pause?: () => void; resume?: () => void } })._socket;
   let inputClosed = false;
   let started = false;
+  let accepted = false;
+  let startResolve: ((plan: { size: number; offset: number }) => void) | null = null;
+  let startReject: ((error: unknown) => void) | null = null;
+  const startPromise = new Promise<{ size: number; offset: number }>((resolve, reject) => {
+    startResolve = resolve;
+    startReject = reject;
+  });
 
   const failBody = (error: unknown) => {
     if (inputClosed) return;
@@ -136,6 +143,7 @@ async function handleUploadSocket(ws: WebSocket, req: IncomingMessage) {
     } catch {
       /* ignore */
     }
+    startReject?.(err);
   };
 
   body.on("drain", () => {
@@ -148,6 +156,26 @@ async function handleUploadSocket(ws: WebSocket, req: IncomingMessage) {
 
   ws.on("message", (data, isBinary) => {
     if (inputClosed) return;
+    if (!accepted) {
+      if (isBinary) return;
+      let msg: { type?: string; size?: number; offset?: number } = {};
+      try {
+        msg = JSON.parse(wsPayloadToBuffer(data as Buffer | ArrayBuffer | Buffer[] | string).toString("utf8")) as typeof msg;
+      } catch {
+        failBody(new ValidationError("Ungültige Upload-Nachricht"));
+        return;
+      }
+      if (msg.type !== "start") return;
+      const size = Math.floor(Number(msg.size));
+      const offset = Math.floor(Number(msg.offset) || 0);
+      if (!Number.isFinite(size) || size < 0 || size > Number.MAX_SAFE_INTEGER || offset < 0 || offset > size) {
+        failBody(new ValidationError("Ungültiger Upload-Plan"));
+        return;
+      }
+      accepted = true;
+      startResolve?.({ size, offset });
+      return;
+    }
     if (!isBinary) {
       let msg: { type?: string } = {};
       try {
@@ -180,6 +208,13 @@ async function handleUploadSocket(ws: WebSocket, req: IncomingMessage) {
 
   try {
     const host = await getHostOrThrow(ticket.hostId, session.user);
+    sendJson(ws, { type: "ready" });
+    const plan = await Promise.race([
+      startPromise,
+      new Promise<{ size: number; offset: number }>((_, reject) => {
+        setTimeout(() => reject(new ValidationError("Upload-Start ausbleibend")), 20_000);
+      }),
+    ]);
     started = true;
     const upload = streamGuestFileUpload(host, {
       kind: ticket.kind,
@@ -193,8 +228,10 @@ async function handleUploadSocket(ws: WebSocket, req: IncomingMessage) {
       path: ticket.path,
       body,
       contentLength: null,
+      expectedSize: plan.size,
+      offset: plan.offset,
     });
-    sendJson(ws, { type: "ready" });
+    sendJson(ws, { type: "go", offset: plan.offset, size: plan.size });
     const result = await upload;
     await writeAuditLog({
       userId: session.user.id,

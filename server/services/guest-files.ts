@@ -10,8 +10,10 @@ import {
   decodeGuestFileContent,
   guestFileName,
   guestPathParent,
+  guestUploadPartPath,
   hasGuestSshAuth,
   isAllowedSftpTarget,
+  isGuestUploadPartName,
   looksLikeSshPrivateKey,
   resolveGuestPath,
   shSingleQuote,
@@ -23,6 +25,7 @@ import {
 } from "@/lib/guest-files";
 import { shareHasPermission, type ShareLevel } from "@/lib/federation-access";
 import { outboundToken, peerHttpBase } from "@/server/services/wireguard-service";
+import { GUEST_UPLOAD_OFFSET_HEADER, GUEST_UPLOAD_SIZE_HEADER } from "@/lib/guest-file-http";
 import { clientForHost } from "@/server/services/host-service";
 import { guestAgentFiles } from "@/server/services/guest-agent-files";
 import {
@@ -211,6 +214,7 @@ async function listDir(sftp: SFTPWrapper, path: string): Promise<GuestFileEntry[
   for (const item of listing) {
     const name = item.filename;
     if (!name || name === "." || name === "..") continue;
+    if (isGuestUploadPartName(name)) continue;
     const child = resolveGuestPath(path, name);
     entries.push({
       name,
@@ -393,8 +397,9 @@ function probePosixShell(client: Client): Promise<boolean> {
   });
 }
 
-function sshCatUpload(client: Client, remotePath: string, body: Readable | null): Promise<number> {
-  const cmd = `umask 022 && cat > ${shSingleQuote(remotePath)}`;
+function sshCatUpload(client: Client, remotePath: string, body: Readable | null, append: boolean): Promise<number> {
+  const redirect = append ? ">>" : ">";
+  const cmd = `umask 022 && cat ${redirect} ${shSingleQuote(remotePath)}`;
   return new Promise((resolve, reject) => {
     client.exec(cmd, (err, stream) => {
       if (err || !stream) {
@@ -448,13 +453,14 @@ function sshCatUpload(client: Client, remotePath: string, body: Readable | null)
   });
 }
 
-function openHandle(sftp: SFTPWrapper, remotePath: string, flags: "r" | "w"): Promise<Buffer> {
+function openHandle(sftp: SFTPWrapper, remotePath: string, flags: "r" | "w" | "r+"): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const done = (err: Error | undefined, handle: Buffer) => {
       if (err || !handle) reject(err ?? new ValidationError("SFTP-Datei konnte nicht geöffnet werden"));
       else resolve(handle);
     };
     if (flags === "w") sftp.open(remotePath, "w", { mode: 0o644 }, done);
+    else if (flags === "r+") sftp.open(remotePath, "r+", { mode: 0o644 }, done);
     else sftp.open(remotePath, "r", done);
   });
 }
@@ -475,12 +481,17 @@ function writeAt(sftp: SFTPWrapper, handle: Buffer, chunk: Buffer, position: num
   });
 }
 
-async function sftpPipelineWrite(sftp: SFTPWrapper, handle: Buffer, body: Readable | null): Promise<number> {
+async function sftpPipelineWrite(
+  sftp: SFTPWrapper,
+  handle: Buffer,
+  body: Readable | null,
+  startPos = 0,
+): Promise<number> {
   if (!body) return 0;
   const chunkSize = sftpChunkSize(sftp);
   const pending = new Set<Promise<void>>();
   let firstError: unknown;
-  let pos = 0;
+  let pos = startPos;
   let rest = Buffer.alloc(0);
 
   const launch = (chunk: Buffer, at: number) => {
@@ -524,7 +535,7 @@ async function sftpPipelineWrite(sftp: SFTPWrapper, handle: Buffer, body: Readab
   await flushRest(true);
   if (pending.size) await Promise.all([...pending]);
   if (firstError) throw firstError;
-  return pos;
+  return pos - startPos;
 }
 
 async function pumpSftpReads(sftp: SFTPWrapper, handle: Buffer, size: number, dest: PassThrough): Promise<void> {
@@ -688,30 +699,99 @@ export async function sftpDownloadResponse(input: StreamCreds): Promise<Response
   }
 }
 
-export async function sftpUploadFromStream(input: StreamCreds & { body: GuestUploadBody }): Promise<{
+async function statSize(sftp: SFTPWrapper, path: string): Promise<number | null> {
+  return new Promise((resolve, reject) => {
+    sftp.stat(path, (err, attrs) => {
+      if (err) {
+        if (isMissingPath(err)) resolve(null);
+        else reject(err);
+        return;
+      }
+      resolve(Number(attrs.size ?? 0));
+    });
+  });
+}
+
+function unlinkQuiet(sftp: SFTPWrapper, path: string): Promise<void> {
+  return new Promise((resolve) => {
+    sftp.unlink(path, () => resolve());
+  });
+}
+
+async function finalizeGuestUploadPart(
+  sftp: SFTPWrapper,
+  partPath: string,
+  destPath: string,
+  expectedSize: number,
+): Promise<number> {
+  const size = (await statSize(sftp, partPath)) ?? 0;
+  if (size !== expectedSize) {
+    throw new ValidationError(
+      `Upload unvollständig (${size} von ${expectedSize} Bytes). Du kannst fortsetzen.`,
+    );
+  }
+  if (partPath !== destPath) {
+    await unlinkQuiet(sftp, destPath);
+    await new Promise<void>((resolve, reject) => {
+      sftp.rename(partPath, destPath, (err) => (err ? reject(err) : resolve()));
+    });
+  }
+  return size;
+}
+
+export async function sftpUploadFromStream(input: StreamCreds & {
+  body: GuestUploadBody;
+  expectedSize?: number | null;
+  offset?: number;
+}): Promise<{
   path: string;
   name: string;
   size: number;
 }> {
   const creds = await parseStreamCreds(input);
+  const offset = Math.max(0, Math.floor(Number(input.offset) || 0));
+  const partPath = guestUploadPartPath(creds.path);
   const session = await openSftp(creds);
   const nodeBody = toNodeReadable(input.body);
   let handle: Buffer | null = null;
   try {
-    if (await probePosixShell(session.client)) {
-      const total = await sshCatUpload(session.client, creds.path, nodeBody);
-      return { path: creds.path, name: guestFileName(creds.path), size: total };
+    const have = (await statSize(session.sftp, partPath)) ?? 0;
+    if (offset === 0) {
+      if (have > 0) await unlinkQuiet(session.sftp, partPath);
+    } else if (have !== offset) {
+      throw new ValidationError("Teil-Upload passt nicht — Datei neu starten");
     }
-    handle = await openHandle(session.sftp, creds.path, "w");
-    const total = await sftpPipelineWrite(session.sftp, handle, nodeBody);
-    await closeHandle(session.sftp, handle);
-    handle = null;
+    const expected =
+      input.expectedSize != null && Number.isFinite(Number(input.expectedSize))
+        ? Math.floor(Number(input.expectedSize))
+        : null;
+    if (expected != null && offset > expected) {
+      throw new ValidationError("Ungültiger Upload-Offset");
+    }
+    const skipWrite = expected != null && expected > 0 && offset === expected;
+    if (skipWrite) {
+      if (nodeBody && !nodeBody.readableEnded) {
+        nodeBody.resume();
+        await new Promise<void>((resolve, reject) => {
+          nodeBody.once("end", resolve);
+          nodeBody.once("close", resolve);
+          nodeBody.once("error", reject);
+        });
+      }
+    } else if (await probePosixShell(session.client)) {
+      await sshCatUpload(session.client, partPath, nodeBody, offset > 0);
+    } else {
+      handle = await openHandle(session.sftp, partPath, offset > 0 ? "r+" : "w");
+      await sftpPipelineWrite(session.sftp, handle, nodeBody, offset);
+      await closeHandle(session.sftp, handle);
+      handle = null;
+    }
+    const sizeAfter = (await statSize(session.sftp, partPath)) ?? 0;
+    const checkSize = expected ?? sizeAfter;
+    const total = await finalizeGuestUploadPart(session.sftp, partPath, creds.path, checkSize);
     return { path: creds.path, name: guestFileName(creds.path), size: total };
   } catch (error) {
     await closeHandle(session.sftp, handle);
-    await new Promise<void>((resolve) => {
-      session.sftp.unlink(creds.path, () => resolve());
-    });
     if (error instanceof ValidationError) throw error;
     throw fileError(error, "Upload fehlgeschlagen");
   } finally {
@@ -808,6 +888,8 @@ async function proxyGuestFileUploadToPeer(
     path: string;
     body: GuestUploadBody;
     contentLength?: string | null;
+    expectedSize?: number | null;
+    offset?: number;
   },
 ): Promise<{ path: string; name: string; size: number }> {
   if (!host.peerId || !host.remoteHostId) throw new ValidationError("Peer host is incomplete");
@@ -826,6 +908,8 @@ async function proxyGuestFileUploadToPeer(
     }),
   };
   if (input.contentLength) headers["Content-Length"] = input.contentLength;
+  if (input.expectedSize != null) headers[GUEST_UPLOAD_SIZE_HEADER] = String(input.expectedSize);
+  if (input.offset) headers[GUEST_UPLOAD_OFFSET_HEADER] = String(input.offset);
   const response = await fetch(`${peerHttpBase(peer)}/api/federation/guest-files/upload`, {
     method: "POST",
     headers,
@@ -857,6 +941,8 @@ export async function streamGuestFileUpload(
     path: string;
     body: GuestUploadBody;
     contentLength?: string | null;
+    expectedSize?: number | null;
+    offset?: number;
   },
 ): Promise<{ path: string; name: string; size: number }> {
   if (host.origin === HostOrigin.PEER) return proxyGuestFileUploadToPeer(host, input);
@@ -904,6 +990,7 @@ export async function guestSftp(input: GuestFileRequest): Promise<GuestFileResul
       }
       case "delete": {
         await remove(sftp, path);
+        await unlinkQuiet(sftp, guestUploadPartPath(path));
         return { path, via: "sftp", fingerprint };
       }
       case "rename": {
@@ -919,8 +1006,10 @@ export async function guestSftp(input: GuestFileRequest): Promise<GuestFileResul
         await renamePath(sftp, path, dest);
         return { path: dest, via: "sftp", name: guestFileName(dest), fingerprint };
       }
-      default:
-        throw new ValidationError("Unknown file operation");
+      case "upload-state": {
+        const partSize = (await statSize(sftp, guestUploadPartPath(path))) ?? 0;
+        return { path, via: "sftp", partSize, fingerprint };
+      }
     }
   });
 }

@@ -10,7 +10,7 @@ const bodySchema = z
     remoteHostId: z.string().min(1),
     kind: z.enum(["vm", "lxc"]),
     vmid: z.number().int().positive(),
-    op: z.enum(["list", "read", "write", "mkdir", "delete", "rename"]),
+    op: z.enum(["list", "read", "write", "mkdir", "delete", "rename", "upload-state"]),
     target: z.string().min(1).max(253),
     port: z.number().int().min(1).max(65535).optional(),
     username: z.string().min(1).max(64),

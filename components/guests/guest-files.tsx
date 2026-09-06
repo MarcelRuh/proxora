@@ -31,6 +31,7 @@ import {
   formatByteRate,
   formatEtaSeconds,
   isAbortError,
+  isGuestUploadWsError,
   putBlobWithProgress,
   saveUrlWithProgress,
   canStreamDownloadProgress,
@@ -49,6 +50,7 @@ import {
   looksLikeSshPrivateKey,
   resolveGuestPath,
   uploadNameConflicts,
+  guestUploadResumeOffset,
   type GuestFileEntry,
   type GuestFileResult,
   type GuestTransferMode,
@@ -166,6 +168,11 @@ export function GuestFilesPanel({
   const [rename, setRename] = useState<{ path: string; name: string } | null>(null);
   const [renameTo, setRenameTo] = useState("");
   const [overwrite, setOverwrite] = useState<{ files: File[]; conflicts: string[] } | null>(null);
+  const [resumeAsk, setResumeAsk] = useState<{ name: string; done: number; total: number } | null>(null);
+  const resumeRef = useRef<{
+    resolve: (choice: "resume" | "restart") => void;
+    reject: (error: unknown) => void;
+  } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const rateRef = useRef<ReturnType<typeof createRateTracker> | null>(null);
   const lastUiRef = useRef(0);
@@ -287,7 +294,7 @@ export function GuestFilesPanel({
       }),
     });
     if (!result.ticket) throw new Error(t("common.failed"));
-    return result.ticket;
+    return result;
   }
 
   function beginTransfer(name: string, total: number) {
@@ -305,26 +312,55 @@ export function GuestFilesPanel({
   }
 
   async function sftpPut(filePath: string, body: Blob, name: string) {
-    const ticket = await transferTicket("upload", filePath);
+    const ticketResult = await transferTicket("upload", filePath);
+    const ticket = ticketResult.ticket;
+    if (!ticket) throw new Error(t("common.failed"));
+    const fileSize = body.size;
+    const resumable = guestUploadResumeOffset(Number(ticketResult.partSize ?? 0) || 0, fileSize);
+    let offset = 0;
+    if (resumable != null && resumable > 0 && fileSize > 0) {
+      offset = (await askResume(name, resumable, fileSize)) === "resume" ? resumable : 0;
+    }
     abortRef.current?.abort();
     const abort = new AbortController();
     abortRef.current = abort;
-    beginTransfer(name, body.size);
+    beginTransfer(name, fileSize);
+    reportProgress(name, offset, fileSize, true);
+    const chunk = offset > 0 && offset < fileSize ? body.slice(offset) : offset >= fileSize ? new Blob([]) : body;
     try {
-      await putBlobWithProgress(`${apiPath}/upload?ticket=${encodeURIComponent(ticket)}`, body, {
+      await putBlobWithProgress(`${apiPath}/upload?ticket=${encodeURIComponent(ticket)}`, chunk, {
         signal: abort.signal,
+        offset,
+        total: fileSize,
         onProgress: (sent, total) => reportProgress(name, sent, total),
       });
-      reportProgress(name, body.size, body.size, true);
+      reportProgress(name, fileSize, fileSize, true);
     } finally {
       if (abortRef.current === abort) abortRef.current = null;
       setTransfer(null);
     }
   }
 
+  function askResume(name: string, done: number, total: number): Promise<"resume" | "restart"> {
+    resumeRef.current?.reject(new DOMException("Aborted", "AbortError"));
+    return new Promise((resolve, reject) => {
+      resumeRef.current = { resolve, reject };
+      setResumeAsk({ name, done, total });
+    });
+  }
+
+  function answerResume(choice: "resume" | "restart" | "abort") {
+    const pending = resumeRef.current;
+    resumeRef.current = null;
+    setResumeAsk(null);
+    if (!pending) return;
+    if (choice === "abort") pending.reject(new DOMException("Aborted", "AbortError"));
+    else pending.resolve(choice);
+  }
+
   async function sftpGetBytes(filePath: string) {
-    const ticket = await transferTicket("download", filePath);
-    const response = await fetch(`${apiPath}/download?ticket=${encodeURIComponent(ticket)}`, { credentials: "include" });
+    const issued = await transferTicket("download", filePath);
+    const response = await fetch(`${apiPath}/download?ticket=${encodeURIComponent(issued.ticket!)}`, { credentials: "include" });
     if (!response.ok) {
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       throw new Error(data.error || t("common.failed"));
@@ -335,8 +371,8 @@ export function GuestFilesPanel({
   async function download(entry: GuestFileEntry) {
     if (via === "sftp") {
       try {
-        const ticket = await transferTicket("download", entry.path);
-        const url = `${apiPath}/download?ticket=${encodeURIComponent(ticket)}`;
+        const issued = await transferTicket("download", entry.path);
+        const url = `${apiPath}/download?ticket=${encodeURIComponent(issued.ticket!)}`;
         if (!canStreamDownloadProgress(entry.size)) {
           triggerBrowserDownload(url, entry.name);
           toast.success(t("files.downloadInBrowser"));
@@ -360,8 +396,7 @@ export function GuestFilesPanel({
           setTransfer(null);
         }
       } catch (error) {
-        if (isAbortError(error)) toast.message(t("files.transferCancelled"));
-        else toast.error(error instanceof Error ? error.message : t("common.failed"));
+        toastTransferError(error);
       }
       return;
     }
@@ -447,11 +482,16 @@ export function GuestFilesPanel({
       setEditor(null);
       if (via) await loadDir(path, via, session);
     } catch (error) {
-      if (isAbortError(error)) toast.message(t("files.transferCancelled"));
-      else toast.error(error instanceof Error ? error.message : t("common.failed"));
+      toastTransferError(error);
     } finally {
       setSaving(false);
     }
+  }
+
+  function toastTransferError(error: unknown) {
+    if (isAbortError(error)) toast.message(t("files.transferCancelled"));
+    else if (isGuestUploadWsError(error)) toast.error(t("files.uploadNeedsWs"));
+    else toast.error(error instanceof Error ? error.message : t("common.failed"));
   }
 
   async function uploadFiles(files: File[], policy?: "overwrite" | "skip") {
@@ -495,8 +535,7 @@ export function GuestFilesPanel({
       toast.success(queued.length > 1 ? t("files.uploadedMany", { count: queued.length }) : t("files.uploaded"));
       if (via) await loadDir(path, via, session);
     } catch (error) {
-      if (isAbortError(error)) toast.message(t("files.transferCancelled"));
-      else toast.error(error instanceof Error ? error.message : t("common.failed"));
+      toastTransferError(error);
     }
   }
 
@@ -536,8 +575,7 @@ export function GuestFilesPanel({
       if (via) await loadDir(path, via, session);
       setEditor({ path: dest, name, text: "" });
     } catch (error) {
-      if (isAbortError(error)) toast.message(t("files.transferCancelled"));
-      else toast.error(error instanceof Error ? error.message : t("common.failed"));
+      toastTransferError(error);
     } finally {
       setBusy(false);
     }
@@ -1066,6 +1104,37 @@ export function GuestFilesPanel({
             </Button>
             <Button onClick={() => overwrite && void uploadFiles(overwrite.files, "overwrite")}>
               {t("files.overwrite")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(resumeAsk)}
+        onOpenChange={(open) => {
+          if (!open && resumeRef.current) answerResume("abort");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("files.resumeTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("files.resumeBody", {
+                name: resumeAsk?.name ?? "",
+                done: bytesToSize(resumeAsk?.done ?? 0, 2),
+                total: bytesToSize(resumeAsk?.total ?? 0, 2),
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-3 flex flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={() => answerResume("abort")}>
+              {t("common.cancel")}
+            </Button>
+            <Button variant="outline" onClick={() => answerResume("restart")}>
+              {t("files.resumeRestart")}
+            </Button>
+            <Button onClick={() => answerResume("resume")}>
+              {t("files.resume")}
             </Button>
           </div>
         </DialogContent>

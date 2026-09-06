@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.5.7] – 2026-09-06
+
+### Changed
+
+- Guest uploads write to a `.proxora-part` sidecar, then rename only after the guest file size matches. Abort leaves the part for resume; cancel no longer replaces the destination with a truncated ISO.
+- A partial upload can be resumed from the byte already on the guest.
+- Large uploads no longer fall back silently to HTTP/2 PUT (~2 MB/s). If WebSocket is blocked, the UI says so.
+
 ## [1.5.6] – 2026-09-06
 
 ### Changed

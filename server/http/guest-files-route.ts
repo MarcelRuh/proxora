@@ -13,7 +13,7 @@ import { GUEST_FILE_MAX_BYTES, GUEST_SSH_KEY_MAX, hasGuestSshAuth } from "@/lib/
 
 const bodySchema = z
   .object({
-    op: z.enum(["list", "read", "write", "mkdir", "delete", "rename", "transfer-ticket"]),
+    op: z.enum(["list", "read", "write", "mkdir", "delete", "rename", "transfer-ticket", "upload-state"]),
     mode: z.enum(["download", "upload"]).optional(),
     via: z.enum(["agent", "sftp"]).optional(),
     target: z.string().min(1).max(253).optional(),
@@ -43,6 +43,7 @@ const AUDIT: Record<GuestFileOp, string> = {
   mkdir: AUDIT_ACTIONS.GUEST_FILES_MKDIR,
   delete: AUDIT_ACTIONS.GUEST_FILES_DELETE,
   rename: AUDIT_ACTIONS.GUEST_FILES_RENAME,
+  "upload-state": AUDIT_ACTIONS.GUEST_FILES_LIST,
 };
 
 export function guestFilesRoute(kind: "vm" | "lxc") {
@@ -78,17 +79,40 @@ export function guestFilesRoute(kind: "vm" | "lxc") {
         target: body.target ?? "",
         port: body.port,
         username: body.username ?? "",
-        password: body.password ?? "",
+        password: body.password,
         privateKey: body.privateKey,
         passphrase: body.passphrase,
         mode,
       });
+      let partSize = 0;
+      if (mode === "upload") {
+        try {
+          const state = await runGuestFileOp(host, {
+            kind,
+            node: params.node,
+            vmid,
+            op: "upload-state",
+            via: "sftp",
+            target: body.target,
+            port: body.port,
+            username: body.username,
+            password: body.password,
+            privateKey: body.privateKey,
+            passphrase: body.passphrase,
+            path: body.path,
+          });
+          partSize = Number(state.partSize ?? 0) || 0;
+        } catch {
+          partSize = 0;
+        }
+      }
       return json({
         ticket: issued.ticket,
         path: issued.path,
         name: issued.name,
         mode: issued.mode,
         via: "sftp" as const,
+        partSize,
       });
     }
     const result = await runGuestFileOp(host, {

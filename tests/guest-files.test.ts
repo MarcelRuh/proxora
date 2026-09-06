@@ -15,8 +15,11 @@ import {
   resolveGuestPath,
   shSingleQuote,
   uploadNameConflicts,
+  guestUploadPartPath,
+  guestUploadResumeOffset,
+  isGuestUploadPartName,
 } from "@/lib/guest-files";
-import { guestFileUploadWsUrl, isGuestFileTransferPath, isGuestFileUploadWsPath } from "@/lib/guest-file-http";
+import { guestFileUploadWsUrl, isGuestFileTransferPath, isGuestFileUploadWsPath, parseGuestUploadPlan } from "@/lib/guest-file-http";
 import {
   createGuestTransferTicket,
   decodeGuestTransferMeta,
@@ -61,6 +64,21 @@ describe("guest file paths", () => {
     expect(guestFileUploadWsUrl("t/1", "http://192.168.1.10:3000")).toBe(
       "ws://192.168.1.10:3000/ws/guest-file?ticket=t%2F1",
     );
+  });
+
+  it("keeps stream uploads in a sidecar part file until size matches", () => {
+    expect(guestUploadPartPath("/home/win.iso")).toBe("/home/win.iso.proxora-part");
+    expect(isGuestUploadPartName("win.iso.proxora-part")).toBe(true);
+    expect(isGuestUploadPartName("win.iso")).toBe(false);
+    expect(guestUploadResumeOffset(0, 100)).toBeNull();
+    expect(guestUploadResumeOffset(40, 100)).toBe(40);
+    expect(guestUploadResumeOffset(100, 100)).toBe(100);
+    expect(guestUploadResumeOffset(120, 100)).toBeNull();
+    expect(parseGuestUploadPlan({ sizeHeader: "8000", offsetHeader: "2000", contentLength: "10" })).toEqual({
+      offset: 2000,
+      expectedSize: 8000,
+    });
+    expect(parseGuestUploadPlan({ contentLength: "512" })).toEqual({ offset: 0, expectedSize: 512 });
   });
 
   it("rejects loopback and metadata SSH targets", () => {
