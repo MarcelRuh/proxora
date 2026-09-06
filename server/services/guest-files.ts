@@ -1,4 +1,4 @@
-import { PassThrough, Readable } from "node:stream";
+import { PassThrough, Readable, Transform } from "node:stream";
 import { Client, type SFTPWrapper } from "ssh2";
 import { HostOrigin, type Host } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -14,6 +14,7 @@ import {
   isAllowedSftpTarget,
   looksLikeSshPrivateKey,
   resolveGuestPath,
+  shSingleQuote,
   type GuestFileEntry,
   type GuestFileKind,
   type GuestFileOp,
@@ -170,6 +171,7 @@ async function openSftp(auth: SshAuth): Promise<{ client: Client; sftp: SFTPWrap
       username: auth.username,
       readyTimeout: CONNECT_MS,
       tryKeyboard: Boolean(password),
+      algorithms: { compress: ["none"] },
       ...(password ? { password } : {}),
       ...(privateKey ? { privateKey, passphrase: auth.passphrase || undefined } : {}),
       hostVerifier: (key: Buffer) => {
@@ -334,8 +336,113 @@ async function parseStreamCreds(input: StreamCreds) {
   }
 }
 
-const SFTP_CHUNK = 32 * 1024;
+const SFTP_CHUNK_FALLBACK = 32 * 1024;
+const SFTP_CHUNK_MAX = 224 * 1024;
 const SFTP_IN_FLIGHT = 64;
+
+function sftpChunkSize(sftp: SFTPWrapper): number {
+  const raw = Number((sftp as unknown as { _maxWriteLen?: number })._maxWriteLen);
+  if (!Number.isFinite(raw) || raw < 16 * 1024) return SFTP_CHUNK_FALLBACK;
+  return Math.min(SFTP_CHUNK_MAX, Math.floor(raw));
+}
+
+function probePosixShell(client: Client): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+    const timer = setTimeout(() => done(false), 5_000);
+    try {
+      client.exec("sh -c 'printf proxora_posix'", (err, stream) => {
+        if (err || !stream) {
+          clearTimeout(timer);
+          done(false);
+          return;
+        }
+        let out = "";
+        stream.on("data", (chunk: Buffer | string) => {
+          out += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+        });
+        stream.stderr?.resume();
+        stream.on("close", () => {
+          clearTimeout(timer);
+          done(out.includes("proxora_posix"));
+        });
+        stream.on("error", () => {
+          clearTimeout(timer);
+          done(false);
+        });
+      });
+    } catch {
+      clearTimeout(timer);
+      done(false);
+    }
+  });
+}
+
+function sshCatUpload(
+  client: Client,
+  remotePath: string,
+  body: ReadableStream<Uint8Array> | null,
+): Promise<number> {
+  const cmd = `umask 022 && cat > ${shSingleQuote(remotePath)}`;
+  return new Promise((resolve, reject) => {
+    client.exec(cmd, (err, stream) => {
+      if (err || !stream) {
+        reject(err ?? new ValidationError("SSH-Exec fehlgeschlagen"));
+        return;
+      }
+      let total = 0;
+      let stderr = "";
+      let exitCode: number | null = 0;
+      let finished = false;
+      const fail = (error: unknown) => {
+        if (finished) return;
+        finished = true;
+        try {
+          stream.destroy();
+        } catch {
+          /* ignore */
+        }
+        reject(error instanceof Error ? error : new ValidationError(String(error)));
+      };
+      const succeed = () => {
+        if (finished) return;
+        finished = true;
+        resolve(total);
+      };
+      stream.stderr?.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString("utf8");
+        if (stderr.length > 800) stderr = stderr.slice(-800);
+      });
+      stream.on("error", fail);
+      stream.on("exit", (code: number | undefined) => {
+        if (typeof code === "number") exitCode = code;
+      });
+      stream.on("close", () => {
+        if (finished) return;
+        if (exitCode === 0) succeed();
+        else fail(new ValidationError(stderr.trim().slice(0, 240) || "Upload fehlgeschlagen"));
+      });
+      const counter = new Transform({
+        highWaterMark: 1024 * 1024,
+        transform(chunk, _enc, cb) {
+          total += (chunk as Buffer).length;
+          cb(null, chunk);
+        },
+      });
+      const nodeIn = body
+        ? Readable.fromWeb(body as import("node:stream/web").ReadableStream<Uint8Array>, { highWaterMark: 1024 * 1024 })
+        : Readable.from([]);
+      nodeIn.on("error", fail);
+      counter.on("error", fail);
+      nodeIn.pipe(counter).pipe(stream);
+    });
+  });
+}
 
 function openHandle(sftp: SFTPWrapper, remotePath: string, flags: "r" | "w"): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -371,6 +478,7 @@ async function sftpPipelineWrite(
   body: ReadableStream<Uint8Array> | null,
 ): Promise<number> {
   if (!body) return 0;
+  const chunkSize = sftpChunkSize(sftp);
   const reader = body.getReader();
   const pending = new Set<Promise<void>>();
   let firstError: unknown;
@@ -378,7 +486,8 @@ async function sftpPipelineWrite(
   let rest = Buffer.alloc(0);
 
   const launch = (chunk: Buffer, at: number) => {
-    const p = writeAt(sftp, handle, chunk, at)
+    const owned = Buffer.from(chunk);
+    const p = writeAt(sftp, handle, owned, at)
       .catch((err) => {
         firstError ??= err;
       })
@@ -396,9 +505,9 @@ async function sftpPipelineWrite(
   };
 
   const flushRest = async (all: boolean) => {
-    while (rest.length >= SFTP_CHUNK || (all && rest.length > 0)) {
+    while (rest.length >= chunkSize || (all && rest.length > 0)) {
       await waitSlot();
-      const n = all && rest.length < SFTP_CHUNK ? rest.length : Math.min(SFTP_CHUNK, rest.length);
+      const n = all && rest.length < chunkSize ? rest.length : Math.min(chunkSize, rest.length);
       const chunk = rest.subarray(0, n);
       rest = rest.subarray(n);
       const at = pos;
@@ -433,6 +542,7 @@ async function sftpPipelineWrite(
 
 async function pumpSftpReads(sftp: SFTPWrapper, handle: Buffer, size: number, dest: PassThrough): Promise<void> {
   if (size <= 0) return;
+  const chunkSize = sftpChunkSize(sftp);
   let nextIssue = 0;
   let nextEmit = 0;
   const ready = new Map<number, Buffer>();
@@ -467,7 +577,7 @@ async function pumpSftpReads(sftp: SFTPWrapper, handle: Buffer, size: number, de
       if (stopped) return;
       while (!paused && inFlight < SFTP_IN_FLIGHT && nextIssue < size) {
         const at = nextIssue;
-        const len = Math.min(SFTP_CHUNK, size - at);
+        const len = Math.min(chunkSize, size - at);
         nextIssue += len;
         inFlight++;
         const buf = Buffer.allocUnsafe(len);
@@ -600,6 +710,10 @@ export async function sftpUploadFromStream(input: StreamCreds & { body: Readable
   const session = await openSftp(creds);
   let handle: Buffer | null = null;
   try {
+    if (await probePosixShell(session.client)) {
+      const total = await sshCatUpload(session.client, creds.path, input.body);
+      return { path: creds.path, name: guestFileName(creds.path), size: total };
+    }
     handle = await openHandle(session.sftp, creds.path, "w");
     const total = await sftpPipelineWrite(session.sftp, handle, input.body);
     await closeHandle(session.sftp, handle);

@@ -90,6 +90,11 @@ export function guestFileName(path: string): string {
   return resolved.slice(resolved.lastIndexOf("/") + 1);
 }
 
+/** POSIX sh single-quote, safe for `cat > …` over SSH exec. */
+export function shSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 export function attachmentDisposition(name: string): string {
   const fallback =
     name.replace(/[^\x20-\x7E]+/g, "_").replace(/["\\;\r\n]/g, "_").slice(0, 150).trim() || "download";

@@ -13,6 +13,7 @@ import {
   looksLikeSshPrivateKey,
   parseGuestListOutput,
   resolveGuestPath,
+  shSingleQuote,
   uploadNameConflicts,
 } from "@/lib/guest-files";
 import {
@@ -38,6 +39,11 @@ describe("guest file paths", () => {
     expect(guestPathParent("/etc")).toBe("/");
     expect(guestPathParent("/")).toBeNull();
     expect(guestFileName("/etc/hosts")).toBe("hosts");
+  });
+
+  it("quotes paths for POSIX cat over SSH", () => {
+    expect(shSingleQuote("/var/iso/win.iso")).toBe("'/var/iso/win.iso'");
+    expect(shSingleQuote("/tmp/it's")).toBe("'/tmp/it'\\''s'");
   });
 
   it("rejects loopback and metadata SSH targets", () => {

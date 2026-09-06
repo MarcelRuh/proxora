@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.5.3] – 2026-09-06
+
+### Changed
+
+- Guest uploads on Linux/LXC stream over SSH `cat` instead of per-packet SFTP ACKs, so ISO-sized files are no longer capped around 2 MB/s. Windows guests stay on SFTP with larger write chunks. SSH compression is disabled for transfers.
+
 ## [1.5.2] – 2026-09-06
 
 ### Changed
