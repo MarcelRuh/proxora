@@ -23,6 +23,7 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -39,6 +40,10 @@ class MainActivity : AppCompatActivity() {
   private var fileCallback: ValueCallback<Array<Uri>>? = null
   private var loadedServer: String? = null
   private val extraWindows = ArrayDeque<Dialog>()
+
+  companion object {
+    const val ACTION_RELOAD = "app.proxora.RELOAD"
+  }
 
   private val filePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
     val uris = result.data?.let { extractUris(it) }
@@ -65,6 +70,20 @@ class MainActivity : AppCompatActivity() {
     }
     webView = WebView(this).apply {
       overScrollMode = View.OVER_SCROLL_NEVER
+      setOnLongClickListener {
+        val type = hitTestResult.type
+        if (
+          type == WebView.HitTestResult.SRC_ANCHOR_TYPE ||
+          type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE ||
+          type == WebView.HitTestResult.IMAGE_TYPE ||
+          type == WebView.HitTestResult.EDIT_TEXT_TYPE
+        ) {
+          false
+        } else {
+          showQuickActions()
+          true
+        }
+      }
     }
     ProxoraWeb.configure(webView)
     attachClients(webView)
@@ -74,7 +93,7 @@ class MainActivity : AppCompatActivity() {
     }.apply {
       setColorSchemeColors(getColor(R.color.proxora_pink))
       setProgressBackgroundColorSchemeColor(getColor(R.color.proxora_surface))
-      setOnRefreshListener { webView.reload() }
+      setOnRefreshListener { reloadPage() }
       addView(
         webView,
         ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
@@ -120,6 +139,13 @@ class MainActivity : AppCompatActivity() {
     )
 
     if (!Prefs.serverUrl(this).isNullOrBlank()) loadServer(reset = savedInstanceState == null)
+    if (savedInstanceState == null) handleShortcut(intent)
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    handleShortcut(intent)
   }
 
   override fun onResume() {
@@ -148,6 +174,28 @@ class MainActivity : AppCompatActivity() {
       isAppearanceLightStatusBars = false
       isAppearanceLightNavigationBars = false
     }
+  }
+
+  private fun handleShortcut(intent: Intent?) {
+    if (intent?.action != ACTION_RELOAD) return
+    if (webView.url.isNullOrBlank()) return
+    reloadPage()
+  }
+
+  private fun reloadPage() {
+    swipe.isRefreshing = true
+    webView.reload()
+  }
+
+  private fun showQuickActions() {
+    AlertDialog.Builder(this, R.style.Theme_Proxora)
+      .setItems(arrayOf(getString(R.string.menu_reload), getString(R.string.menu_server))) { _, which ->
+        when (which) {
+          0 -> reloadPage()
+          1 -> setupLauncher.launch(Intent(this, SetupActivity::class.java))
+        }
+      }
+      .show()
   }
 
   private fun loadServer(reset: Boolean) {

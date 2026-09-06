@@ -3,6 +3,17 @@
   <shortcut
     android:enabled="true"
     android:icon="@mipmap/ic_launcher"
+    android:shortcutId="reload"
+    android:shortcutLongLabel="@string/menu_reload"
+    android:shortcutShortLabel="@string/menu_reload">
+    <intent
+      android:action="app.proxora.RELOAD"
+      android:targetClass="app.proxora.MainActivity"
+      android:targetPackage="app.proxora" />
+  </shortcut>
+  <shortcut
+    android:enabled="true"
+    android:icon="@mipmap/ic_launcher"
     android:shortcutId="server"
     android:shortcutLongLabel="@string/menu_server"
     android:shortcutShortLabel="@string/menu_server">

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.3] – 2026-09-06
+
+### Changed
+
+- Android: long-press the app icon for **Reload** as well as change server. Same two actions appear on a long-press in the app.
+
 ## [1.7.2] – 2026-09-06
 
 ### Changed

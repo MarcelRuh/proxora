@@ -11,8 +11,8 @@ android {
     applicationId = "app.proxora"
     minSdk = 26
     targetSdk = 35
-    versionCode = 172
-    versionName = "1.7.2"
+    versionCode = 173
+    versionName = "1.7.3"
   }
 
   buildTypes {
