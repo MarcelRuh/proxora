@@ -13,6 +13,20 @@ object PushRegistrar {
   private val io = Executors.newSingleThreadExecutor()
   private val main = Handler(Looper.getMainLooper())
 
+  fun hasDistributor(context: Context): Boolean {
+    val distributors = try {
+      UnifiedPush.getDistributors(context)
+    } catch (_: Exception) {
+      emptyList()
+    }
+    val saved = try {
+      UnifiedPush.getAckDistributor(context)
+    } catch (_: Exception) {
+      null
+    }
+    return saved?.isNotBlank() == true || distributors.isNotEmpty()
+  }
+
   fun register(activity: Activity) {
     io.execute {
       val vapid = vapidKey(activity) ?: return@execute
@@ -27,8 +41,6 @@ object PushRegistrar {
       /* distributor missing */
     }
     Prefs.setPushEndpoint(context, null)
-    PushClient.realtime = true
-    PushKeepAlive.sync(context)
   }
 
   fun onNewEndpoint(context: Context, endpoint: PushEndpoint) {
@@ -44,31 +56,15 @@ object PushRegistrar {
       }
       if (!ok) return@execute
       Prefs.setPushEndpoint(app, endpoint.url)
-      PushClient.realtime = false
-      PushClient.restart()
-      main.post { PushKeepAlive.sync(app) }
     }
   }
 
   fun onLost(context: Context) {
     Prefs.setPushEndpoint(context, null)
-    PushClient.realtime = true
-    PushClient.restart()
-    PushKeepAlive.sync(context)
   }
 
   private fun registerOnMain(activity: Activity, vapid: String) {
-    val distributors = try {
-      UnifiedPush.getDistributors(activity)
-    } catch (_: Exception) {
-      emptyList()
-    }
-    val saved = try {
-      UnifiedPush.getAckDistributor(activity)
-    } catch (_: Exception) {
-      null
-    }
-    if (saved.isNullOrBlank() && distributors.isEmpty()) return
+    if (!hasDistributor(activity)) return
     try {
       UnifiedPush.tryUseCurrentOrDefaultDistributor(activity) { success ->
         if (!success) return@tryUseCurrentOrDefaultDistributor

@@ -11,7 +11,7 @@ object Prefs {
   private const val KEY_COOKIES_URL = "origin_cookies_url"
   private const val KEY_LAST_URL = "last_page_url"
   private const val KEY_PUSH_ENDPOINT = "push_endpoint"
-  private const val KEY_BATTERY_PROMPTED = "battery_prompted"
+  private const val KEY_DISTRIBUTOR_PROMPTED = "distributor_prompted"
 
   private fun prefs(context: Context) = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
@@ -73,11 +73,11 @@ object Prefs {
     editor.commit()
   }
 
-  fun batteryPrompted(context: Context): Boolean =
-    prefs(context).getBoolean(KEY_BATTERY_PROMPTED, false)
+  fun distributorPrompted(context: Context): Boolean =
+    prefs(context).getBoolean(KEY_DISTRIBUTOR_PROMPTED, false)
 
-  fun setBatteryPrompted(context: Context) {
-    prefs(context).edit().putBoolean(KEY_BATTERY_PROMPTED, true).commit()
+  fun setDistributorPrompted(context: Context) {
+    prefs(context).edit().putBoolean(KEY_DISTRIBUTOR_PROMPTED, true).commit()
   }
 }
 

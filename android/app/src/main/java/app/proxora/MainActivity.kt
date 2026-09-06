@@ -12,8 +12,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Message
-import android.os.PowerManager
-import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -203,6 +201,7 @@ class MainActivity : AppCompatActivity() {
     AppForeground.resumed = true
     val server = Prefs.serverUrl(this)
     if (!server.isNullOrBlank() && server != loadedServer) loadServer(clearSessionIfChanged = true)
+    PushRegistrar.register(this)
   }
 
   override fun onPause() {
@@ -324,23 +323,67 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun startBackgroundPush() {
-    PushKeepAlive.sync(this)
     PushRegistrar.register(this)
-    requestUnrestrictedBattery()
+    window.decorView.postDelayed({ maybeOfferDistributor() }, 1200)
   }
 
-  private fun requestUnrestrictedBattery() {
-    if (Prefs.batteryPrompted(this)) return
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-    val pm = getSystemService(PowerManager::class.java) ?: return
-    if (pm.isIgnoringBatteryOptimizations(packageName)) return
-    Prefs.setBatteryPrompted(this)
-    try {
-      startActivity(
-        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).setData(Uri.parse("package:$packageName")),
+  private fun maybeOfferDistributor() {
+    if (isFinishing || Prefs.distributorPrompted(this)) return
+    if (PushRegistrar.hasDistributor(this) || !Prefs.pushEndpoint(this).isNullOrBlank()) return
+    Prefs.setDistributorPrompted(this)
+    val dialog = androidx.appcompat.app.AppCompatDialog(this, R.style.Theme_Proxora)
+    val title = TextView(this).apply {
+      text = getString(R.string.push_distributor_title)
+      setTextColor(getColor(R.color.proxora_fg))
+      textSize = 18f
+    }
+    val body = TextView(this).apply {
+      text = getString(R.string.push_distributor_body)
+      setTextColor(getColor(R.color.proxora_muted))
+      setPadding(0, dp(8), 0, dp(16))
+    }
+    val install = proxoraFilledButton(getString(R.string.push_distributor_install)) {
+      dialog.dismiss()
+      openNtfy()
+    }
+    val later = proxoraOutlinedButton(getString(R.string.push_distributor_later)) { dialog.dismiss() }
+    val card = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      setBackgroundResource(R.drawable.quick_actions_card)
+      setPadding(dp(20), dp(20), dp(20), dp(20))
+      addView(title)
+      addView(body)
+      addView(install, buttonRowParams())
+      addView(later, buttonRowParams(dp(12)))
+    }
+    val scrim = FrameLayout(this).apply {
+      setBackgroundColor(0x99000000.toInt())
+      setOnClickListener { dialog.dismiss() }
+      addView(
+        card,
+        FrameLayout.LayoutParams(proxoraCardWidth(), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
       )
+    }
+    card.isClickable = true
+    dialog.setContentView(
+      scrim,
+      ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+    )
+    dialog.window?.apply {
+      setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+      setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+      setDimAmount(0.6f)
+      setGravity(Gravity.CENTER)
+    }
+    dialog.show()
+  }
+
+  private fun openNtfy() {
+    val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=io.heckel.ntfy"))
+    try {
+      startActivity(market)
     } catch (_: Exception) {
-      /* OEM without the setting */
+      startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://ntfy.sh/app")))
     }
   }
 

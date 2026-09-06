@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.14] – 2026-09-07
+
+### Changed
+
+- Android background push no longer uses a persistent connection notification. Alerts use UnifiedPush (install ntfy once); the app itself stays off the battery when closed.
+
 ## [1.7.13] – 2026-09-07
 
 ### Changed

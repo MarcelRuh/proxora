@@ -19,8 +19,8 @@
   <string name="notify_channel">Alerts</string>
   <string name="notify_channel_desc">Inbox from your Proxora instance</string>
   <string name="notify_overflow">%1$d new alerts</string>
-  <string name="notify_keepalive_channel">Connection</string>
-  <string name="notify_keepalive_desc">Keeps the connection to your instance so alerts arrive.</string>
-  <string name="notify_keepalive_title">Proxora</string>
-  <string name="notify_keepalive_body">Alerts active</string>
+  <string name="push_distributor_title">Background push</string>
+  <string name="push_distributor_body">To get alerts when Proxora is closed — without a persistent notification or extra battery use — install ntfy once. It stays silent in the background.</string>
+  <string name="push_distributor_install">Install ntfy</string>
+  <string name="push_distributor_later">Later</string>
 </resources>
