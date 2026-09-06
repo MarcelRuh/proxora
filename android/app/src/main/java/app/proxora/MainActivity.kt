@@ -14,11 +14,15 @@ import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
@@ -36,6 +40,10 @@ import java.util.ArrayDeque
 class MainActivity : AppCompatActivity() {
   private lateinit var webView: WebView
   private lateinit var progress: ProgressBar
+  private lateinit var errorPanel: LinearLayout
+  private lateinit var errorTitle: TextView
+  private lateinit var errorBody: TextView
+  private var showingError = false
   private var fileCallback: ValueCallback<Array<Uri>>? = null
   private var loadedServer: String? = null
   private val extraWindows = ArrayDeque<Dialog>()
@@ -51,8 +59,9 @@ class MainActivity : AppCompatActivity() {
   }
 
   private val setupLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-    if (Prefs.serverUrl(this).isNullOrBlank()) finish()
-    else loadServer(reset = true)
+    val url = Prefs.serverUrl(this)
+    if (url.isNullOrBlank()) finish()
+    else if (url != loadedServer) loadServer(clearSessionIfChanged = true)
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -89,6 +98,7 @@ class MainActivity : AppCompatActivity() {
     }
     ProxoraWeb.configure(webView)
     attachClients(webView)
+    errorPanel = buildErrorPanel()
 
     val statusSpacer = View(this).apply {
       setBackgroundColor(getColor(R.color.proxora_bg))
@@ -103,6 +113,10 @@ class MainActivity : AppCompatActivity() {
       addView(
         progress,
         FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (3 * resources.displayMetrics.density).toInt()),
+      )
+      addView(
+        errorPanel,
+        FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
       )
     }
     val root = LinearLayoutCompat(this).apply {
@@ -150,7 +164,7 @@ class MainActivity : AppCompatActivity() {
       },
     )
 
-    if (!Prefs.serverUrl(this).isNullOrBlank()) loadServer(reset = savedInstanceState == null)
+    if (!Prefs.serverUrl(this).isNullOrBlank()) loadServer(clearSessionIfChanged = false)
     if (savedInstanceState == null) handleShortcut(intent)
   }
 
@@ -163,7 +177,12 @@ class MainActivity : AppCompatActivity() {
   override fun onResume() {
     super.onResume()
     val server = Prefs.serverUrl(this)
-    if (!server.isNullOrBlank() && server != loadedServer) loadServer(reset = true)
+    if (!server.isNullOrBlank() && server != loadedServer) loadServer(clearSessionIfChanged = true)
+  }
+
+  override fun onPause() {
+    CookieManager.getInstance().flush()
+    super.onPause()
   }
 
   override fun onDestroy() {
@@ -186,6 +205,58 @@ class MainActivity : AppCompatActivity() {
     return (24 * resources.displayMetrics.density).toInt()
   }
 
+  private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+  private fun buildErrorPanel(): LinearLayout {
+    errorTitle = TextView(this).apply {
+      setTextColor(getColor(R.color.proxora_fg))
+      textSize = 22f
+    }
+    errorBody = TextView(this).apply {
+      setTextColor(getColor(R.color.proxora_muted))
+      setPadding(0, dp(10), 0, dp(22))
+    }
+    val retry = Button(this).apply {
+      text = getString(R.string.error_retry)
+      setOnClickListener { retryLoad() }
+    }
+    val change = Button(this).apply {
+      text = getString(R.string.menu_server)
+      setOnClickListener { setupLauncher.launch(Intent(this@MainActivity, SetupActivity::class.java)) }
+    }
+    return LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      visibility = View.GONE
+      setBackgroundColor(getColor(R.color.proxora_bg))
+      setPadding(dp(20), dp(28), dp(20), dp(20))
+      addView(errorTitle)
+      addView(errorBody)
+      addView(retry)
+      addView(change.apply { setPadding(0, dp(8), 0, 0) })
+    }
+  }
+
+  private fun showError(title: String, body: String) {
+    showingError = true
+    errorTitle.text = title
+    errorBody.text = body
+    errorPanel.visibility = View.VISIBLE
+    progress.visibility = View.GONE
+  }
+
+  private fun hideError() {
+    showingError = false
+    errorPanel.visibility = View.GONE
+  }
+
+  private fun retryLoad() {
+    val url = Prefs.serverUrl(this) ?: return
+    hideError()
+    val current = webView.url
+    if (current.isNullOrBlank() || current == "about:blank") webView.loadUrl(url)
+    else webView.reload()
+  }
+
   private fun handleShortcut(intent: Intent?) {
     if (intent?.action != ACTION_RELOAD) return
     if (webView.url.isNullOrBlank()) return
@@ -193,6 +264,7 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun reloadPage() {
+    hideError()
     webView.reload()
   }
 
@@ -207,15 +279,17 @@ class MainActivity : AppCompatActivity() {
       .show()
   }
 
-  private fun loadServer(reset: Boolean) {
+  private fun loadServer(clearSessionIfChanged: Boolean) {
     val url = Prefs.serverUrl(this) ?: return
+    val previous = loadedServer
     loadedServer = url
-    if (reset) {
+    if (clearSessionIfChanged && previous != null && previous != url) {
       CookieManager.getInstance().removeAllCookies(null)
       CookieManager.getInstance().flush()
       webView.clearCache(true)
       webView.clearHistory()
     }
+    hideError()
     webView.loadUrl(url)
   }
 
@@ -227,19 +301,32 @@ class MainActivity : AppCompatActivity() {
       override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
         handleUrl(request.url.toString())
 
+      override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+        if (view === webView) hideError()
+      }
+
+      override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+        if (view !== webView || !request.isForMainFrame) return
+        showError(getString(R.string.error_title), getString(R.string.error_body))
+      }
+
       override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: android.net.http.SslError) {
         if (Prefs.allowInsecureTls(this@MainActivity)) {
           handler.proceed()
         } else {
           handler.cancel()
-          Toast.makeText(this@MainActivity, R.string.ssl_blocked, Toast.LENGTH_LONG).show()
+          if (view === webView) {
+            showError(getString(R.string.error_ssl_title), getString(R.string.ssl_blocked))
+          } else {
+            Toast.makeText(this@MainActivity, R.string.ssl_blocked, Toast.LENGTH_LONG).show()
+          }
         }
       }
     }
     view.webChromeClient = object : WebChromeClient() {
       override fun onProgressChanged(view: WebView, newProgress: Int) {
         progress.progress = newProgress
-        progress.visibility = if (newProgress in 1..99) View.VISIBLE else View.GONE
+        progress.visibility = if (!showingError && newProgress in 1..99) View.VISIBLE else View.GONE
       }
 
       override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
@@ -305,7 +392,7 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun startDownload(url: String, userAgent: String, contentDisposition: String, mimeType: String) {
-    if (url.startsWith("blob:")) return
+    if (url.startsWith("blob:") || url.startsWith("data:")) return
     val name = URLUtil.guessFileName(url, contentDisposition, mimeType)
     val request = DownloadManager.Request(Uri.parse(url)).apply {
       setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)

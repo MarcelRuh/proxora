@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.8] – 2026-09-06
+
+### Fixed
+
+- Android keeps the login session across app restarts. Cookies are only cleared when you change the server URL.
+- Android shows a Proxora error screen (retry / change server) when the instance is unreachable, instead of the Chromium error page.
+- Guest file downloads that use `blob:` URLs now save into Downloads on Android.
+
+### Changed
+
+- Release APKs are signed with a dedicated upload key instead of the debug keystore.
+
 ## [1.7.7] – 2026-09-06
 
 ### Changed

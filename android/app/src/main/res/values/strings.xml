@@ -10,5 +10,10 @@
   <string name="menu_reload">Neu laden</string>
   <string name="menu_server">Server ändern</string>
   <string name="download_started">Download: %1$s</string>
+  <string name="download_failed">Download fehlgeschlagen.</string>
   <string name="ssl_blocked">Zertifikat abgelehnt. App-Icon lange drücken → Server ändern, dann selbstsignierte Zertifikate erlauben.</string>
+  <string name="error_title">Server nicht erreichbar</string>
+  <string name="error_body">Proxora antwortet nicht. Prüfe URL, VPN und ob die Instanz läuft.</string>
+  <string name="error_retry">Erneut versuchen</string>
+  <string name="error_ssl_title">Zertifikat abgelehnt</string>
 </resources>

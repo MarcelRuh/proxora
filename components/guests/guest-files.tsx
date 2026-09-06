@@ -110,7 +110,6 @@ function downloadBytes(name: string, bytes: Uint8Array) {
   copy.set(bytes);
   const url = URL.createObjectURL(new Blob([copy]));
   triggerBrowserDownload(url, name);
-  URL.revokeObjectURL(url);
 }
 
 function decodeBase64(value: string): Uint8Array {

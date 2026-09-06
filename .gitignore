@@ -49,6 +49,8 @@ android/build/
 android/app/build/
 android/local.properties
 android/.idea/
+android/keystore.properties
+android/proxora-release.jks
 *.apk
 *.aab
 *.keystore

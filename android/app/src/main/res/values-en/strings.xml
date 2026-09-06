@@ -10,5 +10,10 @@
   <string name="menu_reload">Reload</string>
   <string name="menu_server">Change server</string>
   <string name="download_started">Download: %1$s</string>
+  <string name="download_failed">Download failed.</string>
   <string name="ssl_blocked">Certificate rejected. Long-press the app icon → Change server, then allow self-signed certificates.</string>
+  <string name="error_title">Server unreachable</string>
+  <string name="error_body">Proxora is not responding. Check the URL, VPN, and that the instance is running.</string>
+  <string name="error_retry">Try again</string>
+  <string name="error_ssl_title">Certificate rejected</string>
 </resources>

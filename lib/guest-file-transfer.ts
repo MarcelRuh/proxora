@@ -389,25 +389,97 @@ export async function saveUrlWithProgress(
     offset += chunk.byteLength;
   }
   const href = URL.createObjectURL(new Blob([bytes]));
-  const a = document.createElement("a");
-  a.href = href;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(href);
+  triggerBrowserDownload(href, name);
   return "saved";
 }
 
+export type AndroidDownloadBridge = {
+  beginDownload: (id: string, filename: string, mime: string) => void;
+  appendDownload: (id: string, base64Chunk: string) => void;
+  finishDownload: (id: string) => void;
+  abortDownload?: (id: string) => void;
+};
+
+export const ANDROID_DOWNLOAD_CHUNK = 24 * 1024;
+
+export function getAndroidDownloadBridge(
+  host: { ProxoraAndroid?: AndroidDownloadBridge } | null | undefined =
+    typeof window === "undefined" ? null : window,
+): AndroidDownloadBridge | null {
+  const bridge = host?.ProxoraAndroid;
+  if (!bridge?.beginDownload || !bridge.appendDownload || !bridge.finishDownload) return null;
+  return bridge;
+}
+
+export function bytesToBase64Chunks(bytes: Uint8Array, chunkSize = ANDROID_DOWNLOAD_CHUNK): string[] {
+  const size = Math.max(1, chunkSize);
+  const chunks: string[] = [];
+  for (let i = 0; i < bytes.length; i += size) {
+    const slice = bytes.subarray(i, Math.min(i + size, bytes.length));
+    let binary = "";
+    for (let j = 0; j < slice.length; j++) binary += String.fromCharCode(slice[j]!);
+    chunks.push(btoa(binary));
+  }
+  return chunks;
+}
+
+export function saveBytesWithAndroidBridge(
+  bytes: Uint8Array,
+  name: string,
+  mime: string,
+  bridge: AndroidDownloadBridge,
+): void {
+  const id = `dl-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  bridge.beginDownload(id, name, mime || "application/octet-stream");
+  try {
+    for (const chunk of bytesToBase64Chunks(bytes)) {
+      bridge.appendDownload(id, chunk);
+    }
+    bridge.finishDownload(id);
+  } catch (error) {
+    bridge.abortDownload?.(id);
+    throw error;
+  }
+}
+
+export async function saveBlobUrlWithAndroidBridge(
+  url: string,
+  name: string,
+  bridge: AndroidDownloadBridge,
+): Promise<void> {
+  const blob = await fetch(url).then((response) => {
+    if (!response.ok) throw new Error(`Download fehlgeschlagen (${response.status})`);
+    return response.blob();
+  });
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  saveBytesWithAndroidBridge(bytes, name, blob.type || "application/octet-stream", bridge);
+}
+
 export function triggerBrowserDownload(url: string, name: string) {
+  const bridge = getAndroidDownloadBridge();
+  if (bridge && (url.startsWith("blob:") || url.startsWith("data:"))) {
+    void saveBlobUrlWithAndroidBridge(url, name, bridge).finally(() => {
+      if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+    });
+    return;
+  }
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
   document.body.appendChild(a);
   a.click();
   a.remove();
+  if (url.startsWith("blob:")) {
+    setTimeout(() => URL.revokeObjectURL(url), 2_000);
+  }
 }
 
 export function isAbortError(error: unknown): boolean {
   return (error instanceof DOMException && error.name === "AbortError") || (error instanceof Error && error.name === "AbortError");
+}
+
+declare global {
+  interface Window {
+    ProxoraAndroid?: AndroidDownloadBridge;
+  }
 }

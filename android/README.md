@@ -21,11 +21,15 @@ gradle :app:assembleRelease
 
 The APK is `app/build/outputs/apk/release/app-release.apk`. CI on `main` also uploads that artifact.
 
+Release builds are signed with `android/proxora-release.jks` (gitignored). Locally, copy `keystore.properties.example` to `keystore.properties` and fill in the passwords. Without that file, Gradle falls back to the debug key. Tagged GitHub releases require the `ANDROID_KEYSTORE_*` secrets.
+
+If you already installed a debug-signed APK (1.7.7 and earlier), uninstall it once before installing 1.7.8 — Android will not update over a different signing key.
+
 ## Use
 
 1. Install the APK (sideload; not on Play Store).
 2. Enter your Proxora URL, e.g. `https://proxora.home.arpa`.
-3. Sign in as usual (TOTP included).
+3. Sign in as usual (TOTP included). The session stays until you change the server URL.
 4. Optional: allow a self-signed TLS certificate for LAN installs.
 
 Consoles and the file explorer open in the same view (Android has no desktop popups). Use the system back button to return.

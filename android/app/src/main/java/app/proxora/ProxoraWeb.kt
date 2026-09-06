@@ -31,6 +31,7 @@ object ProxoraWeb {
     }
     CookieManager.getInstance().setAcceptCookie(true)
     CookieManager.getInstance().setAcceptThirdPartyCookies(view, true)
+    view.addJavascriptInterface(AndroidDownloadBridge(view.context), "ProxoraAndroid")
     view.setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
   }
 }
