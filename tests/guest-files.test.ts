@@ -16,7 +16,7 @@ import {
   shSingleQuote,
   uploadNameConflicts,
 } from "@/lib/guest-files";
-import { isGuestFileTransferPath } from "@/lib/guest-file-http";
+import { guestFileUploadWsUrl, isGuestFileTransferPath, isGuestFileUploadWsPath } from "@/lib/guest-file-http";
 import {
   createGuestTransferTicket,
   decodeGuestTransferMeta,
@@ -52,6 +52,15 @@ describe("guest file paths", () => {
     expect(isGuestFileTransferPath("/api/hosts/abc/vms/pve/100/files/download?ticket=x")).toBe(true);
     expect(isGuestFileTransferPath("/api/federation/guest-files/upload")).toBe(true);
     expect(isGuestFileTransferPath("/api/hosts/abc/lxc/pve/243/files")).toBe(false);
+    expect(isGuestFileUploadWsPath("/ws/guest-file")).toBe(true);
+    expect(isGuestFileUploadWsPath("/ws/guest-file?ticket=abc")).toBe(true);
+    expect(isGuestFileUploadWsPath("/ws/console")).toBe(false);
+    expect(guestFileUploadWsUrl("abc", "https://proxora.example.de")).toBe(
+      "wss://proxora.example.de/ws/guest-file?ticket=abc",
+    );
+    expect(guestFileUploadWsUrl("t/1", "http://192.168.1.10:3000")).toBe(
+      "ws://192.168.1.10:3000/ws/guest-file?ticket=t%2F1",
+    );
   });
 
   it("rejects loopback and metadata SSH targets", () => {

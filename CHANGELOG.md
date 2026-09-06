@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.5.6] – 2026-09-06
+
+### Changed
+
+- Guest uploads of large files (ISO and similar) now go over WebSocket instead of HTTP/2 PUT. Chrome plus nginx/OpenResty caps a single HTTP/2 stream around 2 MB/s even when the WAN is much faster; the console already used WebSocket (HTTP/1.1), and uploads now take the same path.
+
 ## [1.5.5] – 2026-09-06
 
 ### Fixed

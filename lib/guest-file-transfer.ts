@@ -1,4 +1,5 @@
 import type { MessageKey } from "@/lib/i18n/messages";
+import { guestFileUploadWsUrl } from "@/lib/guest-file-http";
 import { bytesToSize } from "@/lib/utils";
 
 export type RateSample = { bytesPerSec: number; etaSeconds: number | null };
@@ -47,7 +48,19 @@ export function formatEtaSeconds(
   return t("files.etaHours", { h, m });
 }
 
-export function putBlobWithProgress(
+const WS_UPLOAD_MIN_BYTES = 512 * 1024;
+const WS_BUFFER_HIGH = 8 * 1024 * 1024;
+const WS_HANDSHAKE_MS = 20_000;
+
+function ticketFromUploadUrl(url: string): string {
+  try {
+    return new URL(url, "http://localhost").searchParams.get("ticket")?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function putBlobOverXhr(
   url: string,
   body: Blob,
   opts?: {
@@ -91,6 +104,149 @@ export function putBlobWithProgress(
     }
     xhr.send(body);
   });
+}
+
+class WsHandshakeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WsHandshakeError";
+  }
+}
+
+async function waitWsBuffered(ws: WebSocket, signal?: AbortSignal) {
+  while (ws.readyState === WebSocket.OPEN && ws.bufferedAmount > WS_BUFFER_HIGH) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
+function putBlobOverWebSocket(
+  ticket: string,
+  body: Blob,
+  opts?: {
+    onProgress?: (sent: number, total: number) => void;
+    signal?: AbortSignal;
+  },
+): Promise<{ path?: string; name?: string; size?: number }> {
+  const origin = globalThis.location?.origin;
+  if (!origin || typeof WebSocket === "undefined" || typeof body.stream !== "function") {
+    return Promise.reject(new WsHandshakeError("No WebSocket"));
+  }
+  const url = guestFileUploadWsUrl(ticket, origin);
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+    ws.binaryType = "arraybuffer";
+    let settled = false;
+    let ready = false;
+    const handshake = setTimeout(() => {
+      if (!ready) fail(new WsHandshakeError("WebSocket handshake timeout"));
+    }, WS_HANDSHAKE_MS);
+
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(handshake);
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+      reject(error instanceof Error ? error : new Error(String(error)));
+    };
+
+    const abort = () => fail(new DOMException("Aborted", "AbortError"));
+    if (opts?.signal) {
+      if (opts.signal.aborted) {
+        abort();
+        return;
+      }
+      opts.signal.addEventListener("abort", abort, { once: true });
+    }
+
+    ws.onerror = () => {
+      fail(ready ? new Error("Upload fehlgeschlagen") : new WsHandshakeError("WebSocket failed"));
+    };
+    ws.onclose = () => {
+      if (!settled) fail(ready ? new Error("Upload abgebrochen") : new WsHandshakeError("WebSocket closed"));
+    };
+    ws.onmessage = (event) => {
+      if (typeof event.data !== "string") return;
+      let msg: { type?: string; error?: string; path?: string; name?: string; size?: number } = {};
+      try {
+        msg = JSON.parse(event.data) as typeof msg;
+      } catch {
+        fail(new Error("Ungültige Server-Antwort"));
+        return;
+      }
+      if (msg.type === "error") {
+        fail(new Error(msg.error || "Upload fehlgeschlagen"));
+        return;
+      }
+      if (msg.type === "ready") {
+        if (ready) return;
+        ready = true;
+        clearTimeout(handshake);
+        void pump();
+        return;
+      }
+      if (msg.type === "done") {
+        if (settled) return;
+        settled = true;
+        clearTimeout(handshake);
+        opts?.onProgress?.(body.size, body.size);
+        resolve({ path: msg.path, name: msg.name, size: msg.size });
+        try {
+          ws.close();
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+
+    async function pump() {
+      try {
+        opts?.onProgress?.(0, body.size);
+        const reader = body.stream().getReader();
+        let sent = 0;
+        while (true) {
+          if (opts?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+          if (ws.readyState !== WebSocket.OPEN) throw new Error("Upload abgebrochen");
+          await waitWsBuffered(ws, opts?.signal);
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value?.byteLength) continue;
+          ws.send(value);
+          sent += value.byteLength;
+          opts?.onProgress?.(Math.max(0, sent - ws.bufferedAmount), body.size);
+        }
+        await waitWsBuffered(ws, opts?.signal);
+        opts?.onProgress?.(body.size, body.size);
+        if (ws.readyState !== WebSocket.OPEN) throw new Error("Upload abgebrochen");
+        ws.send(JSON.stringify({ type: "end" }));
+      } catch (error) {
+        fail(error);
+      }
+    }
+  });
+}
+
+export async function putBlobWithProgress(
+  url: string,
+  body: Blob,
+  opts?: {
+    onProgress?: (sent: number, total: number) => void;
+    signal?: AbortSignal;
+  },
+): Promise<{ path?: string; name?: string; size?: number }> {
+  const ticket = ticketFromUploadUrl(url);
+  if (ticket && body.size >= WS_UPLOAD_MIN_BYTES) {
+    try {
+      return await putBlobOverWebSocket(ticket, body, opts);
+    } catch (error) {
+      if (isAbortError(error) || !(error instanceof WsHandshakeError)) throw error;
+    }
+  }
+  return putBlobOverXhr(url, body, opts);
 }
 
 const BLOB_DOWNLOAD_MAX = 512 * 1024 * 1024;

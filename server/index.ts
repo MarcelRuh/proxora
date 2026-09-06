@@ -5,7 +5,9 @@ import next from "next";
 import { WebSocketServer } from "ws";
 import { logger } from "@/lib/logger";
 import { attachConsoleProxy } from "@/server/ws/console-proxy";
+import { attachGuestFileUpload } from "@/server/ws/guest-file-upload";
 import { handleNodeGuestFileTransfer } from "@/server/http/guest-file-node";
+import { GUEST_FILE_UPLOAD_WS_PATH } from "@/lib/guest-file-http";
 import { startAptRefreshScheduler } from "@/server/services/apt-refresh";
 import { startBackupWatchScheduler } from "@/server/services/backup-watch";
 import { startDiskWatchScheduler } from "@/server/services/disk-watch";
@@ -44,10 +46,22 @@ async function main() {
   });
 
   const wss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
+  const uploadWss = new WebSocketServer({
+    noServer: true,
+    perMessageDeflate: false,
+    maxPayload: 8 * 1024 * 1024,
+  });
   attachConsoleProxy(wss);
+  attachGuestFileUpload(uploadWss);
 
   server.on("upgrade", (req, socket, head) => {
     const { pathname } = parse(req.url ?? "");
+    if (pathname === GUEST_FILE_UPLOAD_WS_PATH) {
+      uploadWss.handleUpgrade(req, socket, head, (ws) => {
+        uploadWss.emit("connection", ws, req);
+      });
+      return;
+    }
     if (pathname === "/ws/console" || pathname === "/ws/vnc" || pathname === "/api/federation/ws") {
       wss.handleUpgrade(req, socket, head, (ws) => {
         wss.emit("connection", ws, req);
