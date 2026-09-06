@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.5.5] – 2026-09-06
+
+### Fixed
+
+- Guest file uploads failed immediately with "Transfer abgelaufen oder ungültig". The JSON ticket was stored in the Next.js bundle while the stream handler looked in the separate Node server bundle; both now share one ticket map.
+
 ## [1.5.4] – 2026-09-06
 
 ### Fixed

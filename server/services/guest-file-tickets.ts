@@ -31,11 +31,18 @@ export type GuestTransferTicket = {
   expiresAt: number;
 };
 
-const tickets = new Map<string, GuestTransferTicket>();
+const TICKET_STORE_KEY = "__proxoraGuestTransferTickets";
+
+function tickets(): Map<string, GuestTransferTicket> {
+  const g = globalThis as typeof globalThis & { [TICKET_STORE_KEY]?: Map<string, GuestTransferTicket> };
+  g[TICKET_STORE_KEY] ??= new Map();
+  return g[TICKET_STORE_KEY];
+}
 
 function pruneTickets(now = Date.now()) {
-  for (const [id, row] of tickets) {
-    if (row.expiresAt <= now) tickets.delete(id);
+  const store = tickets();
+  for (const [id, row] of store) {
+    if (row.expiresAt <= now) store.delete(id);
   }
 }
 
@@ -76,7 +83,7 @@ export function createGuestTransferTicket(
     throw new ValidationError("Ungültiger SSH-Schlüssel");
   }
   const id = randomBytes(24).toString("base64url");
-  tickets.set(id, {
+  tickets().set(id, {
     id,
     userId: input.userId,
     hostId: input.hostId,
@@ -99,9 +106,10 @@ export function createGuestTransferTicket(
 /** Ticket stays valid until TTL so HEAD probes, proxy retries and slow multi-GB starts still work. */
 export function takeGuestTransferTicket(id: string, userId: string, mode: GuestTransferMode): GuestTransferTicket {
   pruneTickets();
-  const row = tickets.get(id);
+  const store = tickets();
+  const row = store.get(id);
   if (!row || row.userId !== userId || row.mode !== mode || row.expiresAt <= Date.now()) {
-    tickets.delete(id);
+    store.delete(id);
     throw new NotFoundError("Transfer abgelaufen oder ungültig");
   }
   return row;

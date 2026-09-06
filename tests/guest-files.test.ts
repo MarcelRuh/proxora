@@ -164,6 +164,8 @@ describe("guest file stream transfer", () => {
     const row = takeGuestTransferTicket(upload.ticket, "u1", "upload");
     expect(row.mode).toBe("upload");
     expect(takeGuestTransferTicket(upload.ticket, "u1", "upload").id).toBe(row.id);
+    const shared = (globalThis as { __proxoraGuestTransferTickets?: Map<string, { id: string }> }).__proxoraGuestTransferTickets;
+    expect(shared?.get(upload.ticket)?.id).toBe(row.id);
   });
 
   it("rejects expired or foreign transfer tickets", () => {
