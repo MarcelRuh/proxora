@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Trash2,
   Upload,
+  AlignLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,8 @@ import { Input, Textarea } from "@/components/ui/input";
 import { ConfirmAction } from "@/components/confirm-action";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { api, ApiRequestError } from "@/lib/api";
-import { bytesToSize } from "@/lib/utils";
+import { bytesToSize, formatPercent } from "@/lib/utils";
+import { formatGuestFileText, prettyGuestFileOnOpen } from "@/lib/guest-file-format";
 import { isAbortError, putBlobWithProgress } from "@/lib/guest-file-transfer";
 import {
   AGENT_FILE_MAX_BYTES,
@@ -322,7 +324,11 @@ export function GuestFilesPanel({
           toast.message(t("files.binary"));
           return;
         }
-        setEditor({ path: entry.path, name: entry.name, text: new TextDecoder().decode(bytes) });
+        setEditor({
+          path: entry.path,
+          name: entry.name,
+          text: prettyGuestFileOnOpen(entry.name, new TextDecoder().decode(bytes)),
+        });
       } catch (error) {
         toast.error(error instanceof Error ? error.message : t("common.failed"));
       } finally {
@@ -339,11 +345,26 @@ export function GuestFilesPanel({
         toast.message(t("files.binary"));
         return;
       }
-      setEditor({ path: entry.path, name: entry.name, text: new TextDecoder().decode(bytes) });
+      setEditor({
+        path: entry.path,
+        name: entry.name,
+        text: prettyGuestFileOnOpen(entry.name, new TextDecoder().decode(bytes)),
+      });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("common.failed"));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function formatEditor() {
+    if (!editor) return;
+    try {
+      const next = formatGuestFileText(editor.name, editor.text);
+      setEditor({ ...editor, text: next });
+      toast.success(t("files.formatted"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("files.formatFailed"));
     }
   }
 
@@ -677,19 +698,23 @@ export function GuestFilesPanel({
                     <p className="truncate text-xs text-muted-foreground">
                       {t("files.transferring", {
                         name: transfer.name,
-                        done: bytesToSize(transfer.sent, 0),
-                        total: bytesToSize(transfer.total, 0),
+                        done: bytesToSize(transfer.sent, 2),
+                        total: bytesToSize(transfer.total, 2),
+                        percent: formatPercent(transfer.total ? Math.min(100, (transfer.sent / transfer.total) * 100) : 0),
                       })}
                     </p>
                     <div className="mt-1 h-1 overflow-hidden rounded bg-muted">
                       <div
                         className="h-full bg-primary transition-[width]"
                         style={{
-                          width: `${transfer.total ? Math.min(100, Math.round((transfer.sent / transfer.total) * 100)) : 0}%`,
+                          width: `${transfer.total ? Math.min(100, Math.round((transfer.sent / transfer.total) * 1000) / 10) : 0}%`,
                         }}
                       />
                     </div>
                   </div>
+                  <span className="shrink-0 text-sm font-medium tabular-nums">
+                    {formatPercent(transfer.total ? Math.min(100, (transfer.sent / transfer.total) * 100) : 0)}
+                  </span>
                   <Button
                     size="sm"
                     variant="outline"
@@ -702,7 +727,7 @@ export function GuestFilesPanel({
                 <p className="border-b border-border px-3 py-1.5 text-xs text-muted-foreground">{t("files.dropHint")}</p>
               ) : null}
               <div className="max-h-[28rem] overflow-auto">
-                <div className="sticky top-0 grid grid-cols-[1fr_7rem_10rem_auto] gap-2 border-b border-border bg-card px-3 py-1.5 text-xs text-muted-foreground">
+                <div className="sticky top-0 grid grid-cols-[1fr_8rem_10rem_auto] gap-2 border-b border-border bg-card px-3 py-1.5 text-xs text-muted-foreground">
                   <span>{t("files.colName")}</span>
                   <span>{t("files.colSize")}</span>
                   <span>{t("files.colMtime")}</span>
@@ -714,7 +739,7 @@ export function GuestFilesPanel({
                   entries.map((entry) => (
                     <div
                       key={entry.path}
-                      className="grid grid-cols-[1fr_7rem_10rem_auto] items-center gap-2 border-b border-border/60 px-3 py-1.5 text-sm hover:bg-primary/5"
+                      className="grid grid-cols-[1fr_8rem_10rem_auto] items-center gap-2 border-b border-border/60 px-3 py-1.5 text-sm hover:bg-primary/5"
                     >
                       <button
                         type="button"
@@ -733,7 +758,7 @@ export function GuestFilesPanel({
                         <span className="truncate">{entry.type === "dir" ? `${entry.name}/` : entry.name}</span>
                       </button>
                       <span className="text-xs text-muted-foreground">
-                        {entry.type === "dir" ? t("files.dir") : bytesToSize(entry.size, 0)}
+                        {entry.type === "dir" ? t("files.dir") : bytesToSize(entry.size, 2)}
                       </span>
                       <span className="truncate text-xs text-muted-foreground">{formatMtime(entry.mtime)}</span>
                       <div className="flex justify-end gap-1">
@@ -770,16 +795,22 @@ export function GuestFilesPanel({
             <DialogDescription className="font-mono">{editor?.path}</DialogDescription>
           </DialogHeader>
           <Textarea
-            className="min-h-[50vh] font-mono text-xs"
+            className="min-h-[50vh] font-mono text-xs [tab-size:2]"
             value={editor?.text ?? ""}
             onChange={(e) => setEditor((cur) => (cur ? { ...cur, text: e.target.value } : cur))}
           />
           <div className="mt-3 flex items-center justify-end gap-2">
             {saving && transfer ? (
               <span className="mr-auto truncate text-xs text-muted-foreground">
-                {bytesToSize(transfer.sent, 0)} / {bytesToSize(transfer.total, 0)}
+                {bytesToSize(transfer.sent, 2)} / {bytesToSize(transfer.total, 2)} ·{" "}
+                {formatPercent(transfer.total ? Math.min(100, (transfer.sent / transfer.total) * 100) : 0)}
               </span>
-            ) : null}
+            ) : (
+              <Button variant="outline" className="mr-auto" disabled={saving || !editor} onClick={() => formatEditor()}>
+                <AlignLeft className="h-4 w-4" />
+                {t("files.format")}
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => {

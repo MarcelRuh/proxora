@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { guestCpuPercent, guestSizeDetail, percentage } from "@/lib/utils";
+import { bytesToSize, guestCpuPercent, guestSizeDetail, percentage } from "@/lib/utils";
+
+describe("bytesToSize", () => {
+  it("shows two fraction digits for megabytes and above", () => {
+    expect(bytesToSize(2 * 1024 * 1024 * 1024, 2)).toBe("2,00 GB");
+    expect(bytesToSize(8 * 1024 * 1024 * 1024, 2)).toBe("8,00 GB");
+    expect(bytesToSize(2.5 * 1024 * 1024 * 1024, 2)).toBe("2,50 GB");
+  });
+
+  it("keeps whole bytes without fraction digits", () => {
+    expect(bytesToSize(512, 2)).toBe("512 B");
+  });
+});
 
 describe("guestSizeDetail", () => {
   it("formats used and total memory", () => {

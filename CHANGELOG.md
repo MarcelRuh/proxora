@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.19] – 2026-09-06
+
+### Changed
+
+- Guest file transfers show percent plus sizes with two decimal places (e.g. 2,14 GB). The editor formats JSON and HTML/XML on open and via a Format button.
+
 ## [1.4.18] – 2026-09-06
 
 ### Changed
