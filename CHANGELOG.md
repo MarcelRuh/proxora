@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.0] – 2026-09-06
+
+### Added
+
+- Official Android app (`android/`): WebView client against your Proxora URL with login, consoles, guest files (upload/download), and the rest of the UI.
+- Consoles and the file explorer open in the same view on Android and small screens (no desktop popups).
+
 ## [1.6.1] – 2026-09-06
 
 ### Fixed

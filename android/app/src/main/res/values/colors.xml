@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="proxora_bg">#0A0A0F</color>
+  <color name="proxora_fg">#F5F5F7</color>
+  <color name="proxora_muted">#9CA3AF</color>
+  <color name="proxora_pink">#FF006E</color>
+  <color name="proxora_surface">#14141C</color>
+  <color name="ic_launcher_background">#0A0A0F</color>
+</resources>

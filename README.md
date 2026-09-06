@@ -5,7 +5,7 @@
 [![CI](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-> Status: **v1.4.13** – self-hosted Proxmox control plane with switchable UI skins.
+> Status: **v1.7.0** – self-hosted Proxmox control plane with an Android client.
 
 Proxora talks to each node through the official **Proxmox VE API**. No cluster required.
 
@@ -84,6 +84,7 @@ Preserves `.env` and data volumes, syncs from GitHub, then runs `docker compose 
 - Optional TOTP 2FA at sign-in
 - Append-only audit log, global search (`Ctrl+K`)
 - Dark neon UI (Dockora-inspired)
+- **Android app** (`android/`) — full UI in a WebView against your instance
 - **In-app self-update** from GitHub with version + progress bar (sidecar owns `docker.sock`)
 
 ## Stack
@@ -93,6 +94,7 @@ Preserves `.env` and data volumes, syncs from GitHub, then runs `docker compose 
 | App | Next.js 16, React 19, TypeScript, Tailwind CSS |
 | API | Route handlers + Prisma/PostgreSQL |
 | Console | xterm.js + WebSocket termproxy |
+| Android | Kotlin WebView client (`android/`) |
 | Runtime | Docker Compose |
 
 ## Quick start (development)
@@ -158,6 +160,7 @@ On the host (Datacenter → Permissions → API Tokens):
 - [Development](./docs/development.md)
 - [Deployment](./docs/deployment.md)
 - [Changelog](./CHANGELOG.md)
+- [Android app](./android/README.md)
 - [Contributing](./CONTRIBUTING.md)
 - [Security](./SECURITY.md)
 

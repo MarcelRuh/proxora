@@ -42,3 +42,14 @@ next-env.d.ts
 .proxora-update-compose.log
 .proxora-update.lock
 /data
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.apk
+*.aab
+*.keystore
+*.jks

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">Proxora</string>
+  <string name="setup_title">Proxora server</string>
+  <string name="setup_hint">URL of your Proxora instance — the same features as the browser: VMs, LXC, console, files, backups, access control.</string>
+  <string name="setup_url">https://proxora.example.com</string>
+  <string name="setup_insecure">Allow self-signed certificates (LAN only)</string>
+  <string name="setup_connect">Connect</string>
+  <string name="setup_invalid">Invalid URL. Use http:// or https:// only.</string>
+  <string name="menu_reload">Reload</string>
+  <string name="menu_server">Change server</string>
+  <string name="download_started">Download: %1$s</string>
+  <string name="ssl_blocked">Certificate rejected. You can allow self-signed certificates under Change server.</string>
+</resources>

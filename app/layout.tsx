@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Orbitron, JetBrains_Mono, Source_Serif_4 } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { UI_THEME_BOOTSTRAP } from "@/lib/ui-theme";
@@ -31,6 +31,19 @@ const sourceSerif = Source_Serif_4({
 export const metadata: Metadata = {
   title: "Proxora",
   description: "Zentrale Verwaltung unabhängiger Proxmox-VE-Hosts.",
+  appleWebApp: {
+    capable: true,
+    title: "Proxora",
+    statusBarStyle: "black-translucent",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: "#0a0a0f",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -4,6 +4,7 @@ import {
   guestToolWindowFeatures,
   guestToolWindowName,
   guestToolWindowSize,
+  shouldOpenGuestToolInPlace,
 } from "@/lib/guest-tool-window";
 
 describe("guest tool windows", () => {
@@ -37,5 +38,11 @@ describe("guest tool windows", () => {
     expect(features).toContain("width=1100");
     expect(features).toMatch(/left=\d+/);
     expect(features).toMatch(/top=\d+/);
+  });
+
+  it("opens guest tools in-place on Android and small screens", () => {
+    expect(shouldOpenGuestToolInPlace("Mozilla/5.0 ProxoraAndroid/1.7.0", 1200)).toBe(true);
+    expect(shouldOpenGuestToolInPlace("Mozilla/5.0 Chrome/120", 390)).toBe(true);
+    expect(shouldOpenGuestToolInPlace("Mozilla/5.0 Chrome/120", 1280)).toBe(false);
   });
 });

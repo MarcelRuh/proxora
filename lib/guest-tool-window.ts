@@ -1,5 +1,7 @@
 export type GuestTool = "console" | "files";
 
+export const PROXORA_ANDROID_UA = "ProxoraAndroid";
+
 export function guestToolBase(kind: "vm" | "lxc"): "vms" | "containers" {
   return kind === "vm" ? "vms" : "containers";
 }
@@ -39,6 +41,15 @@ export function guestToolWindowFeatures(
   return `popup=yes,width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes`;
 }
 
+/** Android app and small screens cannot host a real popup; stay in the same WebView. */
+export function shouldOpenGuestToolInPlace(
+  userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent,
+  innerWidth = typeof window === "undefined" ? 1200 : window.innerWidth,
+): boolean {
+  if (userAgent.includes(PROXORA_ANDROID_UA)) return true;
+  return innerWidth < 768;
+}
+
 /** Opens (or focuses) a small tool window. Falls back to same-tab navigation if popups are blocked. */
 export function openGuestToolWindow(input: {
   kind: "vm" | "lxc";
@@ -48,6 +59,10 @@ export function openGuestToolWindow(input: {
   tool: GuestTool;
 }): Window | null {
   const url = guestToolPath(input);
+  if (shouldOpenGuestToolInPlace()) {
+    window.location.assign(url);
+    return null;
+  }
   const name = guestToolWindowName(input);
   const win = window.open(url, name, guestToolWindowFeatures(input.tool, window));
   if (!win) {
