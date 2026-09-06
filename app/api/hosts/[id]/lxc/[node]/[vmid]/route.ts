@@ -13,12 +13,12 @@ import { assertGuestAccess } from "@/server/auth/session-core";
 import { assertGuestIdentityFree } from "@/server/services/guest-ips";
 import { withHostClient } from "@/server/services/host-service";
 import { waitGuestAction } from "@/server/proxmox/task-wait";
-import { guestIsRunning, lxcMigrateParams } from "@/lib/guest-migrate";
+import { guestIsRunning, inventoryNodesForMigrate, lxcMigrateParams, migrateTargetAllowed } from "@/lib/guest-migrate";
 import { parseGuestConfigIps } from "@/lib/create-ip";
 import { rememberGuestIpCache } from "@/server/services/guest-ip-cache";
 import { durationLabel } from "@/lib/duration";
 import { notifyGuestTaskFailed } from "@/server/notifications/guest-task-fail";
-import { invalidateInventoryCache } from "@/server/services/inventory-cache";
+import { invalidateInventoryCache, loadHostInventory } from "@/server/services/inventory-cache";
 import { shutdownThenDeleteGuest } from "@/server/services/guest-delete";
 
 export const maxDuration = 800;
@@ -141,6 +141,10 @@ export const POST = apiRoute("lxc.view", async (req, session, params) => {
           const target = body.target?.trim() ?? "";
           if (!target) throw new ValidationError("Ziel-Node fehlt");
           if (target === node) throw new ValidationError("Ziel-Node ist der aktuelle Node");
+          const inv = await loadHostInventory(client, params.id);
+          if (!migrateTargetAllowed(inventoryNodesForMigrate(inv.nodes), node, target)) {
+            throw new ValidationError("Migration braucht ein Cluster mit einem anderen Online-Node");
+          }
           const live = await client.lxc.status(node, vmid).catch(() => null);
           result = await client.lxc.migrate(node, vmid, lxcMigrateParams(target, guestIsRunning(String(live?.status ?? ""))));
           break;

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.15] – 2026-09-06
+
+### Changed
+
+- Migrate is hidden on standalone hosts (no cluster / no other online node). Clone stays: it runs on the same node and does not need a cluster. The API rejects migrate without a valid target node.
+
 ## [1.4.14] – 2026-09-06
 
 ### Added

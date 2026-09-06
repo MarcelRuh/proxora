@@ -18,8 +18,8 @@ import { notifyGuestTaskFailed } from "@/server/notifications/guest-task-fail";
 import { isQemuAgentEnabled, vmDiskFromAgent } from "@/server/services/guest-disk";
 import { rememberGuestIpCache } from "@/server/services/guest-ip-cache";
 import { parseAgentNetworkIps, parseGuestConfigIps } from "@/lib/create-ip";
-import { invalidateInventoryCache } from "@/server/services/inventory-cache";
-import { guestIsRunning, qemuMigrateParams } from "@/lib/guest-migrate";
+import { invalidateInventoryCache, loadHostInventory } from "@/server/services/inventory-cache";
+import { guestIsRunning, inventoryNodesForMigrate, migrateTargetAllowed, qemuMigrateParams } from "@/lib/guest-migrate";
 import { shutdownThenDeleteGuest } from "@/server/services/guest-delete";
 
 export const maxDuration = 800;
@@ -179,6 +179,10 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
         const target = body.target?.trim() ?? "";
         if (!target) throw new ValidationError("Ziel-Node fehlt");
         if (target === node) throw new ValidationError("Ziel-Node ist der aktuelle Node");
+        const inv = await loadHostInventory(client, params.id);
+        if (!migrateTargetAllowed(inventoryNodesForMigrate(inv.nodes), node, target)) {
+          throw new ValidationError("Migration braucht ein Cluster mit einem anderen Online-Node");
+        }
         const live = await vm.status(node, vmid).catch(() => null);
         result = await vm.migrate(node, vmid, qemuMigrateParams(target, guestIsRunning(String(live?.status ?? ""))));
         break;

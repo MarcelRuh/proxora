@@ -32,6 +32,7 @@ import { vmHasGraphics } from "@/lib/guest-console";
 import { parseGuestConfigIps } from "@/lib/create-ip";
 import { invalidateDashboardQueries } from "@/components/dashboard/use-dashboard";
 import { peerHostAllowsPermission } from "@/lib/federation-access";
+import { hostAllowsMigrate } from "@/lib/guest-migrate";
 
 type GuestPayload = {
   status: Record<string, unknown>;
@@ -98,6 +99,13 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
   });
+  const isCluster = hosts?.hosts.find((h) => h.id === params.hostId)?.isClusterMember === true;
+  const { data: hostStatus } = useQuery({
+    queryKey: ["host", params.hostId],
+    queryFn: () => api<{ nodes: Array<{ node: string; online: string }> }>(`/api/hosts/${params.hostId}/status`),
+    enabled: Boolean(can.migrate && isCluster),
+    staleTime: 20_000,
+  });
   const [restoreFile, setRestoreFile] = useState<BackupFile | null>(null);
   const { data: backupOverview } = useQuery({
     queryKey: ["backups", params.hostId],
@@ -160,6 +168,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const canFiles =
     can.files &&
     peerHostAllowsPermission(hostMeta ?? { origin: "LOCAL" }, kind === "vm" ? "vm.files" : "lxc.files");
+  const showMigrate = can.migrate && hostAllowsMigrate(isCluster, hostStatus?.nodes, params.node);
 
   if (isLoading) return <PageSkeleton />;
   if (error) {
@@ -248,7 +257,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             onDone={() => void refetch()}
           />
         ) : null}
-        {can.migrate ? (
+        {showMigrate ? (
           <MigrateDialog
             kind={kind}
             hostId={params.hostId}

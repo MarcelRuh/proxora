@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { guestIsRunning, lxcMigrateParams, migrateTargetNodes, qemuMigrateParams } from "@/lib/guest-migrate";
+import { guestIsRunning, hostAllowsMigrate, inventoryNodesForMigrate, lxcMigrateParams, migrateTargetAllowed, migrateTargetNodes, qemuMigrateParams } from "@/lib/guest-migrate";
 
 describe("migrateTargetNodes", () => {
   it("skips the current node and offline nodes", () => {
@@ -17,6 +17,46 @@ describe("migrateTargetNodes", () => {
 
   it("returns nothing on a single-node host", () => {
     expect(migrateTargetNodes([{ node: "pve", online: "online" }], "pve")).toEqual([]);
+  });
+});
+
+describe("hostAllowsMigrate", () => {
+  it("hides migrate without a cluster or a second online node", () => {
+    expect(hostAllowsMigrate(false, [{ node: "pve", online: "online" }], "pve")).toBe(false);
+    expect(hostAllowsMigrate(true, [{ node: "pve", online: "online" }], "pve")).toBe(false);
+    expect(
+      hostAllowsMigrate(
+        true,
+        [
+          { node: "pve1", online: "online" },
+          { node: "pve2", online: "online" },
+        ],
+        "pve1",
+      ),
+    ).toBe(true);
+    expect(
+      hostAllowsMigrate(
+        true,
+        [
+          { node: "pve1", online: "online" },
+          { node: "pve2", online: "offline" },
+        ],
+        "pve1",
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects migrate to the current node or an unknown target", () => {
+    const nodes = [
+      { node: "pve1", online: "online" },
+      { node: "pve2", online: "online" },
+    ];
+    expect(migrateTargetAllowed(nodes, "pve1", "pve2")).toBe(true);
+    expect(migrateTargetAllowed(nodes, "pve1", "pve1")).toBe(false);
+    expect(migrateTargetAllowed(nodes, "pve1", "pve9")).toBe(false);
+    expect(inventoryNodesForMigrate([{ node: "pve1", status: "online" }, { node: "", status: "online" }])).toEqual([
+      { node: "pve1", online: "online" },
+    ]);
   });
 });
 
