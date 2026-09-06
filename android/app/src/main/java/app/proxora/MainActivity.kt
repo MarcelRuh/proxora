@@ -453,7 +453,6 @@ class MainActivity : AppCompatActivity() {
     val bundle = restoreBundle
     restoreBundle = null
     OriginCookies.restore(this, url) {
-      PushClient.restart()
       val open = pendingOpen
       pendingOpen = null
       if (open != null) {
@@ -482,7 +481,6 @@ class MainActivity : AppCompatActivity() {
       override fun onPageFinished(view: WebView, url: String?) {
         if (view !== webView) return
         snapshotSession()
-        PushClient.onSessionReady()
         PushRegistrar.register(this@MainActivity)
         if (pendingReload && !webView.url.isNullOrBlank()) {
           pendingReload = false
