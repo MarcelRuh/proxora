@@ -7,6 +7,8 @@ import {
   permissionForGuestAction,
   ROLE_PRESETS,
   sanitizePermissions,
+  filesOnlyGuestPermissions,
+  normalizeGuestPermissions,
   userHasPermission,
   userHasAnyPermission,
 } from "@/lib/permissions";
@@ -50,7 +52,8 @@ describe("RBAC", () => {
     expect(hasPermission(granted, "vm.shutdown")).toBe(true);
     expect(hasPermission(granted, "vm.force-stop")).toBe(true);
     expect(hasPermission(granted, "lxc.console")).toBe(true);
-    expect(hasPermission(granted, "lxc.files")).toBe(true);
+    expect(hasPermission(granted, "lxc.files.read")).toBe(true);
+    expect(hasPermission(granted, "lxc.files.write")).toBe(true);
     expect(hasPermission(granted, "tasks.cancel")).toBe(true);
     expect(hasPermission(granted, "storage.delete")).toBe(false);
     expect(hasPermission(granted, "vm.reset")).toBe(false);
@@ -66,7 +69,8 @@ describe("RBAC", () => {
     expect(hasPermission(granted, "lxc.view")).toBe(true);
     expect(hasPermission(granted, "lxc.start")).toBe(true);
     expect(hasPermission(granted, "lxc.console")).toBe(true);
-    expect(hasPermission(granted, "lxc.files")).toBe(true);
+    expect(hasPermission(granted, "lxc.files.read")).toBe(true);
+    expect(hasPermission(granted, "lxc.files.write")).toBe(true);
     expect(hasPermission(granted, "vm.view")).toBe(true);
     expect(hasPermission(granted, "lxc.create")).toBe(false);
     expect(hasPermission(granted, "lxc.config")).toBe(false);
@@ -81,6 +85,9 @@ describe("RBAC", () => {
     expect(hasPermission(["vm.stop"], "vm.force-stop")).toBe(true);
     expect(hasPermission(["vm.force-stop"], "vm.shutdown")).toBe(false);
     expect(sanitizePermissions(["hosts.edit", "vm.view"])).toEqual(["hosts.update", "hosts.credentials", "vm.view"]);
+    expect(hasPermission(["vm.files"], "vm.files.read")).toBe(true);
+    expect(hasPermission(["vm.files"], "vm.files.write")).toBe(true);
+    expect(hasPermission(["lxc.files.read"], "lxc.files.write")).toBe(false);
   });
 
   it("maps guest actions to single permissions", () => {
@@ -125,6 +132,24 @@ describe("RBAC", () => {
     expect(userHasPermission(holder, "users.view", "h1")).toBe(true);
     expect(userHasPermission(holder, "hosts.create", "h1")).toBe(false);
   });
+
+  it("lets a guest override beat the role and host", () => {
+    const holder = {
+      role: { permissions: ["lxc.view", "lxc.start", "lxc.files.read", "lxc.files.write"] },
+      hostPermissions: { h1: ["lxc.view", "lxc.start"] },
+      guestPermissions: { "h1:lxc:243": ["lxc.view", "lxc.files.read", "lxc.files.write"] },
+    };
+    const guest = { hostId: "h1", kind: "lxc" as const, vmid: 243 };
+    expect(userHasPermission(holder, "lxc.files.read", "h1", guest)).toBe(true);
+    expect(userHasPermission(holder, "lxc.start", "h1", guest)).toBe(false);
+    expect(userHasPermission(holder, "lxc.start", "h1", { hostId: "h1", kind: "lxc", vmid: 100 })).toBe(true);
+    expect(userHasPermission(holder, "lxc.files.read", "h1", { hostId: "h1", kind: "lxc", vmid: 100 })).toBe(false);
+  });
+
+  it("treats files-only guest grants as view plus files", () => {
+    expect(filesOnlyGuestPermissions("lxc")).toEqual(["lxc.view", "lxc.files.read", "lxc.files.write"]);
+    expect(normalizeGuestPermissions("vm", ["vm.files.write"])).toEqual(["vm.view", "vm.files.read", "vm.files.write"]);
+  });
 });
 
 describe("guest scope", () => {
@@ -168,5 +193,12 @@ describe("guest scope", () => {
     const locked: AccessScope = { allowedHostIds: [], allowedGuests: null };
     expect(canAccessHost(locked, "h1")).toBe(false);
     expect(filterGuestsForUser(locked, "h1", "lxc", [{ vmid: 1 }])).toEqual([]);
+  });
+
+  it("stores per-guest permission overrides", () => {
+    const scope = sessionScopeFromGrants([], [
+      { hostId: "h1", kind: "lxc", vmid: 243, override: true, permissions: ["lxc.view", "lxc.files.read"] },
+    ]);
+    expect(scope.guestPermissions).toEqual({ "h1:lxc:243": ["lxc.view", "lxc.files.read"] });
   });
 });

@@ -23,6 +23,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { ConfirmAction } from "@/components/confirm-action";
 import { GuestFileEditor } from "@/components/guests/guest-file-editor";
 import { useI18n } from "@/components/i18n/locale-provider";
+import { useCan } from "@/components/auth/session-user";
 import { api, ApiRequestError } from "@/lib/api";
 import { bytesToSize, formatPercent } from "@/lib/utils";
 import { formatGuestFileText, prettyGuestFileOnOpen } from "@/lib/guest-file-format";
@@ -58,6 +59,7 @@ import {
   type GuestTransferMode,
   type GuestUploadPartial,
 } from "@/lib/guest-files";
+import { guestFilePermission } from "@/lib/permissions";
 
 type Session = {
   target: string;
@@ -135,6 +137,7 @@ export function GuestFilesPanel({
   ips,
   running,
   agentEnabled,
+  windows,
   fill,
 }: {
   hostId: string;
@@ -144,6 +147,7 @@ export function GuestFilesPanel({
   ips: string[];
   running: boolean;
   agentEnabled?: boolean;
+  windows?: boolean;
   fill?: boolean;
 }) {
   const { t } = useI18n();
@@ -189,6 +193,7 @@ export function GuestFilesPanel({
   const connected = via !== null;
   const maxBytes = via === "agent" ? AGENT_FILE_MAX_BYTES : null;
   const transferring = Boolean(transfer);
+  const canWrite = useCan(guestFilePermission(kind, "write"), hostId, { hostId, kind, vmid });
 
   async function request(op: "list" | "read" | "write" | "mkdir" | "delete" | "rename" | "transfer-ticket", extra: Record<string, unknown> = {}) {
     const mode = extra.via === "sftp" || session ? "sftp" : "agent";
@@ -250,14 +255,14 @@ export function GuestFilesPanel({
 
   useEffect(() => {
     if (opened.current) return;
-    if (kind !== "vm" || !running || !agentEnabled) {
+    if (windows || kind !== "vm" || !running || !agentEnabled) {
       setShowSsh(true);
       return;
     }
     opened.current = true;
     void loadDir("/", "agent");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per guest
-  }, [kind, running, hostId, node, vmid]);
+  }, [kind, running, hostId, node, vmid, windows]);
 
   async function connect() {
     const next: Session = {
@@ -664,6 +669,12 @@ export function GuestFilesPanel({
 
   return (
     <Card className={fill ? "flex h-full min-h-0 flex-col overflow-hidden rounded-none border-0 shadow-none" : "overflow-hidden"}>
+      {windows ? (
+        <CardContent className="p-4">
+          <p className="text-sm text-muted-foreground">{t("files.windowsUnsupported")}</p>
+        </CardContent>
+      ) : (
+      <>
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div>
           {fill ? null : <h2 className="text-base font-semibold">{t("files.title")}</h2>}
@@ -832,7 +843,7 @@ export function GuestFilesPanel({
               className={`flex min-w-0 flex-1 flex-col ${fill ? "min-h-0" : ""} ${dragging ? "bg-primary/5" : ""}`}
               onDragEnter={(e) => {
                 e.preventDefault();
-                if (via === "sftp") setDragging(true);
+                if (canWrite && via === "sftp") setDragging(true);
               }}
               onDragOver={(e) => e.preventDefault()}
               onDragLeave={(e) => {
@@ -842,7 +853,7 @@ export function GuestFilesPanel({
               onDrop={(e) => {
                 e.preventDefault();
                 setDragging(false);
-                if (via !== "sftp" || transferring) return;
+                if (!canWrite || via !== "sftp" || transferring) return;
                 const files = Array.from(e.dataTransfer.files);
                 if (files.length) void uploadFiles(files);
               }}
@@ -872,6 +883,8 @@ export function GuestFilesPanel({
                 ))}
               </div>
               <div className="flex flex-wrap gap-2 border-b border-border px-3 py-2">
+                {canWrite ? (
+                  <>
                 <input
                   ref={fileRef}
                   type="file"
@@ -917,6 +930,10 @@ export function GuestFilesPanel({
                     {t("files.newFile")}
                   </Button>
                 </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{t("files.readOnly")}</p>
+                )}
               </div>
               {transfer ? (
                 <div className="flex items-center gap-3 border-b border-border px-3 py-2">
@@ -953,7 +970,7 @@ export function GuestFilesPanel({
                     {t("files.cancelTransfer")}
                   </Button>
                 </div>
-              ) : via === "sftp" ? (
+              ) : via === "sftp" && canWrite ? (
                 <p className="border-b border-border px-3 py-1.5 text-xs text-muted-foreground">{t("files.dropHint")}</p>
               ) : null}
               {via === "sftp" && partials.length
@@ -1015,34 +1032,38 @@ export function GuestFilesPanel({
                       </span>
                       <span className="truncate text-xs text-muted-foreground">{formatMtime(entry.mtime)}</span>
                       <div className="flex justify-end gap-1">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          disabled={busy || transferring}
-                          onClick={() => {
-                            setRename({ path: entry.path, name: entry.name });
-                            setRenameTo(entry.name);
-                          }}
-                          aria-label={t("files.rename")}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
+                        {canWrite ? (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            disabled={busy || transferring}
+                            onClick={() => {
+                              setRename({ path: entry.path, name: entry.name });
+                              setRenameTo(entry.name);
+                            }}
+                            aria-label={t("files.rename")}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        ) : null}
                         {entry.type === "file" ? (
                           <Button size="icon" variant="ghost" disabled={busy || transferring} onClick={() => void download(entry)} aria-label={t("files.download")}>
                             <Download className="h-4 w-4" />
                           </Button>
                         ) : null}
-                        <ConfirmAction
-                          title={t("files.deleteTitle", { name: entry.name })}
-                          description={entry.path}
-                          actionLabel={t("files.delete")}
-                          destructive
-                          onConfirm={() => remove(entry)}
-                        >
-                          <Button size="icon" variant="ghost" disabled={busy} aria-label={t("files.delete")}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </ConfirmAction>
+                        {canWrite ? (
+                          <ConfirmAction
+                            title={t("files.deleteTitle", { name: entry.name })}
+                            description={entry.path}
+                            actionLabel={t("files.delete")}
+                            destructive
+                            onConfirm={() => remove(entry)}
+                          >
+                            <Button size="icon" variant="ghost" disabled={busy} aria-label={t("files.delete")}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </ConfirmAction>
+                        ) : null}
                       </div>
                     </div>
                   ))
@@ -1059,9 +1080,9 @@ export function GuestFilesPanel({
             <DialogTitle>{editor?.name}</DialogTitle>
             <DialogDescription className="font-mono">{editor?.path}</DialogDescription>
           </DialogHeader>
-          <GuestFileEditor
+            <GuestFileEditor
             value={editor?.text ?? ""}
-            disabled={saving}
+            disabled={saving || !canWrite}
             onChange={(text) => setEditor((cur) => (cur ? { ...cur, text } : cur))}
           />
           <div className="mt-3 flex items-center justify-end gap-2">
@@ -1088,7 +1109,7 @@ export function GuestFilesPanel({
             >
               {t("common.cancel")}
             </Button>
-            <Button disabled={saving} onClick={() => void saveEditor()}>
+            <Button disabled={saving || !canWrite} onClick={() => void saveEditor()}>
               {t("files.saveFile")}
             </Button>
           </div>
@@ -1185,6 +1206,8 @@ export function GuestFilesPanel({
           </div>
         </DialogContent>
       </Dialog>
+      </>
+      )}
     </Card>
   );
 }

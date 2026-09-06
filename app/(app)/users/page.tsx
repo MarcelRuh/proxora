@@ -17,7 +17,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
 import type { PublicHost } from "@/lib/types";
-import type { GuestScope } from "@/lib/guest-scope";
+import type { GuestGrant } from "@/lib/guest-scope";
 
 type UserRow = {
   id: string;
@@ -30,7 +30,7 @@ type UserRow = {
   role: { name: string; id: string };
   hostIds: string[];
   hosts: HostGrant[];
-  guests: GuestScope[];
+  guests: GuestGrant[];
 };
 
 type RoleRow = { id: string; name: string; slug: string; permissions: string[] };
@@ -41,7 +41,7 @@ const emptyForm = {
   password: "",
   roleId: "",
   hosts: [] as HostGrant[],
-  guests: [] as GuestScope[],
+  guests: [] as GuestGrant[],
 };
 
 export default function UsersPage() {
@@ -61,7 +61,7 @@ export default function UsersPage() {
     roleId: "",
     status: "ACTIVE",
     hosts: [] as HostGrant[],
-    guests: [] as GuestScope[],
+    guests: [] as GuestGrant[],
   });
 
   const create = useMutation({
@@ -140,7 +140,9 @@ export default function UsersPage() {
                       : t("users.scopeSummary", {
                           hosts: u.hostIds.length,
                           guests: u.guests?.length ?? 0,
-                          custom: (u.hosts ?? []).filter((h) => h.permissions).length,
+                          custom:
+                            (u.hosts ?? []).filter((h) => h.permissions).length +
+                            (u.guests ?? []).filter((g) => g.permissions).length,
                         })}
                   </td>
                   <td className="text-right">

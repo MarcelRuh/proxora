@@ -22,6 +22,7 @@ export type SessionUser = {
   allowedHostIds: string[] | null;
   allowedGuests: GuestScope[] | null;
   hostPermissions: Record<string, string[] | null> | null;
+  guestPermissions: Record<string, string[] | null> | null;
 };
 
 export type AuthSession = {
@@ -35,7 +36,7 @@ type SessionUserSource = {
   email: string;
   role: { id: string; slug: string; name: string; permissions: string[] };
   hostAccess: Array<{ hostId: string; permissions?: string[]; override?: boolean }>;
-  guestAccess: Array<{ hostId: string; kind: string; vmid: number }>;
+  guestAccess: Array<{ hostId: string; kind: string; vmid: number; permissions?: string[]; override?: boolean }>;
 };
 
 export function toSessionUser(user: SessionUserSource): SessionUser {
@@ -44,6 +45,14 @@ export function toSessionUser(user: SessionUserSource): SessionUser {
     ? Object.fromEntries(
         Object.entries(scope.hostPermissions).map(([hostId, granted]) => [
           hostId,
+          granted ? sanitizePermissions(granted) : null,
+        ]),
+      )
+    : null;
+  const guestPermissions = scope.guestPermissions
+    ? Object.fromEntries(
+        Object.entries(scope.guestPermissions).map(([key, granted]) => [
+          key,
           granted ? sanitizePermissions(granted) : null,
         ]),
       )
@@ -64,6 +73,7 @@ export function toSessionUser(user: SessionUserSource): SessionUser {
     ),
     allowedGuests: scope.allowedGuests,
     hostPermissions,
+    guestPermissions,
   };
 }
 

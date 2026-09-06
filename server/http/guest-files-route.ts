@@ -4,10 +4,11 @@ import { json } from "@/server/http/respond";
 import { clientIp } from "@/server/auth/session";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
-import { ValidationError } from "@/lib/errors";
+import { ForbiddenError, ValidationError } from "@/lib/errors";
+import { guestFilePermission, userHasPermission } from "@/lib/permissions";
 import { assertGuestAccess } from "@/server/auth/session-core";
 import { getHostOrThrow } from "@/server/services/host-service";
-import { runGuestFileOp, type GuestFileOp } from "@/server/services/guest-files";
+import { assertLinuxGuestFiles, runGuestFileOp, type GuestFileOp } from "@/server/services/guest-files";
 import { createGuestTransferTicket } from "@/server/services/guest-file-tickets";
 import { GUEST_FILE_MAX_BYTES, GUEST_SSH_KEY_MAX, hasGuestSshAuth } from "@/lib/guest-files";
 
@@ -47,12 +48,23 @@ const AUDIT: Record<GuestFileOp, string> = {
 };
 
 export function guestFilesRoute(kind: "vm" | "lxc") {
-  const permission = kind === "vm" ? "vm.files" : "lxc.files";
-  return apiRoute(permission, async (req, session, params) => {
+  const read = guestFilePermission(kind, "read");
+  const write = guestFilePermission(kind, "write");
+  return apiRoute([read, write], async (req, session, params) => {
     const vmid = Number(params.vmid);
     if (!Number.isInteger(vmid) || vmid < 1) throw new ValidationError("Invalid VMID");
     assertGuestAccess(session.user, params.id, kind, vmid);
     const body = bodySchema.parse(await req.json());
+    const guest = { hostId: params.id, kind, vmid };
+    const mutating =
+      body.op === "write" ||
+      body.op === "mkdir" ||
+      body.op === "delete" ||
+      body.op === "rename" ||
+      (body.op === "transfer-ticket" && body.mode === "upload");
+    if (!userHasPermission(session.user, mutating ? write : read, params.id, guest)) {
+      throw new ForbiddenError();
+    }
     const via = body.via ?? (kind === "vm" && !hasGuestSshAuth(body) ? "agent" : "sftp");
     if (via === "agent" && kind !== "vm") {
       throw new ValidationError("Der QEMU Agent gibt es nur bei VMs. LXC braucht SSH im Container.");
@@ -61,6 +73,7 @@ export function guestFilesRoute(kind: "vm" | "lxc") {
       throw new ValidationError("Path fehlt");
     }
     const host = await getHostOrThrow(params.id, session.user);
+    await assertLinuxGuestFiles(host, kind, params.node, vmid);
     if (body.op === "transfer-ticket") {
       if (via !== "sftp") {
         throw new ValidationError("Stream-Transfer nur per SFTP");

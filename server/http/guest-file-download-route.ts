@@ -3,6 +3,7 @@ import { json } from "@/server/http/respond";
 import { clientIp } from "@/server/auth/session";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
+import { guestFilePermission } from "@/lib/permissions";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { assertGuestAccess } from "@/server/auth/session-core";
 import { getHostOrThrow } from "@/server/services/host-service";
@@ -32,7 +33,7 @@ function loadTicket(
 }
 
 export function guestFileDownloadHeadRoute(kind: "vm" | "lxc") {
-  const permission = kind === "vm" ? "vm.files" : "lxc.files";
+  const permission = guestFilePermission(kind, "read");
   return apiRoute(permission, async (req, session, params) => {
     const ticket = loadTicket(req, session.user.id, params, kind, "download");
     assertGuestAccess(session.user, params.id, kind, ticket.vmid);
@@ -41,7 +42,7 @@ export function guestFileDownloadHeadRoute(kind: "vm" | "lxc") {
 }
 
 export function guestFileDownloadRoute(kind: "vm" | "lxc") {
-  const permission = kind === "vm" ? "vm.files" : "lxc.files";
+  const permission = guestFilePermission(kind, "read");
   return apiRoute(permission, async (req, session, params) => {
     const ticket = loadTicket(req, session.user.id, params, kind, "download");
     assertGuestAccess(session.user, params.id, kind, ticket.vmid);
@@ -87,7 +88,7 @@ export function guestFileDownloadRoute(kind: "vm" | "lxc") {
 }
 
 export function guestFileUploadRoute(kind: "vm" | "lxc") {
-  const permission = kind === "vm" ? "vm.files" : "lxc.files";
+  const permission = guestFilePermission(kind, "write");
   return apiRoute(permission, async (req, session, params) => {
     const ticket = loadTicket(req, session.user.id, params, kind, "upload");
     assertGuestAccess(session.user, params.id, kind, ticket.vmid);

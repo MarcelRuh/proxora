@@ -118,19 +118,19 @@ describe("guest file paths", () => {
 
 describe("guest file permissions", () => {
   it("keeps files off viewers and on operators", () => {
-    expect(hasPermission(ROLE_PRESETS.viewer.permissions, "lxc.files")).toBe(false);
-    expect(hasPermission(ROLE_PRESETS.viewer.permissions, "vm.files")).toBe(false);
-    expect(hasPermission(ROLE_PRESETS.operator.permissions, "lxc.files")).toBe(true);
-    expect(hasPermission(ROLE_PRESETS.operator.permissions, "vm.files")).toBe(true);
-    expect(hasPermission(ROLE_PRESETS.nothing.permissions, "lxc.files")).toBe(true);
-    expect(hasPermission(ROLE_PRESETS.nothing.permissions, "vm.files")).toBe(true);
+    expect(hasPermission(ROLE_PRESETS.viewer.permissions, "lxc.files.read")).toBe(false);
+    expect(hasPermission(ROLE_PRESETS.viewer.permissions, "vm.files.write")).toBe(false);
+    expect(hasPermission(ROLE_PRESETS.operator.permissions, "lxc.files.read")).toBe(true);
+    expect(hasPermission(ROLE_PRESETS.operator.permissions, "vm.files.write")).toBe(true);
+    expect(hasPermission(ROLE_PRESETS.nothing.permissions, "lxc.files.read")).toBe(true);
+    expect(hasPermission(ROLE_PRESETS.nothing.permissions, "vm.files.write")).toBe(true);
     expect(hasPermission(ROLE_PRESETS.nothing.permissions, "hosts.view")).toBe(false);
   });
 
   it("does not include SFTP in view-level host shares", () => {
-    expect(shareHasPermission("view", null, "lxc.files")).toBe(false);
-    expect(shareHasPermission("control", null, "lxc.files")).toBe(true);
-    expect(shareHasPermission("control", null, "vm.files")).toBe(true);
+    expect(shareHasPermission("view", null, "lxc.files.read")).toBe(false);
+    expect(shareHasPermission("control", null, "lxc.files.read")).toBe(true);
+    expect(shareHasPermission("control", null, "vm.files.write")).toBe(true);
   });
 });
 

@@ -16,6 +16,18 @@ export function hostIdFromApiPath(pathname: string, params: Record<string, strin
   return params.id ?? decodeURIComponent(raw);
 }
 
+export function guestRefFromApiPath(
+  pathname: string,
+  params: Record<string, string>,
+): { hostId: string; kind: "vm" | "lxc"; vmid: number } | undefined {
+  const m = /^\/api\/hosts\/([^/]+)\/(vms|lxc)\/([^/]+)\/([^/]+)/.exec(pathname);
+  if (!m) return undefined;
+  const hostId = params.id ?? decodeURIComponent(m[1] ?? "");
+  const vmid = Number(params.vmid ?? m[4]);
+  if (!hostId || !Number.isInteger(vmid) || vmid < 1) return undefined;
+  return { hostId, kind: m[2] === "lxc" ? "lxc" : "vm", vmid };
+}
+
 export function apiRoute(
   permission: Permission | Permission[] | null,
   handler: (request: NextRequest, session: AuthSession, params: Record<string, string>) => Promise<Response>,
@@ -27,8 +39,10 @@ export function apiRoute(
       const params = ctx?.params ? await ctx.params : {};
       if (permission) {
         const needed = Array.isArray(permission) ? permission : [permission];
-        const hostId = hostIdFromApiPath(new URL(request.url).pathname, params);
-        if (!userHasAnyPermission(session.user, needed, hostId)) {
+        const pathname = new URL(request.url).pathname;
+        const hostId = hostIdFromApiPath(pathname, params);
+        const guest = guestRefFromApiPath(pathname, params);
+        if (!userHasAnyPermission(session.user, needed, hostId, guest)) {
           throw new ForbiddenError();
         }
       }

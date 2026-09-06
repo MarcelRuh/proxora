@@ -5,12 +5,18 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import type { Guest } from "@/lib/types";
-import type { GuestScope } from "@/lib/guest-scope";
+import type { GuestGrant, GuestScope } from "@/lib/guest-scope";
 import { guestScopeKey } from "@/lib/guest-scope";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { Button } from "@/components/ui/button";
 import { RolePermissionPicker } from "@/components/access/role-permission-picker";
-import { hostGrantCatalog, hostScopedFromRole } from "@/lib/permissions";
+import {
+  filesOnlyGuestPermissions,
+  guestGrantCatalog,
+  guestScopedFromRole,
+  hostGrantCatalog,
+  hostScopedFromRole,
+} from "@/lib/permissions";
 
 export type HostGrant = {
   hostId: string;
@@ -27,11 +33,11 @@ export function UserScopeFields({
   onGuestNames,
 }: {
   hosts: HostGrant[];
-  guests: GuestScope[];
+  guests: GuestGrant[];
   rolePermissions?: readonly string[];
   roleSlug?: string;
   onHosts: (next: HostGrant[]) => void;
-  onGuests: (next: GuestScope[]) => void;
+  onGuests: (next: GuestGrant[]) => void;
   onGuestNames?: (names: Record<string, string>) => void;
 }) {
   const { t } = useI18n();
@@ -44,6 +50,7 @@ export function UserScopeFields({
   const listed = hostIds.length ? allHosts.filter((h) => hostIds.includes(h.id)) : allHosts;
   const [openHost, setOpenHost] = useState<string | null>(null);
   const [openGuestHost, setOpenGuestHost] = useState<string | null>(null);
+  const [openGuest, setOpenGuest] = useState<string | null>(null);
   const guestHostIds = [...new Set([...guests.map((g) => g.hostId), ...(openGuestHost ? [openGuestHost] : [])])].sort();
   const { data: inventory } = useQuery({
     queryKey: ["scope-guests", guestHostIds],
@@ -97,15 +104,38 @@ export function UserScopeFields({
   }
 
   function toggleGuest(scope: GuestScope, on: boolean) {
+    const key = guestScopeKey(scope);
     if (on) {
-      if (guests.some((g) => guestScopeKey(g) === guestScopeKey(scope))) return;
-      onGuests([...guests, scope]);
+      if (guests.some((g) => guestScopeKey(g) === key)) return;
+      onGuests([...guests, { ...scope, permissions: null }]);
       if (roleSlug !== "nothing" && grants.length && !hostIds.includes(scope.hostId)) {
         onHosts([...grants, { hostId: scope.hostId, permissions: null }]);
       }
       return;
     }
-    onGuests(guests.filter((g) => guestScopeKey(g) !== guestScopeKey(scope)));
+    onGuests(guests.filter((g) => guestScopeKey(g) !== key));
+    if (openGuest === key) setOpenGuest(null);
+  }
+
+  function patchGuest(scope: GuestScope, next: GuestGrant) {
+    onGuests(guests.map((g) => (guestScopeKey(g) === guestScopeKey(scope) ? next : g)));
+  }
+
+  function setGuestOverride(scope: GuestScope, on: boolean) {
+    patchGuest(scope, {
+      ...scope,
+      permissions: on ? guestScopedFromRole(scope.kind, rolePermissions) : null,
+    });
+    setOpenGuest(on ? guestScopeKey(scope) : null);
+  }
+
+  function setGuestFilesOnly(scope: GuestScope) {
+    patchGuest(scope, { ...scope, permissions: filesOnlyGuestPermissions(scope.kind) });
+    setOpenGuest(guestScopeKey(scope));
+  }
+
+  function setGuestPerms(scope: GuestScope, permissions: string[]) {
+    patchGuest(scope, { ...scope, permissions });
   }
 
   return (
@@ -184,14 +214,24 @@ export function UserScopeFields({
                         kind="vm"
                         items={loaded.vms}
                         guests={guests}
+                        openGuest={openGuest}
                         onToggle={toggleGuest}
+                        onOverride={setGuestOverride}
+                        onFilesOnly={setGuestFilesOnly}
+                        onPerms={setGuestPerms}
+                        onOpen={setOpenGuest}
                       />
                       <GuestChecks
                         hostId={host.id}
                         kind="lxc"
                         items={loaded.containers}
                         guests={guests}
+                        openGuest={openGuest}
                         onToggle={toggleGuest}
+                        onOverride={setGuestOverride}
+                        onFilesOnly={setGuestFilesOnly}
+                        onPerms={setGuestPerms}
+                        onOpen={setOpenGuest}
                       />
                       {loaded.vms.length === 0 && loaded.containers.length === 0 ? (
                         <p className="text-xs text-muted-foreground">{t("users.noGuestsOnHost")}</p>
@@ -215,28 +255,75 @@ function GuestChecks({
   kind,
   items,
   guests,
+  openGuest,
   onToggle,
+  onOverride,
+  onFilesOnly,
+  onPerms,
+  onOpen,
 }: {
   hostId: string;
   kind: "vm" | "lxc";
   items: Guest[];
-  guests: GuestScope[];
+  guests: GuestGrant[];
+  openGuest: string | null;
   onToggle: (scope: GuestScope, on: boolean) => void;
+  onOverride: (scope: GuestScope, on: boolean) => void;
+  onFilesOnly: (scope: GuestScope) => void;
+  onPerms: (scope: GuestScope, permissions: string[]) => void;
+  onOpen: (key: string | null) => void;
 }) {
+  const { t } = useI18n();
   if (!items.length) return null;
   return (
-    <div className="mb-2 grid gap-1">
+    <div className="mb-2 grid gap-2">
       {items.map((g) => {
         const scope: GuestScope = { hostId, kind, vmid: g.vmid };
-        const checked = guests.some((x) => guestScopeKey(x) === guestScopeKey(scope));
+        const key = guestScopeKey(scope);
+        const grant = guests.find((x) => guestScopeKey(x) === key);
+        const checked = Boolean(grant);
+        const custom = Boolean(grant?.permissions);
+        const expanded = openGuest === key && custom;
         return (
-          <label key={`${kind}-${g.vmid}`} className="flex items-center gap-2">
-            <input type="checkbox" checked={checked} onChange={(e) => onToggle(scope, e.target.checked)} />
-            <span>
-              {kind.toUpperCase()} {g.vmid}
-              <span className="text-muted-foreground"> · {g.name}</span>
-            </span>
-          </label>
+          <div key={`${kind}-${g.vmid}`} className="rounded-[4px] border border-border/70 p-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex min-w-0 flex-1 items-center gap-2">
+                <input type="checkbox" checked={checked} onChange={(e) => onToggle(scope, e.target.checked)} />
+                <span>
+                  {kind.toUpperCase()} {g.vmid}
+                  <span className="text-muted-foreground"> · {g.name}</span>
+                </span>
+              </label>
+              {checked ? (
+                <>
+                  <Button type="button" size="sm" variant="outline" onClick={() => onFilesOnly(scope)}>
+                    {t("users.guestFilesOnly")}
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => onOverride(scope, !custom)}>
+                    {custom ? t("users.hostInherit") : t("users.hostCustomize")}
+                  </Button>
+                </>
+              ) : null}
+            </div>
+            {checked && custom ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("users.hostOverrideMeta", { n: grant?.permissions?.length ?? 0 })}
+              </p>
+            ) : null}
+            {expanded ? (
+              <div className="mt-3 border-t border-border pt-3">
+                <RolePermissionPicker
+                  catalog={guestGrantCatalog(kind)}
+                  value={grant?.permissions ?? []}
+                  onChange={(permissions) => onPerms(scope, permissions)}
+                />
+              </div>
+            ) : custom && checked ? (
+              <Button type="button" size="sm" variant="ghost" className="mt-1" onClick={() => onOpen(key)}>
+                {t("users.hostEditPerms")}
+              </Button>
+            ) : null}
+          </div>
         );
       })}
     </div>

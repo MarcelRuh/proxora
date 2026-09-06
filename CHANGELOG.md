@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.6.0] – 2026-09-06
+
+### Added
+
+- File rights are split into read (list/download) and write (upload/edit/delete). Existing `vm.files` / `lxc.files` still mean both.
+- Per-guest rights on the user: pick one LXC or VM and set e.g. files only, independently of the role.
+- Windows VMs no longer offer the file explorer (Linux guests and LXC unchanged).
+
 ## [1.5.10] – 2026-09-06
 
 ### Changed

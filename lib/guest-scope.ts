@@ -4,6 +4,10 @@ export type GuestScope = {
   vmid: number;
 };
 
+export type GuestGrant = GuestScope & {
+  permissions: string[] | null;
+};
+
 export type AccessScope = {
   allowedHostIds: string[] | null;
   allowedGuests: GuestScope[] | null;
@@ -19,12 +23,17 @@ export type GuestAccessGrant = {
   hostId: string;
   kind: string;
   vmid: number;
+  permissions?: string[];
+  override?: boolean;
 };
 
 export function sessionScopeFromGrants(
   hostAccess: HostAccessGrant[],
   guestAccess: GuestAccessGrant[],
-): AccessScope & { hostPermissions: Record<string, string[] | null> | null } {
+): AccessScope & {
+  hostPermissions: Record<string, string[] | null> | null;
+  guestPermissions: Record<string, string[] | null> | null;
+} {
   const guests: GuestScope[] = guestAccess.flatMap((row) => {
     const kind = parseGuestKind(row.kind);
     return kind ? [{ hostId: row.hostId, kind, vmid: row.vmid }] : [];
@@ -43,10 +52,20 @@ export function sessionScopeFromGrants(
     if (!(hostId in hostPermissions)) hostPermissions[hostId] = null;
   }
 
+  const guestPermissions: Record<string, string[] | null> = {};
+  for (const row of guestAccess) {
+    const kind = parseGuestKind(row.kind);
+    if (!kind) continue;
+    guestPermissions[guestScopeKey({ hostId: row.hostId, kind, vmid: row.vmid })] = row.override
+      ? [...(row.permissions ?? [])]
+      : null;
+  }
+
   return {
     allowedHostIds,
     allowedGuests: guests.length ? guests : null,
     hostPermissions: Object.keys(hostPermissions).length ? hostPermissions : null,
+    guestPermissions: Object.keys(guestPermissions).length ? guestPermissions : null,
   };
 }
 

@@ -23,7 +23,7 @@ import { GUEST_ROW_ESTIMATE_PX, GUEST_TABLE_VIRTUALIZE_AFTER, windowRows } from 
 import type { Guest } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useSessionUser } from "@/components/auth/session-user";
-import { userHasPermission, type Permission } from "@/lib/permissions";
+import { userHasAnyPermission, userHasPermission, guestFilePermission, type Permission } from "@/lib/permissions";
 import { invalidateDashboardQueries, applyGuestIpsToCache } from "@/components/dashboard/use-dashboard";
 import { openGuestToolWindow } from "@/lib/guest-tool-window";
 
@@ -390,15 +390,21 @@ export const GuestTable = memo(function GuestTable({
                 const hid = g.hostId ?? hostId ?? "";
                 const row = rowKind(g);
                 const prefix = row === "vm" ? "vm" : "lxc";
+                const guest = { hostId: hid, kind: row, vmid: g.vmid };
                 const perms = {
-                  start: userHasPermission(user, `${prefix}.start` as Permission, hid),
-                  shutdown: userHasPermission(user, `${prefix}.shutdown` as Permission, hid),
-                  reboot: userHasPermission(user, `${prefix}.reboot` as Permission, hid),
-                  stop: userHasPermission(user, `${prefix}.force-stop` as Permission, hid),
-                  console: userHasPermission(user, `${prefix}.console` as Permission, hid),
-                  files: userHasPermission(user, `${prefix}.files` as Permission, hid),
-                  snapshot: userHasPermission(user, `${prefix}.snapshot.create` as Permission, hid),
-                  delete: userHasPermission(user, `${prefix}.delete` as Permission, hid),
+                  start: userHasPermission(user, `${prefix}.start` as Permission, hid, guest),
+                  shutdown: userHasPermission(user, `${prefix}.shutdown` as Permission, hid, guest),
+                  reboot: userHasPermission(user, `${prefix}.reboot` as Permission, hid, guest),
+                  stop: userHasPermission(user, `${prefix}.force-stop` as Permission, hid, guest),
+                  console: userHasPermission(user, `${prefix}.console` as Permission, hid, guest),
+                  files: userHasAnyPermission(
+                    user,
+                    [guestFilePermission(row, "read"), guestFilePermission(row, "write")],
+                    hid,
+                    guest,
+                  ),
+                  snapshot: userHasPermission(user, `${prefix}.snapshot.create` as Permission, hid, guest),
+                  delete: userHasPermission(user, `${prefix}.delete` as Permission, hid, guest),
                 };
                 const kindLabel = row === "vm" ? "VM" : "LXC";
                 const detailBase = row === "vm" ? "vms" : "containers";

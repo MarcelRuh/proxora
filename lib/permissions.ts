@@ -19,7 +19,8 @@ export const PERMISSIONS = [
   "vm.pause",
   "vm.resume",
   "vm.console",
-  "vm.files",
+  "vm.files.read",
+  "vm.files.write",
   "vm.snapshot.create",
   "vm.snapshot.delete",
   "vm.snapshot.rollback",
@@ -34,7 +35,8 @@ export const PERMISSIONS = [
   "lxc.force-stop",
   "lxc.reboot",
   "lxc.console",
-  "lxc.files",
+  "lxc.files.read",
+  "lxc.files.write",
   "lxc.snapshot.create",
   "lxc.snapshot.delete",
   "lxc.snapshot.rollback",
@@ -127,7 +129,8 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
   { id: "vm.pause", group: "vm", de: "VM pausieren", en: "Pause VM" },
   { id: "vm.resume", group: "vm", de: "VM fortsetzen", en: "Resume VM" },
   { id: "vm.console", group: "vm", de: "VM-Konsole", en: "VM console" },
-  { id: "vm.files", group: "vm", de: "VM-Dateien (SFTP)", en: "VM files (SFTP)" },
+  { id: "vm.files.read", group: "vm", de: "VM-Dateien lesen / herunterladen", en: "Read / download VM files" },
+  { id: "vm.files.write", group: "vm", de: "VM-Dateien schreiben / hochladen", en: "Write / upload VM files" },
   { id: "vm.snapshot.create", group: "vm", de: "VM-Snapshot erstellen", en: "Create VM snapshot" },
   { id: "vm.snapshot.delete", group: "vm", de: "VM-Snapshot löschen", en: "Delete VM snapshot" },
   { id: "vm.snapshot.rollback", group: "vm", de: "VM-Snapshot wiederherstellen", en: "Roll back VM snapshot" },
@@ -142,7 +145,8 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
   { id: "lxc.force-stop", group: "lxc", de: "Container hart stoppen", en: "Force stop container" },
   { id: "lxc.reboot", group: "lxc", de: "Container neu starten", en: "Reboot container" },
   { id: "lxc.console", group: "lxc", de: "Container-Konsole", en: "Container console" },
-  { id: "lxc.files", group: "lxc", de: "Container-Dateien (SFTP)", en: "Container files (SFTP)" },
+  { id: "lxc.files.read", group: "lxc", de: "Container-Dateien lesen / herunterladen", en: "Read / download container files" },
+  { id: "lxc.files.write", group: "lxc", de: "Container-Dateien schreiben / hochladen", en: "Write / upload container files" },
   { id: "lxc.snapshot.create", group: "lxc", de: "Container-Snapshot erstellen", en: "Create container snapshot" },
   { id: "lxc.snapshot.delete", group: "lxc", de: "Container-Snapshot löschen", en: "Delete container snapshot" },
   { id: "lxc.snapshot.rollback", group: "lxc", de: "Container-Snapshot wiederherstellen", en: "Roll back container snapshot" },
@@ -186,9 +190,11 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
 export const LEGACY_PERMISSION_ALIASES: Record<string, Permission[]> = {
   "hosts.edit": ["hosts.update", "hosts.credentials"],
   "vm.edit": ["vm.config"],
+  "vm.files": ["vm.files.read", "vm.files.write"],
   "vm.stop": ["vm.force-stop", "vm.shutdown", "vm.reboot", "vm.reset", "vm.pause", "vm.resume"],
   "vm.snapshot": ["vm.snapshot.create", "vm.snapshot.delete", "vm.snapshot.rollback"],
   "lxc.edit": ["lxc.config"],
+  "lxc.files": ["lxc.files.read", "lxc.files.write"],
   "lxc.stop": ["lxc.force-stop", "lxc.shutdown", "lxc.reboot"],
   "lxc.snapshot": ["lxc.snapshot.create", "lxc.snapshot.delete", "lxc.snapshot.rollback"],
   "storage.manage": ["storage.view", "storage.delete"],
@@ -265,12 +271,57 @@ export function hostScopedFromRole(granted: readonly string[] | undefined): Perm
     .filter((id) => hasPermission(granted, id));
 }
 
+export function isGuestActionPermission(id: Permission): boolean {
+  if (id === "vm.create" || id === "lxc.create") return false;
+  return id.startsWith("vm.") || id.startsWith("lxc.");
+}
+
+export function guestGrantCatalog(kind: "vm" | "lxc"): PermissionMeta[] {
+  return PERMISSION_CATALOG.filter((p) => p.group === kind && isGuestActionPermission(p.id));
+}
+
+export function guestScopedFromRole(kind: "vm" | "lxc", granted: readonly string[] | undefined): Permission[] {
+  return guestGrantCatalog(kind)
+    .map((p) => p.id)
+    .filter((id) => hasPermission(granted, id));
+}
+
+export function normalizeGuestPermissions(kind: "vm" | "lxc", granted: readonly string[]): Permission[] {
+  const allowed = new Set(guestGrantCatalog(kind).map((p) => p.id));
+  const out = new Set(sanitizePermissions(granted).filter((p) => allowed.has(p)));
+  out.add(kind === "vm" ? "vm.view" : "lxc.view");
+  if (out.has(kind === "vm" ? "vm.files.write" : "lxc.files.write")) {
+    out.add(kind === "vm" ? "vm.files.read" : "lxc.files.read");
+  }
+  return ALL_PERMISSIONS.filter((p) => out.has(p));
+}
+
+export function filesOnlyGuestPermissions(kind: "vm" | "lxc"): Permission[] {
+  return normalizeGuestPermissions(kind, [
+    `${kind}.view`,
+    `${kind}.files.read`,
+    `${kind}.files.write`,
+  ]);
+}
+
+export function guestFilePermission(kind: "vm" | "lxc", access: "read" | "write"): Permission {
+  return `${kind}.files.${access}` as Permission;
+}
+
+export type GuestPermissionRef = { hostId: string; kind: "vm" | "lxc"; vmid: number };
+
 export type PermissionHolder = {
   role?: { permissions?: readonly string[] };
   hostPermissions?: Record<string, string[] | null> | null;
+  guestPermissions?: Record<string, string[] | null> | null;
 };
 
+function guestPermissionKey(guest: GuestPermissionRef): string {
+  return `${guest.hostId}:${guest.kind}:${guest.vmid}`;
+}
+
 /**
+ * Guest overrides win for VM/LXC actions on that guest.
  * Host-scoped checks use a per-host override when set; otherwise the role.
  * Global checks (users, settings, …) always use the role.
  * Without a host id, a host-scoped permission is granted if the role or any override has it.
@@ -279,26 +330,36 @@ export function userHasPermission(
   holder: PermissionHolder | null | undefined,
   required: Permission,
   hostId?: string | null,
+  guest?: GuestPermissionRef | null,
 ): boolean {
   const role = holder?.role?.permissions;
   if (!isHostScopedPermission(required)) return hasPermission(role, required);
+  if (guest && isGuestActionPermission(required)) {
+    const override = holder?.guestPermissions?.[guestPermissionKey(guest)];
+    if (override) return hasPermission(override, required);
+  }
   if (hostId) {
     const override = holder?.hostPermissions?.[hostId];
     if (override) return hasPermission(override, required);
     return hasPermission(role, required);
   }
   if (hasPermission(role, required)) return true;
-  const map = holder?.hostPermissions;
-  if (!map) return false;
-  return Object.values(map).some((granted) => Boolean(granted && hasPermission(granted, required)));
+  const hosts = holder?.hostPermissions;
+  if (hosts && Object.values(hosts).some((granted) => Boolean(granted && hasPermission(granted, required)))) {
+    return true;
+  }
+  const guests = holder?.guestPermissions;
+  if (!guests) return false;
+  return Object.values(guests).some((granted) => Boolean(granted && hasPermission(granted, required)));
 }
 
 export function userHasAnyPermission(
   holder: PermissionHolder | null | undefined,
   required: readonly Permission[],
   hostId?: string | null,
+  guest?: GuestPermissionRef | null,
 ): boolean {
-  return required.some((p) => userHasPermission(holder, p, hostId));
+  return required.some((p) => userHasPermission(holder, p, hostId, guest));
 }
 
 export const INVENTORY_VIEW_PERMISSIONS: Permission[] = ["hosts.view", "vm.view", "lxc.view"];
@@ -310,14 +371,16 @@ export const NOTHING_PERMISSIONS: Permission[] = [
   "vm.force-stop",
   "vm.reboot",
   "vm.console",
-  "vm.files",
+  "vm.files.read",
+  "vm.files.write",
   "lxc.view",
   "lxc.start",
   "lxc.shutdown",
   "lxc.force-stop",
   "lxc.reboot",
   "lxc.console",
-  "lxc.files",
+  "lxc.files.read",
+  "lxc.files.write",
 ];
 
 export const ROLE_PRESETS: Record<
@@ -353,14 +416,16 @@ export const ROLE_PRESETS: Record<
       "vm.force-stop",
       "vm.reboot",
       "vm.console",
-      "vm.files",
+      "vm.files.read",
+      "vm.files.write",
       "lxc.view",
       "lxc.start",
       "lxc.shutdown",
       "lxc.force-stop",
       "lxc.reboot",
       "lxc.console",
-      "lxc.files",
+      "lxc.files.read",
+      "lxc.files.write",
       "storage.view",
       "zfs.view",
       "backup.view",

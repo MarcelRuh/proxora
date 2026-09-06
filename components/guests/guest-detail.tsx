@@ -22,7 +22,7 @@ import { api } from "@/lib/api";
 import { bytesToSize, formatUptime, guestCpuPercent, guestSizeDetail, percentage } from "@/lib/utils";
 import type { PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
-import { useCan } from "@/components/auth/session-user";
+import { useCan, useCanAny } from "@/components/auth/session-user";
 import { PageSkeleton } from "@/components/layout/page-skeleton";
 import { QueryGate } from "@/components/layout/query-gate";
 import { parseGuestConfigIps } from "@/lib/create-ip";
@@ -30,6 +30,7 @@ import { invalidateDashboardQueries } from "@/components/dashboard/use-dashboard
 import { peerHostAllowsPermission } from "@/lib/federation-access";
 import { hostAllowsMigrate } from "@/lib/guest-migrate";
 import { openGuestToolWindow } from "@/lib/guest-tool-window";
+import { isWindowsOstype } from "@/lib/iso-images";
 
 type GuestPayload = {
   status: Record<string, unknown>;
@@ -51,23 +52,29 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const qc = useQueryClient();
   const params = useParams<{ hostId: string; node: string; vmid: string }>();
   const hostId = params.hostId;
+  const vmid = Number(params.vmid);
+  const guest = { hostId, kind, vmid };
   const can = {
-    start: useCan(kind === "vm" ? "vm.start" : "lxc.start", hostId),
-    shutdown: useCan(kind === "vm" ? "vm.shutdown" : "lxc.shutdown", hostId),
-    stop: useCan(kind === "vm" ? "vm.force-stop" : "lxc.force-stop", hostId),
-    snapshotCreate: useCan(kind === "vm" ? "vm.snapshot.create" : "lxc.snapshot.create", hostId),
-    snapshotDelete: useCan(kind === "vm" ? "vm.snapshot.delete" : "lxc.snapshot.delete", hostId),
-    snapshotRollback: useCan(kind === "vm" ? "vm.snapshot.rollback" : "lxc.snapshot.rollback", hostId),
-    reboot: useCan(kind === "vm" ? "vm.reboot" : "lxc.reboot", hostId),
-    pause: useCan("vm.pause", hostId),
-    resume: useCan("vm.resume", hostId),
-    reset: useCan("vm.reset", hostId),
-    clone: useCan(kind === "vm" ? "vm.clone" : "lxc.clone", hostId),
-    migrate: useCan(kind === "vm" ? "vm.migrate" : "lxc.migrate", hostId),
-    delete: useCan(kind === "vm" ? "vm.delete" : "lxc.delete", hostId),
-    console: useCan(kind === "vm" ? "vm.console" : "lxc.console", hostId),
-    files: useCan(kind === "vm" ? "vm.files" : "lxc.files", hostId),
-    config: useCan(kind === "vm" ? "vm.config" : "lxc.config", hostId),
+    start: useCan(kind === "vm" ? "vm.start" : "lxc.start", hostId, guest),
+    shutdown: useCan(kind === "vm" ? "vm.shutdown" : "lxc.shutdown", hostId, guest),
+    stop: useCan(kind === "vm" ? "vm.force-stop" : "lxc.force-stop", hostId, guest),
+    snapshotCreate: useCan(kind === "vm" ? "vm.snapshot.create" : "lxc.snapshot.create", hostId, guest),
+    snapshotDelete: useCan(kind === "vm" ? "vm.snapshot.delete" : "lxc.snapshot.delete", hostId, guest),
+    snapshotRollback: useCan(kind === "vm" ? "vm.snapshot.rollback" : "lxc.snapshot.rollback", hostId, guest),
+    reboot: useCan(kind === "vm" ? "vm.reboot" : "lxc.reboot", hostId, guest),
+    pause: useCan("vm.pause", hostId, guest),
+    resume: useCan("vm.resume", hostId, guest),
+    reset: useCan("vm.reset", hostId, guest),
+    clone: useCan(kind === "vm" ? "vm.clone" : "lxc.clone", hostId, guest),
+    migrate: useCan(kind === "vm" ? "vm.migrate" : "lxc.migrate", hostId, guest),
+    delete: useCan(kind === "vm" ? "vm.delete" : "lxc.delete", hostId, guest),
+    console: useCan(kind === "vm" ? "vm.console" : "lxc.console", hostId, guest),
+    files: useCanAny(
+      kind === "vm" ? ["vm.files.read", "vm.files.write"] : ["lxc.files.read", "lxc.files.write"],
+      hostId,
+      guest,
+    ),
+    config: useCan(kind === "vm" ? "vm.config" : "lxc.config", hostId, guest),
     backup: useCan("backup.run", hostId),
     restore: useCan("backup.restore", hostId),
     hostsView: useCan("hosts.view"),
@@ -177,9 +184,14 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const netout = num(status.netout);
   const ips = data?.ips?.length ? data.ips : parseGuestConfigIps(config);
   const hostMeta = hosts?.hosts.find((h) => h.id === params.hostId);
+  const windows = kind === "vm" && isWindowsOstype(String(config.ostype ?? ""));
   const canFiles =
+    !windows &&
     can.files &&
-    peerHostAllowsPermission(hostMeta ?? { origin: "LOCAL" }, kind === "vm" ? "vm.files" : "lxc.files");
+    peerHostAllowsPermission(
+      hostMeta ?? { origin: "LOCAL" },
+      kind === "vm" ? ["vm.files.read", "vm.files.write"] : ["lxc.files.read", "lxc.files.write"],
+    );
   const showMigrate = can.migrate && hostAllowsMigrate(isCluster, hostStatus?.nodes, params.node);
 
   if (isLoading) return <PageSkeleton />;

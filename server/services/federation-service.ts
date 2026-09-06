@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { encryptSecret } from "@/lib/crypto";
 import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from "@/lib/errors";
 import { networksForHost, parseGuestIpNetworks } from "@/lib/create-ip";
-import { sanitizePermissions } from "@/lib/permissions";
+import { guestFilePermission, sanitizePermissions } from "@/lib/permissions";
 import {
   effectiveSharePermissions,
   federationPermission,
@@ -45,7 +45,7 @@ export async function requireSharedGuestFiles(request: Request, remoteHostId: st
   });
   if (!share || share.host.origin !== HostOrigin.LOCAL) throw new NotFoundError("Host not shared");
   const level = parseShareLevel(String(share.level)) ?? "view";
-  const needed = kind === "vm" ? "vm.files" : "lxc.files";
+  const needed = [guestFilePermission(kind, "read"), guestFilePermission(kind, "write")];
   if (!shareHasPermission(level, share.permissions, needed)) {
     throw new ForbiddenError("This host is not shared at that level");
   }

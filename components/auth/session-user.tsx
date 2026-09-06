@@ -16,12 +16,20 @@ export function useSessionUser(): SessionUser {
   return user;
 }
 
-export function useCan(permission: Permission, hostId?: string | null): boolean {
+export function useCan(
+  permission: Permission,
+  hostId?: string | null,
+  guest?: { hostId: string; kind: "vm" | "lxc"; vmid: number } | null,
+): boolean {
   const user = useContext(SessionUserContext);
-  return userHasPermission(user, permission, hostId);
+  return userHasPermission(user, permission, hostId, guest);
 }
 
-export function useCanAny(permissions: Permission[], hostId?: string | null): boolean {
+export function useCanAny(
+  permissions: Permission[],
+  hostId?: string | null,
+  guest?: { hostId: string; kind: "vm" | "lxc"; vmid: number } | null,
+): boolean {
   const user = useContext(SessionUserContext);
-  return userHasAnyPermission(user, permissions, hostId);
+  return userHasAnyPermission(user, permissions, hostId, guest);
 }

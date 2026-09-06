@@ -99,7 +99,7 @@ async function finishLogin(
     email: string;
     role: { id: string; slug: string; name: string; permissions: string[] };
     hostAccess: Array<{ hostId: string; permissions?: string[]; override?: boolean }>;
-    guestAccess: Array<{ hostId: string; kind: string; vmid: number }>;
+    guestAccess: Array<{ hostId: string; kind: string; vmid: number; permissions?: string[]; override?: boolean }>;
   },
   ip: string | undefined,
 ) {

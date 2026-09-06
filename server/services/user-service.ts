@@ -1,15 +1,16 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
-import { sanitizePermissions } from "@/lib/permissions";
+import { sanitizePermissions, normalizeGuestPermissions } from "@/lib/permissions";
 import { hashPassword } from "@/lib/password";
-import { parseGuestKind } from "@/lib/guest-scope";
+import { parseGuestKind, type GuestGrant } from "@/lib/guest-scope";
 import { destroyUserSessions } from "@/server/auth/session-core";
 
 const guestScopeSchema = z.object({
   hostId: z.string().min(1),
   kind: z.enum(["vm", "lxc"]),
   vmid: z.number().int().positive(),
+  permissions: z.array(z.string()).nullable().optional(),
 });
 
 const hostGrantSchema = z.object({
@@ -55,11 +56,27 @@ function sanitizeUser<T extends { passwordHash: string; totpSecret: string | nul
   return rest;
 }
 
-function toGuestScope(rows: Array<{ hostId: string; kind: string; vmid: number }>) {
+function toGuestGrants(
+  rows: Array<{ hostId: string; kind: string; vmid: number; permissions: string[]; override: boolean }>,
+): GuestGrant[] {
   return rows.flatMap((g) => {
     const kind = parseGuestKind(g.kind);
-    return kind ? [{ hostId: g.hostId, kind, vmid: g.vmid }] : [];
+    return kind
+      ? [{ hostId: g.hostId, kind, vmid: g.vmid, permissions: g.override ? sanitizePermissions(g.permissions) : null }]
+      : [];
   });
+}
+
+function guestRowsFromInput(
+  guests?: Array<{ hostId: string; kind: "vm" | "lxc"; vmid: number; permissions?: string[] | null }>,
+): Array<{ hostId: string; kind: string; vmid: number; override: boolean; permissions: string[] }> {
+  return (guests ?? []).map((g) => ({
+    hostId: g.hostId,
+    kind: g.kind,
+    vmid: g.vmid,
+    override: g.permissions != null,
+    permissions: g.permissions ? normalizeGuestPermissions(g.kind, g.permissions) : [],
+  }));
 }
 
 export type HostGrantDto = { hostId: string; permissions: string[] | null };
@@ -93,7 +110,7 @@ function withScope<
     passwordHash: string;
     totpSecret: string | null;
     hostAccess: Array<{ hostId: string; permissions: string[]; override: boolean }>;
-    guestAccess: Array<{ hostId: string; kind: string; vmid: number }>;
+    guestAccess: Array<{ hostId: string; kind: string; vmid: number; permissions: string[]; override: boolean }>;
   },
 >(user: T) {
   const hosts = toHostGrants(user.hostAccess);
@@ -101,7 +118,7 @@ function withScope<
     ...sanitizeUser(user),
     hostIds: hosts.map((h) => h.hostId),
     hosts,
-    guests: toGuestScope(user.guestAccess),
+    guests: toGuestGrants(user.guestAccess),
   };
 }
 
@@ -129,7 +146,7 @@ export async function createUser(input: z.infer<typeof createUserSchema>) {
       roleId: input.roleId,
       hostAccess: hostRows.length ? { create: hostRows } : undefined,
       guestAccess: input.guests?.length
-        ? { create: input.guests.map((g) => ({ hostId: g.hostId, kind: g.kind, vmid: g.vmid })) }
+        ? { create: guestRowsFromInput(input.guests) }
         : undefined,
     },
     include: { role: true, hostAccess: true, guestAccess: true },
@@ -163,7 +180,7 @@ export async function updateUser(id: string, input: z.infer<typeof updateUserSch
     await prisma.userGuestAccess.deleteMany({ where: { userId: id } });
     if (input.guests.length) {
       await prisma.userGuestAccess.createMany({
-        data: input.guests.map((g) => ({ userId: id, hostId: g.hostId, kind: g.kind, vmid: g.vmid })),
+        data: guestRowsFromInput(input.guests).map((row) => ({ userId: id, ...row })),
       });
     }
   }

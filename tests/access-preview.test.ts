@@ -54,4 +54,18 @@ describe("access preview", () => {
     expect(preview.guestMode).toBe("listed");
     expect(preview.guests[0]).toMatchObject({ vmid: 243, name: "mail", kind: "lxc" });
   });
+
+  it("surfaces per-guest files-only rights in the preview", () => {
+    const preview = buildAccessPreview({
+      roleName: "Nothing",
+      permissions: ["lxc.view", "lxc.start"],
+      hosts: [],
+      guests: [{ hostId: "h1", kind: "lxc", vmid: 243, permissions: ["lxc.view", "lxc.files.read", "lxc.files.write"] }],
+      hostList: [{ id: "h1", name: "lab" }],
+      guestNames: { "h1:lxc:243": "mail" },
+    });
+    expect(preview.actions).toContain("lxc.files.read");
+    expect(preview.actions).toContain("lxc.files.write");
+    expect(preview.guestOverrides).toEqual([{ label: "lab · LXC 243 (mail)", count: 3 }]);
+  });
 });

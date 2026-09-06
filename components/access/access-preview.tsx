@@ -42,6 +42,13 @@ export function AccessPreviewCard({ preview }: { preview: AccessPreview }) {
           })}
         </p>
       ) : null}
+      {preview.guestOverrides.length ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t("users.previewGuestOverrides", {
+            names: preview.guestOverrides.map((g) => `${g.label} (${g.count})`).join(", "),
+          })}
+        </p>
+      ) : null}
     </div>
   );
 }

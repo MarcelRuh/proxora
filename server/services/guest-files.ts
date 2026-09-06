@@ -31,6 +31,8 @@ import {
   type GuestFileRequest,
   type GuestFileResult,
 } from "@/lib/guest-files";
+import { isWindowsOstype } from "@/lib/iso-images";
+import { guestFilePermission } from "@/lib/permissions";
 import { shareHasPermission, type ShareLevel } from "@/lib/federation-access";
 import { outboundToken, peerHttpBase } from "@/server/services/wireguard-service";
 import { GUEST_UPLOAD_OFFSET_HEADER, GUEST_UPLOAD_PREFIX_HEADER, GUEST_UPLOAD_SIZE_HEADER } from "@/lib/guest-file-http";
@@ -1126,7 +1128,18 @@ async function proxyGuestFilesToPeer(host: Host, input: GuestFileRequest): Promi
   return json;
 }
 
+export async function assertLinuxGuestFiles(host: Host, kind: "vm" | "lxc", node: string | undefined, vmid: number) {
+  if (kind !== "vm") return;
+  if (!node) throw new ValidationError("Node fehlt");
+  const client = await clientForHost(host);
+  const config = await client.vms.config(node, vmid);
+  if (isWindowsOstype(String(config.ostype ?? ""))) {
+    throw new ValidationError("Dateizugriff gibt es nur für Linux-Gäste, nicht für Windows.");
+  }
+}
+
 export async function runGuestFileOp(host: Host, input: GuestFileRequest): Promise<GuestFileResult> {
+  await assertLinuxGuestFiles(host, input.kind, input.node, input.vmid);
   const viaAgent = input.kind === "vm" && input.via !== "sftp" && !hasGuestSshAuth(input);
   if (viaAgent) {
     const client = await clientForHost(host);
@@ -1146,5 +1159,8 @@ export function shareAllowsGuestFiles(
   permissions: readonly string[] | null | undefined,
   kind: "vm" | "lxc",
 ): boolean {
-  return shareHasPermission(level, permissions, kind === "vm" ? "vm.files" : "lxc.files");
+  return shareHasPermission(level, permissions, [
+    guestFilePermission(kind, "read"),
+    guestFilePermission(kind, "write"),
+  ]);
 }

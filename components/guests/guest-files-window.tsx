@@ -6,12 +6,13 @@ import { useQuery } from "@tanstack/react-query";
 import { GuestFilesPanel } from "@/components/guests/guest-files";
 import { api } from "@/lib/api";
 import { useI18n } from "@/components/i18n/locale-provider";
-import { useCan } from "@/components/auth/session-user";
+import { useCanAny } from "@/components/auth/session-user";
 import { QueryGate } from "@/components/layout/query-gate";
 import { parseGuestConfigIps } from "@/lib/create-ip";
 import { peerHostAllowsPermission } from "@/lib/federation-access";
 import type { PublicHost } from "@/lib/types";
 import { APP_NAME } from "@/lib/version";
+import { isWindowsOstype } from "@/lib/iso-images";
 
 type GuestPayload = {
   status: Record<string, unknown>;
@@ -23,7 +24,9 @@ type GuestPayload = {
 export function GuestFilesWindow({ kind }: { kind: "vm" | "lxc" }) {
   const { t } = useI18n();
   const params = useParams<{ hostId: string; node: string; vmid: string }>();
-  const can = useCan(kind === "vm" ? "vm.files" : "lxc.files", params.hostId);
+  const guest = { hostId: params.hostId, kind, vmid: Number(params.vmid) };
+  const filePerms = kind === "vm" ? (["vm.files.read", "vm.files.write"] as const) : (["lxc.files.read", "lxc.files.write"] as const);
+  const can = useCanAny([...filePerms], params.hostId, guest);
   const path = `/api/hosts/${params.hostId}/${kind === "vm" ? "vms" : "lxc"}/${params.node}/${params.vmid}`;
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["guest", kind, params.hostId, params.node, params.vmid],
@@ -50,8 +53,9 @@ export function GuestFilesWindow({ kind }: { kind: "vm" | "lxc" }) {
   const name = String(config.name ?? config.hostname ?? status.name ?? params.vmid);
   const ips = data?.ips?.length ? data.ips : parseGuestConfigIps(config);
   const hostMeta = hosts?.hosts.find((h) => h.id === params.hostId);
+  const windows = kind === "vm" && isWindowsOstype(String(config.ostype ?? ""));
   const allowed =
-    can && peerHostAllowsPermission(hostMeta ?? { origin: "LOCAL" }, kind === "vm" ? "vm.files" : "lxc.files");
+    can && peerHostAllowsPermission(hostMeta ?? { origin: "LOCAL" }, [...filePerms]);
 
   useEffect(() => {
     document.title = t("files.windowTitle", { id: params.vmid, name });
@@ -96,6 +100,7 @@ export function GuestFilesWindow({ kind }: { kind: "vm" | "lxc" }) {
                 ips={ips}
                 running={running}
                 agentEnabled={Boolean(data.agentEnabled)}
+                windows={windows}
                 fill
               />
             </div>

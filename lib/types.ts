@@ -55,6 +55,8 @@ export type SessionUser = {
   allowedGuests: Array<{ hostId: string; kind: "vm" | "lxc"; vmid: number }> | null;
   /** Per assigned host: `null` inherits the role; a list replaces host-scoped role perms. */
   hostPermissions: Record<string, string[] | null> | null;
+  /** Per assigned guest (`hostId:kind:vmid`): `null` inherits host/role; a list replaces VM/LXC perms. */
+  guestPermissions: Record<string, string[] | null> | null;
 };
 
 export type DashboardHost = {

@@ -13,7 +13,8 @@ export const PREVIEW_ACTIONS: Permission[] = [
   "vm.force-stop",
   "vm.reboot",
   "vm.console",
-  "vm.files",
+  "vm.files.read",
+  "vm.files.write",
   "vm.config",
   "vm.delete",
   "vm.clone",
@@ -23,7 +24,8 @@ export const PREVIEW_ACTIONS: Permission[] = [
   "lxc.force-stop",
   "lxc.reboot",
   "lxc.console",
-  "lxc.files",
+  "lxc.files.read",
+  "lxc.files.write",
   "lxc.config",
   "lxc.delete",
   "lxc.clone",
@@ -40,6 +42,7 @@ export type AccessPreview = {
   guests: Array<{ hostName: string; kind: "vm" | "lxc"; vmid: number; name: string | null }>;
   actions: Permission[];
   hostOverrides: Array<{ hostName: string; count: number }>;
+  guestOverrides: Array<{ label: string; count: number }>;
 };
 
 export function buildAccessPreview(input: {
@@ -47,7 +50,7 @@ export function buildAccessPreview(input: {
   permissions: readonly string[] | undefined;
   hosts?: Array<{ hostId: string; permissions: string[] | null }>;
   hostIds?: string[];
-  guests: GuestScope[];
+  guests: Array<GuestScope & { permissions?: string[] | null }>;
   hostList: Array<{ id: string; name: string }>;
   /** @deprecated use hostList */
   hostsLegacy?: Array<{ id: string; name: string }>;
@@ -59,6 +62,9 @@ export function buildAccessPreview(input: {
   const holder = {
     role: { permissions: input.permissions },
     hostPermissions: Object.fromEntries(grants.map((g) => [g.hostId, g.permissions])),
+    guestPermissions: Object.fromEntries(
+      input.guests.map((g) => [guestScopeKey(g), g.permissions ?? null]),
+    ),
   };
   const guestHostIds = [...new Set(input.guests.map((g) => g.hostId))];
   const hostMode: AccessPreview["hostMode"] = grants.length || input.guests.length ? "listed" : "all";
@@ -80,5 +86,14 @@ export function buildAccessPreview(input: {
     hostOverrides: grants
       .filter((g) => g.permissions)
       .map((g) => ({ hostName: hostMap.get(g.hostId) ?? g.hostId, count: g.permissions?.length ?? 0 })),
+    guestOverrides: input.guests.flatMap((g) => {
+      if (!g.permissions) return [];
+      const hostName = hostMap.get(g.hostId) ?? g.hostId;
+      const name = input.guestNames?.[guestScopeKey(g)];
+      const label = name
+        ? `${hostName} · ${g.kind.toUpperCase()} ${g.vmid} (${name})`
+        : `${hostName} · ${g.kind.toUpperCase()} ${g.vmid}`;
+      return [{ label, count: g.permissions.length }];
+    }),
   };
 }

@@ -5,7 +5,7 @@ import { SESSION_COOKIE } from "@/lib/env";
 import { isGuestFileUploadWsPath, parseGuestUploadPrefix } from "@/lib/guest-file-http";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from "@/lib/errors";
-import { userHasAnyPermission } from "@/lib/permissions";
+import { guestFilePermission, userHasAnyPermission } from "@/lib/permissions";
 import { wsPayloadToBuffer } from "@/lib/vnc-handshake";
 import { logger } from "@/lib/logger";
 import { assertGuestAccess, getSessionFromToken } from "@/server/auth/session-core";
@@ -108,8 +108,12 @@ async function handleUploadSocket(ws: WebSocket, req: IncomingMessage) {
     return;
   }
 
-  const permission = ticket.kind === "vm" ? "vm.files" : "lxc.files";
-  if (!userHasAnyPermission(session.user, [permission], ticket.hostId)) {
+  const permission = guestFilePermission(ticket.kind, "write");
+  if (!userHasAnyPermission(session.user, [permission], ticket.hostId, {
+    hostId: ticket.hostId,
+    kind: ticket.kind,
+    vmid: ticket.vmid,
+  })) {
     closeSoon(ws, 4403, "Forbidden");
     return;
   }
