@@ -47,3 +47,28 @@ export function assertSafeWebhookUrl(url: string): string {
   }
   return parsed.toString();
 }
+
+/** Push endpoints may be LAN ntfy/UnifiedPush; still block credentials, loopback, and cloud metadata. */
+export function assertSafePushUrl(url: string): string {
+  const trimmed = url.trim();
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new ValidationError("Invalid push URL");
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new ValidationError("Push URL must be http(s)");
+  }
+  if (parsed.username || parsed.password) {
+    throw new ValidationError("Push URL must not include credentials");
+  }
+  const host = parsed.hostname.trim().toLowerCase().replace(/\.+$/, "");
+  if (!host || host === "localhost" || host.endsWith(".localhost") || host === "metadata.google.internal") {
+    throw new ValidationError("Invalid push URL");
+  }
+  if (host === "::1" || host === "0.0.0.0" || host === "127.0.0.1" || host.startsWith("169.254.")) {
+    throw new ValidationError("Invalid push URL");
+  }
+  return parsed.toString();
+}

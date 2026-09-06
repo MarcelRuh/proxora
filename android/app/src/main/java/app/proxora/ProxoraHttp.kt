@@ -14,8 +14,7 @@ object ProxoraHttp {
       .readTimeout(0, TimeUnit.SECONDS)
       .writeTimeout(20, TimeUnit.SECONDS)
       .pingInterval(20, TimeUnit.SECONDS)
-      .retryOnConnectionFailure(true)
-    if (!insecure) return builder.build()
+      if (!insecure) return builder.build()
     val trust = object : X509TrustManager {
       override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
       override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
@@ -27,4 +26,10 @@ object ProxoraHttp {
     builder.hostnameVerifier { _, _ -> true }
     return builder.build()
   }
+
+  fun jsonClient(insecure: Boolean): OkHttpClient =
+    client(insecure).newBuilder()
+      .readTimeout(15, TimeUnit.SECONDS)
+      .pingInterval(0, TimeUnit.SECONDS)
+      .build()
 }

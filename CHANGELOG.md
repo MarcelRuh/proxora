@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.13] – 2026-09-07
+
+### Changed
+
+- Android keeps a background connection so inbox pushes still arrive after you leave the app. If a UnifiedPush distributor (e.g. ntfy) is installed, that is used instead of the persistent connection notification.
+
 ## [1.7.12] – 2026-09-07
 
 ### Changed

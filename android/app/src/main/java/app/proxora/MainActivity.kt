@@ -12,6 +12,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Message
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -59,7 +61,9 @@ class MainActivity : AppCompatActivity() {
     const val ACTION_RELOAD = "app.proxora.RELOAD"
   }
 
-  private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+  private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+    startBackgroundPush()
+  }
 
   private val filePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
     val uris = result.data?.let { extractUris(it) }
@@ -310,9 +314,34 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun requestNotifyPermission() {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-    if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
-    notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+      checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+    ) {
+      notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+      return
+    }
+    startBackgroundPush()
+  }
+
+  private fun startBackgroundPush() {
+    PushKeepAlive.sync(this)
+    PushRegistrar.register(this)
+    requestUnrestrictedBattery()
+  }
+
+  private fun requestUnrestrictedBattery() {
+    if (Prefs.batteryPrompted(this)) return
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+    val pm = getSystemService(PowerManager::class.java) ?: return
+    if (pm.isIgnoringBatteryOptimizations(packageName)) return
+    Prefs.setBatteryPrompted(this)
+    try {
+      startActivity(
+        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).setData(Uri.parse("package:$packageName")),
+      )
+    } catch (_: Exception) {
+      /* OEM without the setting */
+    }
   }
 
   private fun reloadPage() {
@@ -375,6 +404,7 @@ class MainActivity : AppCompatActivity() {
       CookieManager.getInstance().flush()
       webView.clearCache(true)
       webView.clearHistory()
+      PushRegistrar.unregister(this)
     }
     hideError()
     val bundle = restoreBundle
@@ -410,6 +440,7 @@ class MainActivity : AppCompatActivity() {
         if (view !== webView) return
         snapshotSession()
         PushClient.onSessionReady()
+        PushRegistrar.register(this@MainActivity)
         if (pendingReload && !webView.url.isNullOrBlank()) {
           pendingReload = false
           webView.reload()

@@ -19,4 +19,8 @@
   <string name="notify_channel">Meldungen</string>
   <string name="notify_channel_desc">Inbox von deiner Proxora-Instanz</string>
   <string name="notify_overflow">%1$d neue Meldungen</string>
+  <string name="notify_keepalive_channel">Verbindung</string>
+  <string name="notify_keepalive_desc">Hält die Verbindung zur Instanz, damit Meldungen ankommen.</string>
+  <string name="notify_keepalive_title">Proxora</string>
+  <string name="notify_keepalive_body">Meldungen aktiv</string>
 </resources>

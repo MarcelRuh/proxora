@@ -10,6 +10,8 @@ object Prefs {
   private const val KEY_COOKIES = "origin_cookies"
   private const val KEY_COOKIES_URL = "origin_cookies_url"
   private const val KEY_LAST_URL = "last_page_url"
+  private const val KEY_PUSH_ENDPOINT = "push_endpoint"
+  private const val KEY_BATTERY_PROMPTED = "battery_prompted"
 
   private fun prefs(context: Context) = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
@@ -25,7 +27,7 @@ object Prefs {
       .putString(KEY_URL, url)
       .putBoolean(KEY_INSECURE, allowInsecureTls)
     if (previous != url) {
-      editor.remove(KEY_COOKIES).remove(KEY_COOKIES_URL).remove(KEY_LAST_URL)
+      editor.remove(KEY_COOKIES).remove(KEY_COOKIES_URL).remove(KEY_LAST_URL).remove(KEY_PUSH_ENDPOINT)
     }
     editor.commit()
   }
@@ -60,6 +62,22 @@ object Prefs {
   fun saveLastPageUrl(context: Context, server: String, page: String) {
     val persistable = persistablePageUrl(server, page) ?: return
     prefs(context).edit().putString(KEY_LAST_URL, persistable).commit()
+  }
+
+  fun pushEndpoint(context: Context): String? =
+    prefs(context).getString(KEY_PUSH_ENDPOINT, null)?.takeIf { it.isNotBlank() }
+
+  fun setPushEndpoint(context: Context, endpoint: String?) {
+    val editor = prefs(context).edit()
+    if (endpoint.isNullOrBlank()) editor.remove(KEY_PUSH_ENDPOINT) else editor.putString(KEY_PUSH_ENDPOINT, endpoint)
+    editor.commit()
+  }
+
+  fun batteryPrompted(context: Context): Boolean =
+    prefs(context).getBoolean(KEY_BATTERY_PROMPTED, false)
+
+  fun setBatteryPrompted(context: Context) {
+    prefs(context).edit().putBoolean(KEY_BATTERY_PROMPTED, true).commit()
   }
 }
 

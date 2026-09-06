@@ -21,25 +21,35 @@ object PushClient {
   private var app: Context? = null
   private var delayMs = 1_000L
   @Volatile private var open = false
+  @Volatile var realtime = true
 
   fun start(context: Context) {
     app = context.applicationContext
     InboxNotifier.ensureChannel(app!!)
-    connect()
+    realtime = Prefs.pushEndpoint(app!!).isNullOrBlank()
+    if (realtime) connect()
   }
 
   fun restart() {
     delayMs = 1_000L
+    if (!realtime) {
+      main.removeCallbacksAndMessages(null)
+      socket?.cancel()
+      socket = null
+      open = false
+      return
+    }
     connect()
   }
 
   fun onSessionReady() {
-    if (open) return
+    if (!realtime || open) return
     delayMs = 1_000L
     connect()
   }
 
   private fun connect() {
+    if (!realtime) return
     val ctx = app ?: return
     main.removeCallbacksAndMessages(null)
     socket?.cancel()

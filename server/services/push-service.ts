@@ -3,7 +3,7 @@ import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { prisma } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
-import { assertSafeWebhookUrl } from "@/lib/webhook-url";
+import { assertSafePushUrl } from "@/lib/webhook-url";
 import { PUSH_VAPID_SETTING_KEY, buildPushPayload, type PushPayload } from "@/lib/push-payload";
 import { toSessionUser } from "@/server/auth/session-core";
 import { userReceivesInboxPush } from "@/server/services/inbox-service";
@@ -66,7 +66,7 @@ export async function savePushSubscription(input: {
   auth: string;
   userAgent?: string;
 }): Promise<void> {
-  const endpoint = assertSafeWebhookUrl(input.endpoint);
+  const endpoint = assertSafePushUrl(input.endpoint);
   await prisma.pushSubscription.upsert({
     where: { endpoint },
     create: {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ValidationError } from "@/lib/errors";
-import { assertSafeWebhookUrl, isPrivateOrLocalHostname } from "@/lib/webhook-url";
+import { assertSafeWebhookUrl, assertSafePushUrl, isPrivateOrLocalHostname } from "@/lib/webhook-url";
 
 describe("webhook URL SSRF guard", () => {
   it("allows public http(s) hosts", () => {
@@ -26,5 +26,19 @@ describe("webhook URL SSRF guard", () => {
     expect(() => assertSafeWebhookUrl("https://user:pass@example.com/hook")).toThrow(ValidationError);
     expect(() => assertSafeWebhookUrl("ftp://example.com/hook")).toThrow(ValidationError);
     expect(() => assertSafeWebhookUrl("not a url")).toThrow(ValidationError);
+  });
+});
+
+describe("push URL guard", () => {
+  it("allows public and LAN UnifiedPush endpoints", () => {
+    expect(assertSafePushUrl("https://ntfy.sh/upABCDEF")).toContain("ntfy.sh");
+    expect(assertSafePushUrl("https://fcm.googleapis.com/fcm/send/abc")).toContain("fcm.googleapis.com");
+    expect(assertSafePushUrl("http://192.168.1.10:2586/up/token")).toContain("192.168.1.10");
+  });
+
+  it("rejects loopback, metadata, and credentials", () => {
+    expect(() => assertSafePushUrl("http://127.0.0.1/up")).toThrow(ValidationError);
+    expect(() => assertSafePushUrl("http://169.254.169.254/latest")).toThrow(ValidationError);
+    expect(() => assertSafePushUrl("https://user:pass@ntfy.sh/up")).toThrow(ValidationError);
   });
 });
