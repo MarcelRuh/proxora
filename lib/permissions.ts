@@ -301,8 +301,27 @@ export function userHasAnyPermission(
   return required.some((p) => userHasPermission(holder, p, hostId));
 }
 
+export const INVENTORY_VIEW_PERMISSIONS: Permission[] = ["hosts.view", "vm.view", "lxc.view"];
+
+export const NOTHING_PERMISSIONS: Permission[] = [
+  "vm.view",
+  "vm.start",
+  "vm.shutdown",
+  "vm.force-stop",
+  "vm.reboot",
+  "vm.console",
+  "vm.files",
+  "lxc.view",
+  "lxc.start",
+  "lxc.shutdown",
+  "lxc.force-stop",
+  "lxc.reboot",
+  "lxc.console",
+  "lxc.files",
+];
+
 export const ROLE_PRESETS: Record<
-  "super-admin" | "administrator" | "operator" | "viewer",
+  "super-admin" | "administrator" | "operator" | "viewer" | "nothing",
   { name: string; description: string; permissions: Permission[] }
 > = {
   "super-admin": {
@@ -366,6 +385,11 @@ export const ROLE_PRESETS: Record<
       "settings.view",
       "notifications.view",
     ],
+  },
+  nothing: {
+    name: "Nothing",
+    description: "Only the VMs and containers assigned to the user. No host inventory, storage, or backups.",
+    permissions: [...NOTHING_PERMISSIONS],
   },
 };
 

@@ -21,6 +21,7 @@ export function UserScopeFields({
   hosts: grants,
   guests,
   rolePermissions,
+  roleSlug,
   onHosts,
   onGuests,
   onGuestNames,
@@ -28,6 +29,7 @@ export function UserScopeFields({
   hosts: HostGrant[];
   guests: GuestScope[];
   rolePermissions?: readonly string[];
+  roleSlug?: string;
   onHosts: (next: HostGrant[]) => void;
   onGuests: (next: GuestScope[]) => void;
   onGuestNames?: (names: Record<string, string>) => void;
@@ -98,7 +100,7 @@ export function UserScopeFields({
     if (on) {
       if (guests.some((g) => guestScopeKey(g) === guestScopeKey(scope))) return;
       onGuests([...guests, scope]);
-      if (grants.length && !hostIds.includes(scope.hostId)) {
+      if (roleSlug !== "nothing" && grants.length && !hostIds.includes(scope.hostId)) {
         onHosts([...grants, { hostId: scope.hostId, permissions: null }]);
       }
       return;
@@ -110,7 +112,9 @@ export function UserScopeFields({
     <div className="space-y-4 text-sm">
       <div>
         <p className="mb-1 font-medium">{t("users.hosts")}</p>
-        <p className="mb-2 text-xs text-muted-foreground">{t("users.hostsHint")}</p>
+        <p className="mb-2 text-xs text-muted-foreground">
+          {roleSlug === "nothing" ? t("users.nothingHostsHint") : t("users.hostsHint")}
+        </p>
         <div className="grid gap-2">
           {allHosts.map((h) => {
             const grant = grantFor(h.id);
@@ -155,7 +159,9 @@ export function UserScopeFields({
       </div>
       <div>
         <p className="mb-1 font-medium">{t("users.guests")}</p>
-        <p className="mb-2 text-xs text-muted-foreground">{t("users.guestsHint")}</p>
+        <p className="mb-2 text-xs text-muted-foreground">
+          {roleSlug === "nothing" ? t("users.nothingGuestsHint") : t("users.guestsHint")}
+        </p>
         <div className="space-y-3">
           {listed.map((host) => {
             const loaded = inventory?.find((block) => block.host.id === host.id);

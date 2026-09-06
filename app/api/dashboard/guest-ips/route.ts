@@ -16,7 +16,7 @@ const schema = z.object({
     .max(40),
 });
 
-export const POST = apiRoute("hosts.view", async (req, session) => {
+export const POST = apiRoute(["hosts.view", "vm.view", "lxc.view"], async (req, session) => {
   const body = schema.parse(await req.json());
   return json(await hydrateVisibleGuestIps(session.user, body.guests));
 });

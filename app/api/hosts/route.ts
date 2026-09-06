@@ -4,8 +4,9 @@ import { clientIp } from "@/server/auth/session";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { createHost, hostInputSchema, listHosts, toPublicHost } from "@/server/services/host-service";
+import { INVENTORY_VIEW_PERMISSIONS } from "@/lib/permissions";
 
-export const GET = apiRoute("hosts.view", async (_req, session) => {
+export const GET = apiRoute(INVENTORY_VIEW_PERMISSIONS, async (_req, session) => {
   return json({ hosts: await listHosts(session.user) });
 });
 

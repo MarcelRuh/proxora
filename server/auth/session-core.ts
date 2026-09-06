@@ -1,9 +1,8 @@
 import { ForbiddenError, NotFoundError } from "@/lib/errors";
 import { prisma } from "@/lib/db";
 import { randomToken, sha256 } from "@/lib/crypto";
-import type { GuestScope } from "@/lib/guest-scope";
-import { parseGuestKind, canAccessGuest, canAccessHost } from "@/lib/guest-scope";
-import { sanitizePermissions } from "@/lib/permissions";
+import { canAccessGuest, canAccessHost, lockHostsWithoutHostView, sessionScopeFromGrants, type GuestScope } from "@/lib/guest-scope";
+import { hasPermission, sanitizePermissions } from "@/lib/permissions";
 import { ensureSystemRoles } from "@/server/services/role-sync";
 
 export { canAccessGuest, canAccessHost, filterGuestsForUser } from "@/lib/guest-scope";
@@ -29,6 +28,44 @@ export type AuthSession = {
   id: string;
   user: SessionUser;
 };
+
+type SessionUserSource = {
+  id: string;
+  username: string;
+  email: string;
+  role: { id: string; slug: string; name: string; permissions: string[] };
+  hostAccess: Array<{ hostId: string; permissions?: string[]; override?: boolean }>;
+  guestAccess: Array<{ hostId: string; kind: string; vmid: number }>;
+};
+
+export function toSessionUser(user: SessionUserSource): SessionUser {
+  const scope = sessionScopeFromGrants(user.hostAccess, user.guestAccess);
+  const hostPermissions = scope.hostPermissions
+    ? Object.fromEntries(
+        Object.entries(scope.hostPermissions).map(([hostId, granted]) => [
+          hostId,
+          granted ? sanitizePermissions(granted) : null,
+        ]),
+      )
+    : null;
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: {
+      id: user.role.id,
+      slug: user.role.slug,
+      name: user.role.name,
+      permissions: user.role.permissions,
+    },
+    allowedHostIds: lockHostsWithoutHostView(
+      scope.allowedHostIds,
+      hasPermission(user.role.permissions, "hosts.view"),
+    ),
+    allowedGuests: scope.allowedGuests,
+    hostPermissions,
+  };
+}
 
 function sessionDays(): number {
   return Number(process.env.SESSION_DAYS ?? 7);
@@ -82,40 +119,9 @@ export async function getSessionFromToken(token: string | undefined | null): Pro
   }
   if (record.user.status !== "ACTIVE") return null;
 
-  const guests: GuestScope[] = record.user.guestAccess.flatMap((row) => {
-    const kind = parseGuestKind(row.kind);
-    return kind ? [{ hostId: row.hostId, kind, vmid: row.vmid }] : [];
-  });
-  const hostFromAccess = record.user.hostAccess.map((h) => h.hostId);
-  const hostFromGuests = guests.map((g) => g.hostId);
-  let allowedHostIds: string[] | null = null;
-  if (hostFromAccess.length > 0) allowedHostIds = [...new Set(hostFromAccess)];
-  else if (hostFromGuests.length > 0) allowedHostIds = [...new Set(hostFromGuests)];
-
-  const hostPermissions: Record<string, string[] | null> = {};
-  for (const row of record.user.hostAccess) {
-    hostPermissions[row.hostId] = row.override ? sanitizePermissions(row.permissions) : null;
-  }
-  for (const hostId of hostFromGuests) {
-    if (!(hostId in hostPermissions)) hostPermissions[hostId] = null;
-  }
-
   return {
     id: record.id,
-    user: {
-      id: record.user.id,
-      username: record.user.username,
-      email: record.user.email,
-      role: {
-        id: record.user.role.id,
-        slug: record.user.role.slug,
-        name: record.user.role.name,
-        permissions: record.user.role.permissions,
-      },
-      allowedHostIds,
-      allowedGuests: guests.length ? guests : null,
-      hostPermissions: Object.keys(hostPermissions).length ? hostPermissions : null,
-    },
+    user: toSessionUser(record.user),
   };
 }
 

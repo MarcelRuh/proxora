@@ -33,6 +33,7 @@ import { BrandMark } from "@/components/layout/brand-mark";
 import type { SessionUser } from "@/lib/types";
 import { userHasAnyPermission, userHasPermission } from "@/lib/permissions";
 import type { Permission } from "@/lib/permissions";
+import { navItemVisible } from "@/lib/home-path";
 import { APP_NAME, APP_VERSION } from "@/lib/version";
 import { useQuery } from "@tanstack/react-query";
 import type { SelfUpdateStatus } from "@/components/settings/self-update-section";
@@ -112,7 +113,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
           </div>
         </div>
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-          {NAV.filter((item) => userHasAnyPermission(user, item.anyOf)).map((item) => (
+          {NAV.filter((item) => navItemVisible(user, item.href, item.anyOf)).map((item) => (
             <NavLink
               key={item.href}
               href={item.href}

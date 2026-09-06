@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.5.9] – 2026-09-06
+
+### Added
+
+- System role **Nothing**: operate assigned VMs/containers (start/stop/console/files) without host inventory, storage, backups, or dashboard.
+- Granting a single LXC (or VM) to a Nothing user shows only that guest. Hosts stay hidden in the nav and search.
+
 ## [1.5.8] – 2026-09-06
 
 ### Changed

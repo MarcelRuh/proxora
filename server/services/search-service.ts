@@ -2,15 +2,18 @@ import type { SessionUser } from "@/server/auth/session";
 import { listHosts, withHostClient } from "@/server/services/host-service";
 import { filterGuestsForUser } from "@/server/auth/session-core";
 import { loadHostInventory } from "@/server/services/inventory-cache";
+import { userHasPermission } from "@/lib/permissions";
 
 export async function globalSearch(user: SessionUser, query: string) {
   const q = query.trim().toLowerCase();
   if (q.length < 1) return { hosts: [], vms: [], containers: [], storage: [], tasks: [], users: [] };
 
   const hosts = await listHosts(user);
-  const hostHits = hosts
-    .filter((h) => h.name.toLowerCase().includes(q) || h.url.toLowerCase().includes(q))
-    .map((h) => ({ type: "host" as const, id: h.id, title: h.name, subtitle: h.url }));
+  const hostHits = userHasPermission(user, "hosts.view")
+    ? hosts
+        .filter((h) => h.name.toLowerCase().includes(q) || h.url.toLowerCase().includes(q))
+        .map((h) => ({ type: "host" as const, id: h.id, title: h.name, subtitle: h.url }))
+    : [];
 
   const guestHits = await Promise.all(
     hosts.map(async (host) => {
@@ -40,20 +43,22 @@ export async function globalSearch(user: SessionUser, query: string) {
                 subtitle: `${host.name} / ${v.node}`,
                 href: `/containers/${host.id}/${v.node}/${v.vmid}`,
               })),
-            storage: inv.storage.flatMap((s) => {
-              const name = s.storage.trim();
-              if (!name || seenStorage.has(name) || !name.toLowerCase().includes(q)) return [];
-              seenStorage.add(name);
-              return [
-                {
-                  type: "storage" as const,
-                  id: `${host.id}:${name}`,
-                  title: name,
-                  subtitle: `${host.name} · ${s.type}`,
-                  href: `/storage?host=${host.id}`,
-                },
-              ];
-            }),
+            storage: userHasPermission(user, "storage.view")
+              ? inv.storage.flatMap((s) => {
+                  const name = s.storage.trim();
+                  if (!name || seenStorage.has(name) || !name.toLowerCase().includes(q)) return [];
+                  seenStorage.add(name);
+                  return [
+                    {
+                      type: "storage" as const,
+                      id: `${host.id}:${name}`,
+                      title: name,
+                      subtitle: `${host.name} · ${s.type}`,
+                      href: `/storage?host=${host.id}`,
+                    },
+                  ];
+                })
+              : [],
           };
         });
       } catch {

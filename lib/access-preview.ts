@@ -13,6 +13,7 @@ export const PREVIEW_ACTIONS: Permission[] = [
   "vm.force-stop",
   "vm.reboot",
   "vm.console",
+  "vm.files",
   "vm.config",
   "vm.delete",
   "vm.clone",
@@ -22,6 +23,7 @@ export const PREVIEW_ACTIONS: Permission[] = [
   "lxc.force-stop",
   "lxc.reboot",
   "lxc.console",
+  "lxc.files",
   "lxc.config",
   "lxc.delete",
   "lxc.clone",
@@ -58,10 +60,15 @@ export function buildAccessPreview(input: {
     role: { permissions: input.permissions },
     hostPermissions: Object.fromEntries(grants.map((g) => [g.hostId, g.permissions])),
   };
+  const guestHostIds = [...new Set(input.guests.map((g) => g.hostId))];
+  const hostMode: AccessPreview["hostMode"] = grants.length || input.guests.length ? "listed" : "all";
+  const hostNames = grants.length
+    ? grants.map((g) => hostMap.get(g.hostId) ?? g.hostId)
+    : guestHostIds.map((id) => hostMap.get(id) ?? id);
   return {
     roleName: input.roleName,
-    hostMode: grants.length ? "listed" : "all",
-    hostNames: grants.map((g) => hostMap.get(g.hostId) ?? g.hostId),
+    hostMode,
+    hostNames,
     guestMode: input.guests.length ? "listed" : "all",
     guests: input.guests.map((g) => ({
       hostName: hostMap.get(g.hostId) ?? g.hostId,

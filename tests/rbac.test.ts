@@ -10,7 +10,7 @@ import {
   userHasPermission,
   userHasAnyPermission,
 } from "@/lib/permissions";
-import { canAccessGuest, canAccessHost, filterGuestsForUser, type AccessScope } from "@/lib/guest-scope";
+import { canAccessGuest, canAccessHost, filterGuestsForUser, lockHostsWithoutHostView, sessionScopeFromGrants, type AccessScope } from "@/lib/guest-scope";
 
 function user(partial: Partial<AccessScope> = {}): AccessScope {
   return {
@@ -56,6 +56,21 @@ describe("RBAC", () => {
     expect(hasPermission(granted, "vm.reset")).toBe(false);
     expect(hasPermission(granted, "vm.config")).toBe(false);
     expect(hasPermission(granted, "users.create")).toBe(false);
+  });
+
+  it("gives Nothing guest control without host inventory", () => {
+    const granted = ROLE_PRESETS.nothing.permissions;
+    expect(hasPermission(granted, "hosts.view")).toBe(false);
+    expect(hasPermission(granted, "storage.view")).toBe(false);
+    expect(hasPermission(granted, "backup.view")).toBe(false);
+    expect(hasPermission(granted, "lxc.view")).toBe(true);
+    expect(hasPermission(granted, "lxc.start")).toBe(true);
+    expect(hasPermission(granted, "lxc.console")).toBe(true);
+    expect(hasPermission(granted, "lxc.files")).toBe(true);
+    expect(hasPermission(granted, "vm.view")).toBe(true);
+    expect(hasPermission(granted, "lxc.create")).toBe(false);
+    expect(hasPermission(granted, "lxc.config")).toBe(false);
+    expect(hasPermission(granted, "users.view")).toBe(false);
   });
 
   it("expands legacy coarse aliases without turning force-stop into a bundle", () => {
@@ -134,5 +149,24 @@ describe("guest scope", () => {
         { vmid: 106 },
       ]),
     ).toEqual([{ vmid: 105 }]);
+  });
+
+  it("derives host scope from guest grants when no hosts are assigned", () => {
+    const scope = sessionScopeFromGrants([], [{ hostId: "h1", kind: "lxc", vmid: 243 }]);
+    expect(scope.allowedHostIds).toEqual(["h1"]);
+    expect(scope.allowedGuests).toEqual([{ hostId: "h1", kind: "lxc", vmid: 243 }]);
+    expect(canAccessGuest(scope, "h1", "lxc", 243)).toBe(true);
+    expect(canAccessGuest(scope, "h1", "lxc", 100)).toBe(false);
+    expect(canAccessGuest(scope, "h2", "lxc", 243)).toBe(false);
+    expect(canAccessHost(scope, "h2")).toBe(false);
+  });
+
+  it("does not treat empty grants as all hosts when the role cannot view hosts", () => {
+    expect(lockHostsWithoutHostView(null, false)).toEqual([]);
+    expect(lockHostsWithoutHostView(null, true)).toBeNull();
+    expect(lockHostsWithoutHostView(["h1"], false)).toEqual(["h1"]);
+    const locked: AccessScope = { allowedHostIds: [], allowedGuests: null };
+    expect(canAccessHost(locked, "h1")).toBe(false);
+    expect(filterGuestsForUser(locked, "h1", "lxc", [{ vmid: 1 }])).toEqual([]);
   });
 });

@@ -12,12 +12,20 @@ export function ensureSystemRoles() {
 async function syncSystemRoles() {
   try {
     for (const [slug, preset] of Object.entries(ROLE_PRESETS)) {
-      await prisma.role.updateMany({
-        where: { slug, isSystem: true },
-        data: {
+      await prisma.role.upsert({
+        where: { slug },
+        update: {
           name: preset.name,
           description: preset.description,
           permissions: [...preset.permissions],
+          isSystem: true,
+        },
+        create: {
+          slug,
+          name: preset.name,
+          description: preset.description,
+          permissions: [...preset.permissions],
+          isSystem: true,
         },
       });
     }

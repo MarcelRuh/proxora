@@ -209,6 +209,7 @@ export default function UsersPage() {
               hosts={form.hosts}
               guests={form.guests}
               rolePermissions={roles?.roles.find((r) => r.id === form.roleId)?.permissions}
+              roleSlug={roles?.roles.find((r) => r.id === form.roleId)?.slug}
               onHosts={(hosts) => setForm({ ...form, hosts })}
               onGuests={(guests) => setForm({ ...form, guests })}
               onGuestNames={setGuestNames}
@@ -252,6 +253,7 @@ export default function UsersPage() {
               hosts={editForm.hosts}
               guests={editForm.guests}
               rolePermissions={roles?.roles.find((r) => r.id === editForm.roleId)?.permissions}
+              roleSlug={roles?.roles.find((r) => r.id === editForm.roleId)?.slug}
               onHosts={(hosts) => setEditForm({ ...editForm, hosts })}
               onGuests={(guests) => setEditForm({ ...editForm, guests })}
               onGuestNames={setGuestNames}

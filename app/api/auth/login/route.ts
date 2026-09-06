@@ -16,7 +16,7 @@ import { verifyPassword } from "@/lib/password";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { decryptSecret } from "@/lib/crypto";
 import { createTotpTicket, readTotpTicket, verifyTotp } from "@/lib/totp";
-import { parseGuestKind } from "@/lib/guest-scope";
+import { toSessionUser } from "@/server/auth/session-core";
 
 const loginSchema = z.object({
   username: z.string().min(1).optional(),
@@ -97,7 +97,7 @@ async function finishLogin(
     id: string;
     username: string;
     email: string;
-    role: { slug: string; name: string; permissions: string[] };
+    role: { id: string; slug: string; name: string; permissions: string[] };
     hostAccess: Array<{ hostId: string; permissions?: string[]; override?: boolean }>;
     guestAccess: Array<{ hostId: string; kind: string; vmid: number }>;
   },
@@ -112,25 +112,9 @@ async function finishLogin(
     target: user.username,
     result: "SUCCESS",
   });
-  const guests = user.guestAccess.flatMap((row) => {
-    const kind = parseGuestKind(row.kind);
-    return kind ? [{ hostId: row.hostId, kind, vmid: row.vmid }] : [];
-  });
   const store = await cookies();
   store.set(SESSION_COOKIE, token, sessionCookieOptions(expiresAt));
   return json({
-    user: {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      role: { slug: user.role.slug, name: user.role.name, permissions: user.role.permissions },
-      allowedHostIds: user.hostAccess.length ? user.hostAccess.map((h) => h.hostId) : null,
-      allowedGuests: guests.length ? guests : null,
-      hostPermissions: user.hostAccess.length
-        ? Object.fromEntries(
-            user.hostAccess.map((h) => [h.hostId, h.override ? h.permissions ?? [] : null]),
-          )
-        : null,
-    },
+    user: toSessionUser(user),
   });
 }

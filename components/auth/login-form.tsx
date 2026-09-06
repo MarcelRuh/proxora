@@ -12,6 +12,8 @@ import { APP_NAME } from "@/lib/version";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { LocaleSwitch } from "@/components/i18n/locale-switch";
 import { UiThemeSelect } from "@/components/theme/ui-theme-select";
+import { resolvePostLoginPath } from "@/lib/home-path";
+import type { SessionUser } from "@/lib/types";
 
 export function LoginForm({ next }: { next: string }) {
   const { t } = useI18n();
@@ -38,7 +40,7 @@ export function LoginForm({ next }: { next: string }) {
     setError(null);
     try {
       const payload = ticket ? { ticket, totp } : { username, password };
-      const res = await api<{ totpRequired?: boolean; ticket?: string }>("/api/auth/login", {
+      const res = await api<{ totpRequired?: boolean; ticket?: string; user?: SessionUser }>("/api/auth/login", {
         method: "POST",
         body: JSON.stringify(payload),
       });
@@ -47,7 +49,7 @@ export function LoginForm({ next }: { next: string }) {
         setTotp("");
         return;
       }
-      router.push(next);
+      router.push(res.user ? resolvePostLoginPath(res.user, next) : next);
       router.refresh();
     } catch (err) {
       setError(loginError(err));

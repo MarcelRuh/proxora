@@ -122,8 +122,9 @@ describe("guest file permissions", () => {
     expect(hasPermission(ROLE_PRESETS.viewer.permissions, "vm.files")).toBe(false);
     expect(hasPermission(ROLE_PRESETS.operator.permissions, "lxc.files")).toBe(true);
     expect(hasPermission(ROLE_PRESETS.operator.permissions, "vm.files")).toBe(true);
-    expect(hasPermission(ROLE_PRESETS.administrator.permissions, "lxc.files")).toBe(true);
-    expect(hasPermission(ROLE_PRESETS.administrator.permissions, "vm.files")).toBe(true);
+    expect(hasPermission(ROLE_PRESETS.nothing.permissions, "lxc.files")).toBe(true);
+    expect(hasPermission(ROLE_PRESETS.nothing.permissions, "vm.files")).toBe(true);
+    expect(hasPermission(ROLE_PRESETS.nothing.permissions, "hosts.view")).toBe(false);
   });
 
   it("does not include SFTP in view-level host shares", () => {

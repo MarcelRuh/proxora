@@ -39,4 +39,19 @@ describe("access preview", () => {
     expect(preview.actions).toContain("updates.upgrade");
     expect(preview.hostOverrides).toEqual([{ hostName: "lab", count: 2 }]);
   });
+
+  it("treats guest-only grants as listed hosts, not all hosts", () => {
+    const preview = buildAccessPreview({
+      roleName: "Nothing",
+      permissions: ["lxc.view", "lxc.start"],
+      hosts: [],
+      guests: [{ hostId: "h1", kind: "lxc", vmid: 243 }],
+      hostList: [{ id: "h1", name: "lab" }],
+      guestNames: { "h1:lxc:243": "mail" },
+    });
+    expect(preview.hostMode).toBe("listed");
+    expect(preview.hostNames).toEqual(["lab"]);
+    expect(preview.guestMode).toBe("listed");
+    expect(preview.guests[0]).toMatchObject({ vmid: 243, name: "mail", kind: "lxc" });
+  });
 });
