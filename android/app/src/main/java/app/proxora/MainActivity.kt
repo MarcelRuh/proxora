@@ -21,10 +21,12 @@ import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.LinearLayoutCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -54,7 +56,11 @@ class MainActivity : AppCompatActivity() {
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
-    enableEdgeToEdge()
+    val barColor = 0xFF0A0A0F.toInt()
+    enableEdgeToEdge(
+      statusBarStyle = SystemBarStyle.dark(barColor),
+      navigationBarStyle = SystemBarStyle.dark(barColor),
+    )
     super.onCreate(savedInstanceState)
     if (Prefs.serverUrl(this).isNullOrBlank()) {
       setupLauncher.launch(Intent(this, SetupActivity::class.java))
@@ -84,8 +90,12 @@ class MainActivity : AppCompatActivity() {
     ProxoraWeb.configure(webView)
     attachClients(webView)
 
-    val root = FrameLayout(this).apply {
+    val statusSpacer = View(this).apply {
       setBackgroundColor(getColor(R.color.proxora_bg))
+    }
+    val content = FrameLayout(this).apply {
+      clipToPadding = true
+      clipChildren = true
       addView(
         webView,
         FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
@@ -95,19 +105,32 @@ class MainActivity : AppCompatActivity() {
         FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (3 * resources.displayMetrics.density).toInt()),
       )
     }
-    ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
-      val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-      val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
-      view.updatePadding(
-        left = maxOf(bars.left, cutout.left),
-        top = maxOf(bars.top, cutout.top),
-        right = maxOf(bars.right, cutout.right),
-        bottom = maxOf(bars.bottom, cutout.bottom),
+    val root = LinearLayoutCompat(this).apply {
+      orientation = LinearLayoutCompat.VERTICAL
+      setBackgroundColor(getColor(R.color.proxora_bg))
+      addView(
+        statusSpacer,
+        LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, statusBarFallbackPx()),
       )
-      insets
+      addView(
+        content,
+        LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+      )
+    }
+    ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+      val top = maxOf(
+        insets.getInsets(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.displayCutout()).top,
+        statusBarFallbackPx(),
+      )
+      statusSpacer.layoutParams = LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, top)
+      val sides = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+      val bottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars() or WindowInsetsCompat.Type.ime()).bottom
+      view.updatePadding(left = sides.left, right = sides.right, bottom = bottom)
+      WindowInsetsCompat.CONSUMED
     }
     setContentView(root)
     applySystemBars()
+    ViewCompat.requestApplyInsets(root)
 
     webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
       startDownload(url, userAgent, contentDisposition, mimeType)
@@ -150,12 +173,17 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun applySystemBars() {
-    WindowCompat.setDecorFitsSystemWindows(window, false)
     WindowCompat.getInsetsController(window, window.decorView).apply {
       show(WindowInsetsCompat.Type.statusBars())
       isAppearanceLightStatusBars = false
       isAppearanceLightNavigationBars = false
     }
+  }
+
+  private fun statusBarFallbackPx(): Int {
+    val id = resources.getIdentifier("status_bar_height", "dimen", "android")
+    if (id > 0) return resources.getDimensionPixelSize(id)
+    return (24 * resources.displayMetrics.density).toInt()
   }
 
   private fun handleShortcut(intent: Intent?) {

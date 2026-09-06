@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.6] – 2026-09-06
+
+### Fixed
+
+- Android WebView no longer draws under the system status bar (clock and battery stay clear).
+
 ## [1.7.5] – 2026-09-06
 
 ### Changed
