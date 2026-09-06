@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.1] – 2026-09-06
+
+### Changed
+
+- A WireGuard colleague who self-updates Proxora no longer looks like their hosts went offline. Peers get an update notice (inbox + Discord) and shared hosts stay in maintenance until the instance is back.
+- Android launcher icon matches the web hexagon mark.
+
 ## [1.7.0] – 2026-09-06
 
 ### Added

@@ -17,6 +17,7 @@ import {
   isSelfUpdateAvailable,
   selfUpdateTargetVersion,
 } from "@/lib/version";
+import { broadcastSelfUpdate } from "@/server/services/peer-update";
 import {
   fetchGithubChangelog,
   fetchGithubCommitSha,
@@ -244,10 +245,19 @@ export async function applySelfUpdate(): Promise<{ ok: boolean; message: string;
 
   applyInFlight = true;
   try {
+    await broadcastSelfUpdate({ updating: true, from: APP_VERSION, to: status.targetVersion });
     if (!existsSync("/.dockerenv")) {
-      return await applyOnHost(mount, opts.repo, opts.branch, status.targetTag);
+      const result = await applyOnHost(mount, opts.repo, opts.branch, status.targetTag);
+      if (!result.ok) {
+        await broadcastSelfUpdate({ updating: false, from: APP_VERSION, to: status.targetVersion });
+      }
+      return result;
     }
-    return applyViaSignal(hostDir, opts.repo, status.targetTag);
+    const result = applyViaSignal(hostDir, opts.repo, status.targetTag);
+    if (!result.ok) {
+      await broadcastSelfUpdate({ updating: false, from: APP_VERSION, to: status.targetVersion });
+    }
+    return result;
   } finally {
     applyInFlight = false;
   }

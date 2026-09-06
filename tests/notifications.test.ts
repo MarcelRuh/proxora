@@ -33,7 +33,9 @@ describe("notification topic filters", () => {
   it("adds topics that did not exist when the channel was saved", () => {
     expect(eventsWithNewTopics(["host.updates"], LEGACY_EVENTS_SEEN)).toContain("disk.full");
     expect(eventsWithNewTopics(["host.updates"], LEGACY_EVENTS_SEEN)).toContain("zfs.degraded");
+    expect(eventsWithNewTopics(["host.updates"], LEGACY_EVENTS_SEEN)).toContain("peer.update");
     expect(channelAllowsTopic(["host.updates"], "zfs.degraded")).toBe(true);
+    expect(channelAllowsTopic(["host.updates"], "peer.update")).toBe(true);
   });
 });
 
@@ -107,6 +109,20 @@ describe("discord embeds", () => {
         message: "tank",
       }).embeds[0].fields?.find((f) => f.name === "Ereignis")?.value,
     ).toBe("ZFS-Pool beeinträchtigt");
+  });
+
+  it("labels peer.update without empty host identity fields", () => {
+    const fields = buildDiscordWebhookPayload({
+      topic: "peer.update",
+      level: "warning",
+      title: "Proxora-Update",
+      message: "Labor aktualisiert Proxora (1.7.0 → 1.7.1).",
+      name: "Labor",
+    }).embeds[0].fields;
+    expect(fields.find((f) => f.name === "Ereignis")?.value).toBe("Proxora-Update");
+    expect(fields.find((f) => f.name === "Peer")?.value).toBe("Labor");
+    expect(fields.find((f) => f.name === "Host")).toBeUndefined();
+    expect(fields.find((f) => f.name === "ID")).toBeUndefined();
   });
 
   it("appends wait=true without dropping the token", () => {

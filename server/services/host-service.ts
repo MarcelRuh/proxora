@@ -12,6 +12,7 @@ import { hostClientCache } from "@/server/proxmox/client-cache";
 import type { ConnectionTestResult, ProxmoxConnectionConfig } from "@/server/proxmox/types";
 import { normalizeProxmoxUsername } from "@/server/proxmox/username";
 import { notifyTopic } from "@/server/notifications/dispatch";
+import { absorbPeerUpdateOutage, expireStalePeerUpdates, notePeerHostReachable } from "@/server/services/peer-update";
 import { outboundToken, peerHttpBase } from "@/server/services/wireguard-service";
 
 export const hostInputSchema = z.object({
@@ -184,7 +185,7 @@ export async function testRawConnection(
 async function applyTestResult(hostId: string, result: ConnectionTestResult) {
   const current = await prisma.host.findUnique({
     where: { id: hostId },
-    select: { id: true, name: true, connectionState: true },
+    select: { id: true, name: true, connectionState: true, origin: true, peerId: true },
   });
   if (result.ok) {
     await prisma.host.update({
@@ -199,7 +200,9 @@ async function applyTestResult(hostId: string, result: ConnectionTestResult) {
       },
     });
     notifyHostState(current, HostConnectionState.ONLINE);
+    if (current?.origin === HostOrigin.PEER) await notePeerHostReachable(current.peerId);
   } else {
+    if (await absorbPeerUpdateOutage(hostId)) return;
     await prisma.host.update({
       where: { id: hostId },
       data: {
@@ -327,6 +330,7 @@ export async function testHost(id: string, user: SessionUser) {
 }
 
 export async function probeAllHosts() {
+  await expireStalePeerUpdates();
   const hosts = await prisma.host.findMany({ orderBy: { name: "asc" } });
   await Promise.all(
     hosts.map(async (host) => {
@@ -359,6 +363,7 @@ export async function probeAllHosts() {
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";
         logger.warn({ host: host.name, err: message }, "Host probe failed");
+        if (await absorbPeerUpdateOutage(host.id)) return;
         await prisma.host.update({
           where: { id: host.id },
           data: { connectionState: HostConnectionState.ERROR, lastError: message },
@@ -396,6 +401,9 @@ export async function withHostClient<T>(
     const message = error instanceof Error ? error.message : "Unknown error";
     logger.warn({ host: host.name, err: message }, "Host request failed");
     if (host.connectionState !== HostConnectionState.MAINTENANCE) {
+      if (await absorbPeerUpdateOutage(host.id)) {
+        throw new HostUnreachableError(host.name, message);
+      }
       await prisma.host.update({
         where: { id: host.id },
         data: { connectionState: HostConnectionState.ERROR, lastError: message },

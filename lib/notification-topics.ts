@@ -12,6 +12,7 @@ export const NOTIFICATION_TOPICS = [
   "task.failed",
   "disk.full",
   "zfs.degraded",
+  "peer.update",
 ] as const;
 
 export type NotificationTopic = (typeof NOTIFICATION_TOPICS)[number];

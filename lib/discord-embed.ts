@@ -37,6 +37,7 @@ const TOPIC_LABELS: Record<NotificationTopic | "test", string> = {
   "task.failed": "Task fehlgeschlagen",
   "disk.full": "Disk fast voll",
   "zfs.degraded": "ZFS-Pool beeinträchtigt",
+  "peer.update": "Proxora-Update",
   test: "Test",
 };
 
@@ -103,14 +104,21 @@ export function buildDiscordWebhookPayload(
   const avatarUrl = opts?.avatarUrl ?? proxoraDiscordAvatarUrl();
   const version = opts?.version ?? APP_VERSION;
   const description = clip(event.message, 4096);
-  const fields: DiscordEmbedField[] = [
-    identityField("Name", event.name),
-    identityField("ID", event.id),
-    identityField("Host", event.host),
-    identityField("Node", event.node),
-    { name: "Ereignis", value: TOPIC_LABELS[event.topic] ?? event.topic, inline: true },
-    { name: "Stufe", value: LEVEL_LABELS[event.level] ?? event.level, inline: true },
-  ];
+  const fields: DiscordEmbedField[] =
+    event.topic === "peer.update"
+      ? [
+          ...(event.name ? [identityField("Peer", event.name)] : []),
+          { name: "Ereignis", value: TOPIC_LABELS[event.topic], inline: true },
+          { name: "Stufe", value: LEVEL_LABELS[event.level] ?? event.level, inline: true },
+        ]
+      : [
+          identityField("Name", event.name),
+          identityField("ID", event.id),
+          identityField("Host", event.host),
+          identityField("Node", event.node),
+          { name: "Ereignis", value: TOPIC_LABELS[event.topic] ?? event.topic, inline: true },
+          { name: "Stufe", value: LEVEL_LABELS[event.level] ?? event.level, inline: true },
+        ];
   const origin = process.env.APP_URL?.replace(/\/+$/, "");
   if (event.href && origin) {
     fields.push({ name: "Link", value: clip(`${origin}${event.href}`, 1024), inline: false });

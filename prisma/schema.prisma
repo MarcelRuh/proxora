@@ -251,6 +251,9 @@ model WireguardPeer {
   encryptedInboundToken    String
   encryptedOutboundToken   String            @default("")
   lastSeenAt               DateTime?
+  updatingUntil            DateTime?
+  updatingFrom             String?
+  updatingTo               String?
   createdAt                DateTime          @default(now())
   updatedAt                DateTime          @updatedAt
   hosts                    Host[]
