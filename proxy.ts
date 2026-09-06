@@ -29,5 +29,8 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  // Stream routes must skip proxy: Next clones PUT/POST bodies and caps them (~10 MB), which throttles ISO uploads to ~2 MB/s.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|api/federation/guest-files/(?:upload|download)|api/hosts/.+/files/(?:upload|download)|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };

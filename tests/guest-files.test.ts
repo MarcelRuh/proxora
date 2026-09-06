@@ -16,6 +16,7 @@ import {
   shSingleQuote,
   uploadNameConflicts,
 } from "@/lib/guest-files";
+import { isGuestFileTransferPath } from "@/lib/guest-file-http";
 import {
   createGuestTransferTicket,
   decodeGuestTransferMeta,
@@ -44,6 +45,13 @@ describe("guest file paths", () => {
   it("quotes paths for POSIX cat over SSH", () => {
     expect(shSingleQuote("/var/iso/win.iso")).toBe("'/var/iso/win.iso'");
     expect(shSingleQuote("/tmp/it's")).toBe("'/tmp/it'\\''s'");
+  });
+
+  it("detects guest file stream routes that must skip Next.js proxy", () => {
+    expect(isGuestFileTransferPath("/api/hosts/abc/lxc/pve/243/files/upload")).toBe(true);
+    expect(isGuestFileTransferPath("/api/hosts/abc/vms/pve/100/files/download?ticket=x")).toBe(true);
+    expect(isGuestFileTransferPath("/api/federation/guest-files/upload")).toBe(true);
+    expect(isGuestFileTransferPath("/api/hosts/abc/lxc/pve/243/files")).toBe(false);
   });
 
   it("rejects loopback and metadata SSH targets", () => {

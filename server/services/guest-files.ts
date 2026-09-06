@@ -327,6 +327,16 @@ type StreamCreds = {
   path: string;
 };
 
+export type GuestUploadBody = Readable | ReadableStream<Uint8Array> | null;
+
+function toNodeReadable(body: GuestUploadBody): Readable | null {
+  if (!body) return null;
+  if (body instanceof Readable) return body;
+  return Readable.fromWeb(body as import("node:stream/web").ReadableStream<Uint8Array>, {
+    highWaterMark: 1024 * 1024,
+  });
+}
+
 async function parseStreamCreds(input: StreamCreds) {
   const auth = parseSshAuth(input);
   try {
@@ -383,11 +393,7 @@ function probePosixShell(client: Client): Promise<boolean> {
   });
 }
 
-function sshCatUpload(
-  client: Client,
-  remotePath: string,
-  body: ReadableStream<Uint8Array> | null,
-): Promise<number> {
+function sshCatUpload(client: Client, remotePath: string, body: Readable | null): Promise<number> {
   const cmd = `umask 022 && cat > ${shSingleQuote(remotePath)}`;
   return new Promise((resolve, reject) => {
     client.exec(cmd, (err, stream) => {
@@ -434,9 +440,7 @@ function sshCatUpload(
           cb(null, chunk);
         },
       });
-      const nodeIn = body
-        ? Readable.fromWeb(body as import("node:stream/web").ReadableStream<Uint8Array>, { highWaterMark: 1024 * 1024 })
-        : Readable.from([]);
+      const nodeIn = body ?? Readable.from([]);
       nodeIn.on("error", fail);
       counter.on("error", fail);
       nodeIn.pipe(counter).pipe(stream);
@@ -471,15 +475,9 @@ function writeAt(sftp: SFTPWrapper, handle: Buffer, chunk: Buffer, position: num
   });
 }
 
-/** Pipelined SFTP writes (ssh2 WriteStream is one packet per RTT). */
-async function sftpPipelineWrite(
-  sftp: SFTPWrapper,
-  handle: Buffer,
-  body: ReadableStream<Uint8Array> | null,
-): Promise<number> {
+async function sftpPipelineWrite(sftp: SFTPWrapper, handle: Buffer, body: Readable | null): Promise<number> {
   if (!body) return 0;
   const chunkSize = sftpChunkSize(sftp);
-  const reader = body.getReader();
   const pending = new Set<Promise<void>>();
   let firstError: unknown;
   let pos = 0;
@@ -516,28 +514,17 @@ async function sftpPipelineWrite(
     }
   };
 
-  try {
-    while (true) {
-      if (firstError) throw firstError;
-      const { done, value } = await reader.read();
-      if (value?.byteLength) {
-        const incoming = Buffer.from(value);
-        rest = rest.length ? Buffer.concat([rest, incoming]) : incoming;
-        await flushRest(false);
-      }
-      if (done) break;
-    }
-    await flushRest(true);
-    if (pending.size) await Promise.all([...pending]);
+  for await (const value of body) {
     if (firstError) throw firstError;
-    return pos;
-  } finally {
-    try {
-      reader.releaseLock();
-    } catch {
-      /* already released */
-    }
+    const incoming = Buffer.isBuffer(value) ? value : Buffer.from(value);
+    if (!incoming.byteLength) continue;
+    rest = rest.length ? Buffer.concat([rest, incoming]) : incoming;
+    await flushRest(false);
   }
+  await flushRest(true);
+  if (pending.size) await Promise.all([...pending]);
+  if (firstError) throw firstError;
+  return pos;
 }
 
 async function pumpSftpReads(sftp: SFTPWrapper, handle: Buffer, size: number, dest: PassThrough): Promise<void> {
@@ -701,21 +688,22 @@ export async function sftpDownloadResponse(input: StreamCreds): Promise<Response
   }
 }
 
-export async function sftpUploadFromStream(input: StreamCreds & { body: ReadableStream<Uint8Array> | null }): Promise<{
+export async function sftpUploadFromStream(input: StreamCreds & { body: GuestUploadBody }): Promise<{
   path: string;
   name: string;
   size: number;
 }> {
   const creds = await parseStreamCreds(input);
   const session = await openSftp(creds);
+  const nodeBody = toNodeReadable(input.body);
   let handle: Buffer | null = null;
   try {
     if (await probePosixShell(session.client)) {
-      const total = await sshCatUpload(session.client, creds.path, input.body);
+      const total = await sshCatUpload(session.client, creds.path, nodeBody);
       return { path: creds.path, name: guestFileName(creds.path), size: total };
     }
     handle = await openHandle(session.sftp, creds.path, "w");
-    const total = await sftpPipelineWrite(session.sftp, handle, input.body);
+    const total = await sftpPipelineWrite(session.sftp, handle, nodeBody);
     await closeHandle(session.sftp, handle);
     handle = null;
     return { path: creds.path, name: guestFileName(creds.path), size: total };
@@ -818,7 +806,7 @@ async function proxyGuestFileUploadToPeer(
     privateKey?: string;
     passphrase?: string;
     path: string;
-    body: ReadableStream<Uint8Array> | null;
+    body: GuestUploadBody;
     contentLength?: string | null;
   },
 ): Promise<{ path: string; name: string; size: number }> {
@@ -867,7 +855,7 @@ export async function streamGuestFileUpload(
     privateKey?: string;
     passphrase?: string;
     path: string;
-    body: ReadableStream<Uint8Array> | null;
+    body: GuestUploadBody;
     contentLength?: string | null;
   },
 ): Promise<{ path: string; name: string; size: number }> {

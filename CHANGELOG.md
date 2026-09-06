@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.5.4] – 2026-09-06
+
+### Fixed
+
+- Guest ISO uploads were capped at ~2.1 MB/s because Next.js proxy cloned the PUT body (default 10 MB). Stream routes now skip that proxy and are handled on the Node HTTP server.
+
 ## [1.5.3] – 2026-09-06
 
 ### Changed

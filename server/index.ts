@@ -5,6 +5,7 @@ import next from "next";
 import { WebSocketServer } from "ws";
 import { logger } from "@/lib/logger";
 import { attachConsoleProxy } from "@/server/ws/console-proxy";
+import { handleNodeGuestFileTransfer } from "@/server/http/guest-file-node";
 import { startAptRefreshScheduler } from "@/server/services/apt-refresh";
 import { startBackupWatchScheduler } from "@/server/services/backup-watch";
 import { startDiskWatchScheduler } from "@/server/services/disk-watch";
@@ -27,7 +28,19 @@ async function main() {
   const upgradeHandler = app.getUpgradeHandler?.();
 
   const server = createServer((req, res) => {
-    handle(req, res, parse(req.url ?? "", true));
+    void (async () => {
+      try {
+        if (await handleNodeGuestFileTransfer(req, res)) return;
+      } catch (error) {
+        logger.error({ err: error }, "Guest file transfer failed");
+        if (!res.headersSent) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Internal server error" }));
+        }
+        return;
+      }
+      handle(req, res, parse(req.url ?? "", true));
+    })();
   });
 
   const wss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
