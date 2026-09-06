@@ -29,4 +29,12 @@ describe("home path", () => {
     expect(navItemVisible(operator, "/hosts", ["hosts.view"])).toBe(true);
     expect(navItemVisible(operator, "/vms", ["vm.view"])).toBe(true);
   });
+
+  it("shows one empty list page when Nothing has no grants", () => {
+    const empty = { role: { permissions: ROLE_PRESETS.nothing.permissions }, allowedGuests: null };
+    expect(homePathForUser(empty)).toBe("/containers");
+    expect(navItemVisible(empty, "/containers", ["lxc.view"])).toBe(true);
+    expect(navItemVisible(empty, "/vms", ["vm.view"])).toBe(false);
+    expect(navItemVisible(empty, "/hosts", ["hosts.view"])).toBe(false);
+  });
 });

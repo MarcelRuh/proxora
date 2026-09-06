@@ -4,6 +4,7 @@ import { applyCachedVmDisks } from "@/server/services/guest-disk";
 import { applyCachedGuestIps, rememberGuestIps } from "@/server/services/guest-ip-cache";
 import { loadHostInventory } from "@/server/services/inventory-cache";
 import { canAccessGuest, filterGuestsForUser } from "@/server/auth/session-core";
+import { userHasPermission } from "@/lib/permissions";
 import { isClusterNodeOnline, minPositiveUptime, weightedCpuRatio } from "@/lib/cluster-metrics";
 import { withTimeoutFallback } from "@/lib/promise-timeout";
 import type { ConnectionState, Guest } from "@/lib/types";
@@ -95,12 +96,16 @@ function guestCounts(vms: GuestListItem[], containers: GuestListItem[]): HostCou
   };
 }
 
-function attachHost(snapshot: HostSnapshot, guests: GuestListItem[]): Array<Omit<Guest, "kind">> {
+function attachHost(
+  snapshot: HostSnapshot,
+  guests: GuestListItem[],
+  revealHost: boolean,
+): Array<Omit<Guest, "kind">> {
   return guests.map((guest) => ({
     ...guest,
     hostId: snapshot.overview.id,
-    hostName: snapshot.overview.name,
-    hostOwner: snapshot.overview.origin === "PEER" ? snapshot.overview.peerName : null,
+    hostName: revealHost ? snapshot.overview.name : undefined,
+    hostOwner: revealHost && snapshot.overview.origin === "PEER" ? snapshot.overview.peerName : null,
   }));
 }
 
@@ -226,8 +231,9 @@ export async function getDashboard(user: SessionUser) {
 export async function getDashboardGuests(user: SessionUser, kind: "vm" | "lxc" | "all" = "all") {
   const hosts = await listHosts(user);
   const snapshots = await Promise.all(hosts.map((host) => snapshotHostTimed(host, user, "guests")));
-  const vms = kind === "lxc" ? [] : snapshots.flatMap((s) => attachHost(s, s.vms));
-  const containers = kind === "vm" ? [] : snapshots.flatMap((s) => attachHost(s, s.containers));
+  const revealHost = userHasPermission(user, "hosts.view");
+  const vms = kind === "lxc" ? [] : snapshots.flatMap((s) => attachHost(s, s.vms, revealHost));
+  const containers = kind === "vm" ? [] : snapshots.flatMap((s) => attachHost(s, s.containers, revealHost));
   return { vms, containers };
 }
 

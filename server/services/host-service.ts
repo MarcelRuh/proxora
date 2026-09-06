@@ -6,6 +6,7 @@ import { ConflictError, ForbiddenError, HostUnreachableError, NotFoundError, Pro
 import { logger } from "@/lib/logger";
 import type { SessionUser } from "@/server/auth/session-core";
 import { canAccessHost } from "@/server/auth/session-core";
+import { userHasPermission } from "@/lib/permissions";
 import { createProxmoxClient } from "@/server/proxmox/client";
 import { hostClientCache } from "@/server/proxmox/client-cache";
 import type { ConnectionTestResult, ProxmoxConnectionConfig } from "@/server/proxmox/types";
@@ -70,6 +71,28 @@ export function toPublicHost(
   };
 }
 
+/** Guest-only users need origin/share for federation checks, not URL or credentials. */
+export function redactHostForGuest(host: ReturnType<typeof toPublicHost>): ReturnType<typeof toPublicHost> {
+  return {
+    ...host,
+    name: "",
+    url: "",
+    authType: "API_TOKEN",
+    username: "",
+    tokenId: null,
+    allowInsecureTls: false,
+    lastSeenAt: null,
+    lastError: null,
+    proxmoxVersion: null,
+    clusterName: null,
+    notes: null,
+    aptUpdateCount: 0,
+    aptCheckedAt: null,
+    peerId: null,
+    peerName: null,
+  };
+}
+
 export function filterHostsForUser<T extends { id: string }>(user: SessionUser, hosts: T[]): T[] {
   if (user.allowedHostIds === null) return hosts;
   return hosts.filter((h) => user.allowedHostIds!.includes(h.id));
@@ -81,7 +104,9 @@ export async function listHosts(user: SessionUser) {
     omit: { encryptedSecret: true },
     include: { peer: { select: { name: true } } },
   });
-  return filterHostsForUser(user, hosts).map(toPublicHost);
+  const mapped = filterHostsForUser(user, hosts).map(toPublicHost);
+  if (userHasPermission(user, "hosts.view")) return mapped;
+  return mapped.map(redactHostForGuest);
 }
 
 export async function getHostOrThrow(id: string, user?: SessionUser) {

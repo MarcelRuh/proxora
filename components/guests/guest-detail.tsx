@@ -70,6 +70,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     config: useCan(kind === "vm" ? "vm.config" : "lxc.config", hostId),
     backup: useCan("backup.run", hostId),
     restore: useCan("backup.restore", hostId),
+    hostsView: useCan("hosts.view"),
   };
   const search = useSearchParams();
   const pathname = usePathname();
@@ -195,12 +196,18 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             {params.vmid} · {name}
           </h1>
           <p className="text-sm text-muted-foreground">
-            <Link className="hover:underline" href={`/hosts/${params.hostId}`}>
-              {hostName}
-            </Link>
-            {" / "}
-            {params.node}
-            {num(status.uptime) ? ` · ${t("guest.uptime", { time: formatUptime(num(status.uptime)) })}` : null}
+            {can.hostsView ? (
+              <>
+                <Link className="hover:underline" href={`/hosts/${params.hostId}`}>
+                  {hostName}
+                </Link>
+                {" / "}
+                {params.node}
+                {num(status.uptime) ? ` · ${t("guest.uptime", { time: formatUptime(num(status.uptime)) })}` : null}
+              </>
+            ) : num(status.uptime) ? (
+              t("guest.uptime", { time: formatUptime(num(status.uptime)) })
+            ) : null}
           </p>
         </div>
         <GuestStateBadge status={runState} />

@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.5.10] – 2026-09-06
+
+### Changed
+
+- Guest-only users (Nothing) no longer receive host URL, credentials, notes or host names from the API. The guest table and guest page hide host/node; search does not show host names.
+- A Nothing account without grants sees a single empty page: "Keine Freigaben".
+
 ## [1.5.9] – 2026-09-06
 
 ### Added

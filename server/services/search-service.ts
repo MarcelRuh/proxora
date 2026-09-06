@@ -31,7 +31,7 @@ export async function globalSearch(user: SessionUser, query: string) {
                 type: "vm" as const,
                 id: `${host.id}:${v.node}:${v.vmid}`,
                 title: `VM ${v.vmid} — ${v.name}`,
-                subtitle: `${host.name} / ${v.node}`,
+                subtitle: userHasPermission(user, "hosts.view") ? `${host.name} / ${v.node}` : undefined,
                 href: `/vms/${host.id}/${v.node}/${v.vmid}`,
               })),
             containers: filterGuestsForUser(user, host.id, "lxc", inv.containers)
@@ -40,7 +40,7 @@ export async function globalSearch(user: SessionUser, query: string) {
                 type: "lxc" as const,
                 id: `${host.id}:${v.node}:${v.vmid}`,
                 title: `LXC ${v.vmid} — ${v.name}`,
-                subtitle: `${host.name} / ${v.node}`,
+                subtitle: userHasPermission(user, "hosts.view") ? `${host.name} / ${v.node}` : undefined,
                 href: `/containers/${host.id}/${v.node}/${v.vmid}`,
               })),
             storage: userHasPermission(user, "storage.view")

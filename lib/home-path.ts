@@ -31,10 +31,11 @@ export function navItemVisible(
   anyOf: readonly Permission[],
 ): boolean {
   if (!userHasAnyPermission(user, anyOf)) return false;
-  const guests = user.allowedGuests;
-  if (guests) {
+  if ((href === "/vms" || href === "/containers") && !userHasPermission(user, "hosts.view")) {
+    const guests = user.allowedGuests ?? [];
+    if (!guests.length) return href === homePathForUser(user);
     if (href === "/vms") return guests.some((g) => g.kind === "vm");
-    if (href === "/containers") return guests.some((g) => g.kind === "lxc");
+    return guests.some((g) => g.kind === "lxc");
   }
   return true;
 }

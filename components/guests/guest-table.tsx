@@ -50,7 +50,10 @@ export const GuestTable = memo(function GuestTable({
   const [hostFilter, setHostFilter] = useState("all");
   const [sort, setSort] = useState(DEFAULT_GUEST_SORT);
   const tags = useMemo(() => uniqueGuestTags(items), [items]);
+  const showHost = userHasPermission(user, "hosts.view");
+  const noGrants = !showHost && !(user.allowedGuests?.length);
   const hosts = useMemo(() => {
+    if (!showHost) return [];
     const map = new Map<string, string>();
     for (const g of items) {
       const id = g.hostId ?? hostId ?? "";
@@ -58,7 +61,7 @@ export const GuestTable = memo(function GuestTable({
       map.set(id, g.hostName ?? id);
     }
     return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1], "de"));
-  }, [items, hostId]);
+  }, [items, hostId, showHost]);
 
   function rowKind(g: Guest): "vm" | "lxc" {
     if (g.kind === "vm" || g.kind === "lxc") return g.kind;
@@ -72,7 +75,9 @@ export const GuestTable = memo(function GuestTable({
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const matched = items.filter((g) => {
-      const hay = `${g.name} ${g.vmid} ${g.hostName ?? ""} ${g.node} ${g.tags ?? ""} ${g.description ?? ""} ${(g.ips ?? []).join(" ")}`.toLowerCase();
+      const hay = showHost
+        ? `${g.name} ${g.vmid} ${g.hostName ?? ""} ${g.node} ${g.tags ?? ""} ${g.description ?? ""} ${(g.ips ?? []).join(" ")}`.toLowerCase()
+        : `${g.name} ${g.vmid} ${g.tags ?? ""} ${g.description ?? ""} ${(g.ips ?? []).join(" ")}`.toLowerCase();
       const textOk = !needle || hay.includes(needle);
       const statusOk = status === "all" || g.status === status;
       const tagOk = tag === "all" || guestHasTag(g.tags, tag);
@@ -80,7 +85,7 @@ export const GuestTable = memo(function GuestTable({
       return textOk && statusOk && tagOk && hostOk;
     });
     return sortGuests(matched, sort);
-  }, [items, q, status, tag, hostFilter, hostId, sort]);
+  }, [items, q, status, tag, hostFilter, hostId, sort, showHost]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const firstRowRef = useRef<HTMLTableRowElement>(null);
@@ -231,7 +236,7 @@ export const GuestTable = memo(function GuestTable({
     await invalidateDashboardQueries(qc);
   }
 
-  const colCount = mixed ? 12 : 11;
+  const colCount = (mixed ? 12 : 11) - (showHost ? 0 : 1);
   const bulkBusy = busyId === "bulk";
 
   return (
@@ -321,7 +326,7 @@ export const GuestTable = memo(function GuestTable({
             : "overflow-x-auto rounded-[4px] border border-border"
         }
       >
-        <table className={`w-full text-left text-sm ${mixed ? "min-w-[1080px]" : "min-w-[860px]"}`}>
+        <table className={`w-full text-left text-sm ${mixed ? "min-w-[1080px]" : showHost ? "min-w-[860px]" : "min-w-[720px]"}`}>
           <thead className="sticky top-0 z-10 bg-background font-[family-name:var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-muted-foreground shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
             <tr>
               <th className="w-10 px-3 py-2">
@@ -350,7 +355,7 @@ export const GuestTable = memo(function GuestTable({
               {mixed ? <SortHeader label={t("table.type")} column="kind" sort={sort} onSort={setSort} /> : null}
               <SortHeader label={t("table.name")} column="name" sort={sort} onSort={setSort} />
               <th className="px-3 py-2 font-medium">{t("table.ip")}</th>
-              <SortHeader label={t("table.host")} column="host" sort={sort} onSort={setSort} />
+              {showHost ? <SortHeader label={t("table.host")} column="host" sort={sort} onSort={setSort} /> : null}
               <SortHeader label={t("table.status")} column="status" sort={sort} onSort={setSort} />
               <SortHeader label={t("table.cpu")} column="cpu" sort={sort} onSort={setSort} />
               <SortHeader label={t("table.ram")} column="ram" sort={sort} onSort={setSort} />
@@ -371,7 +376,7 @@ export const GuestTable = memo(function GuestTable({
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={colCount} className="px-3 py-6 text-sm text-muted-foreground">
-                  {items.length === 0 ? t("dashboard.noGuests") : t("table.noMatches")}
+                  {items.length === 0 ? (noGrants ? t("guests.noGrants") : t("dashboard.noGuests")) : t("table.noMatches")}
                 </td>
               </tr>
             ) : (
@@ -464,6 +469,7 @@ export const GuestTable = memo(function GuestTable({
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
+                    {showHost ? (
                     <td className="px-3 py-2">
                       <p className="font-medium leading-tight text-foreground">{g.hostName ?? hid}</p>
                       <p className="text-xs leading-tight text-muted-foreground">
@@ -471,6 +477,7 @@ export const GuestTable = memo(function GuestTable({
                         {g.hostOwner ? ` · ${g.hostOwner}` : ""}
                       </p>
                     </td>
+                    ) : null}
                     <td className="px-3 py-2">
                       <GuestStateBadge status={g.status} />
                     </td>
