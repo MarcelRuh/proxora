@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.13] – 2026-09-06
+
+### Changed
+
+- Create wizards load nodes, storage and bridges first. ISO/template lists and used IPs follow in extra requests (`?media=1`, `?ips=1`). Storage pickers use cluster inventory when it already has content types.
+- Storage overview bars come from `cluster/resources`. ZFS disk details load when a pool is opened. User/role guest pickers fetch one inventory per expanded host (`GET /api/hosts/:id/guests`).
+
 ## [1.4.12] – 2026-09-06
 
 ### Changed

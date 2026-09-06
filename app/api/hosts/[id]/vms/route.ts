@@ -15,7 +15,7 @@ import { ostypeFromIso, vmCdromDisks, windowsVmFirmware } from "@/lib/iso-images
 import { diskExtras, vmDiskSpec } from "@/lib/vm-storage";
 import { withNetFirewall } from "@/lib/windows-guest";
 import type { VmCreateParams } from "@/server/proxmox/vms";
-import { invalidateInventoryCache } from "@/server/services/inventory-cache";
+import { invalidateInventoryCache, loadHostInventory } from "@/server/services/inventory-cache";
 
 export const maxDuration = 800;
 
@@ -60,7 +60,8 @@ const createVmSchema = z.object({
 
 export const GET = apiRoute("vm.view", async (_req, session, params) => {
   const vms = await withHostClient(params.id, session.user, async (client) => {
-    return filterGuestsForUser(session.user, params.id, "vm", await client.listVms());
+    const inv = await loadHostInventory(client, params.id);
+    return filterGuestsForUser(session.user, params.id, "vm", inv.vms);
   });
   return json({ vms });
 });

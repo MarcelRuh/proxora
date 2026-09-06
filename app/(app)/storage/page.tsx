@@ -176,7 +176,7 @@ export default function StoragePage() {
                 onClose={() => setOpen(null)}
               />
             ) : null}
-            <ZfsSection block={zfs?.find((row) => row.hostId === block.host.id)} />
+            <ZfsSection hostId={block.host.id} block={zfs?.find((row) => row.hostId === block.host.id)} />
           </CardContent>
         </Card>
           ))}

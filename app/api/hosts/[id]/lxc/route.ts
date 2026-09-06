@@ -13,7 +13,7 @@ import { durationLabel } from "@/lib/duration";
 import { ipv4Host } from "@/lib/create-ip";
 import { assertGuestIdentityFree } from "@/server/services/guest-ips";
 import type { LxcCreateParams } from "@/server/proxmox/lxc";
-import { invalidateInventoryCache } from "@/server/services/inventory-cache";
+import { invalidateInventoryCache, loadHostInventory } from "@/server/services/inventory-cache";
 
 export const maxDuration = 800;
 
@@ -43,7 +43,8 @@ const createLxcSchema = z.object({
 
 export const GET = apiRoute("lxc.view", async (_req, session, params) => {
   const containers = await withHostClient(params.id, session.user, async (client) => {
-    return filterGuestsForUser(session.user, params.id, "lxc", await client.listContainers());
+    const inv = await loadHostInventory(client, params.id);
+    return filterGuestsForUser(session.user, params.id, "lxc", inv.containers);
   });
   return json({ containers });
 });

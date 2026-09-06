@@ -12,22 +12,13 @@ import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { CreateIpFields, ipCollision, ipFieldsFromVmid } from "@/components/guests/create-ip-fields";
+import { useCreateOptions } from "@/components/guests/use-create-options";
 import { MemoryField } from "@/components/guests/memory-field";
 import { HostSelect, hostAllowsCreate } from "@/components/guests/host-select";
 import { CreateProgressDialog } from "@/components/guests/create-progress-dialog";
-import { DEFAULT_GUEST_NETWORK, shouldSyncGuestIp, type GuestIpNetwork } from "@/lib/create-ip";
+import { DEFAULT_GUEST_NETWORK, shouldSyncGuestIp } from "@/lib/create-ip";
 import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
-
-type Options = {
-  nodes: Array<{ node: string }>;
-  nextid: number | null;
-  storage: Array<{ storage: string; content?: string }>;
-  templates: Array<{ volid?: string }>;
-  bridges: Array<{ iface?: string; type?: string }>;
-  networks?: GuestIpNetwork[];
-  usedIps?: string[];
-};
 
 const selectClass =
   "mt-1 h-9 w-full rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm";
@@ -61,11 +52,7 @@ export default function CreateLxcPage() {
   const [progressError, setProgressError] = useState<string | null>(null);
   const createdRef = useRef<{ hostId: string; node: string; vmid: number } | null>(null);
 
-  const { data: options } = useQuery({
-    queryKey: ["options", form.hostId],
-    enabled: Boolean(form.hostId),
-    queryFn: () => api<Options>(`/api/hosts/${form.hostId}/options`),
-  });
+  const { data: options } = useCreateOptions(form.hostId, form.ipMode);
 
   useEffect(() => {
     const creatable = (hosts?.hosts ?? []).filter(hostAllowsCreate);

@@ -1,67 +1,49 @@
 import { apiRoute } from "@/server/http/api-route";
 import { json } from "@/server/http/respond";
-import { guestIpFromVmid } from "@/lib/create-ip";
-import { nextSmallerVmid } from "@/lib/next-vmid";
-import { collectUsedGuestIpsForHost } from "@/server/services/guest-ips";
 import { networksForHostId } from "@/server/services/guest-ip-settings";
-import { collectIsoVolumes, collectVztmplVolumes } from "@/server/services/lxc-template-catalog";
 import { getHostOrThrow, withHostClient } from "@/server/services/host-service";
-import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
+import { loadCreateIdentity, loadCreateMedia, loadCreateShell } from "@/server/services/create-options";
 
 export const GET = apiRoute(["vm.create", "lxc.create", "vm.clone", "lxc.clone"], async (req, session, params) => {
   const url = new URL(req.url);
-  const node = url.searchParams.get("node");
+  const node = url.searchParams.get("node")?.trim() || undefined;
+  const media = url.searchParams.get("media") === "1";
+  const ips = url.searchParams.get("ips") === "1";
   const networks = await networksForHostId(params.id);
   const target = await getHostOrThrow(params.id, session.user);
-  const [used, hostData] = await Promise.all([
-    collectUsedGuestIpsForHost(target),
-    withHostClient(params.id, session.user, async (client) => {
-      const inv = await loadHostInventory(client, params.id);
-      const nodeNames = inventoryNodeNames(inv);
-      const selected = node ?? nodeNames[0];
-      if (!selected) {
-        return {
-          nodes: [] as Array<{ node: string }>,
-          storage: [],
-          isos: [],
-          templates: [],
-          bridges: [],
-          fallbackNext: null as number | null,
-        };
-      }
-      const [storage, network, fallbackNext] = await Promise.all([
-        client.storage.list(selected),
-        client.nodes.network(selected).catch(() => []),
-        client.cluster.nextId().catch(() => null),
-      ]);
-      const [{ volids: templateVolids }, { volids: isoVolids }] = await Promise.all([
-        collectVztmplVolumes(client, nodeNames),
-        collectIsoVolumes(client, nodeNames),
-      ]);
-      const templates = templateVolids.map((volid) => ({ volid }));
-      const isos = isoVolids.map((volid) => ({ volid }));
-      const bridges = network.filter((n) => n.type === "bridge" || String(n.iface ?? "").startsWith("vmbr"));
-      return { nodes: nodeNames.map((name) => ({ node: name })), storage, isos, templates, bridges, fallbackNext };
-    }),
+
+  if (ips && !media) {
+    const identity = await loadCreateIdentity(target, networks, true);
+    return json({
+      nodes: [],
+      nextid: identity.nextid,
+      storage: [],
+      isos: [],
+      templates: [],
+      bridges: [],
+      networks,
+      usedIps: identity.usedIps,
+      usedVmids: identity.usedVmids,
+    });
+  }
+
+  const [shell, identity, catalog] = await Promise.all([
+    withHostClient(params.id, session.user, (client) => loadCreateShell(client, params.id, node)),
+    loadCreateIdentity(target, networks, false),
+    media
+      ? withHostClient(params.id, session.user, (client) => loadCreateMedia(client, params.id, node))
+      : Promise.resolve({ isos: [] as Array<{ volid: string }>, templates: [] as Array<{ volid: string }> }),
   ]);
-  const usedIpSet = new Set(used.ips);
-  const defaultNet = networks[0]?.id ?? "192.168.178.0";
-  const nextid =
-    used.vmids.length > 0
-      ? nextSmallerVmid(used.vmids, undefined, (id) => {
-          const ip = guestIpFromVmid(defaultNet, id, networks);
-          return Boolean(ip && usedIpSet.has(ip));
-        })
-      : (hostData.fallbackNext ?? nextSmallerVmid([]));
+
   return json({
-    nodes: hostData.nodes,
-    nextid,
-    storage: hostData.storage,
-    isos: hostData.isos,
-    templates: hostData.templates,
-    bridges: hostData.bridges,
+    nodes: shell.nodes,
+    nextid: identity.nextid,
+    storage: shell.storage,
+    isos: catalog.isos,
+    templates: catalog.templates,
+    bridges: shell.bridges,
     networks,
-    usedIps: used.ips,
-    usedVmids: used.vmids,
+    usedIps: [] as string[],
+    usedVmids: identity.usedVmids,
   });
 });

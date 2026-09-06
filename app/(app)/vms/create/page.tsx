@@ -16,31 +16,14 @@ import { bytesToSize } from "@/lib/utils";
 import { isWindowsIso, suggestVirtioIso } from "@/lib/iso-images";
 import { storageIsIscsi, vmDiskStorages, VM_DISK_BUSES, VM_SCSI_CONTROLLERS } from "@/lib/vm-storage";
 import { CreateIpFields, ipCollision, ipFieldsFromVmid } from "@/components/guests/create-ip-fields";
+import { useCreateOptions } from "@/components/guests/use-create-options";
 import { MemoryField } from "@/components/guests/memory-field";
 import { HostSelect, hostAllowsCreate } from "@/components/guests/host-select";
-import { DEFAULT_GUEST_NETWORK, shouldSyncGuestIp, type GuestIpNetwork } from "@/lib/create-ip";
+import { DEFAULT_GUEST_NETWORK, shouldSyncGuestIp } from "@/lib/create-ip";
 import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { StorageContentItem } from "@/lib/storage-content";
 import type { MessageKey } from "@/lib/i18n/messages";
-
-type Options = {
-  nodes: Array<{ node: string }>;
-  nextid: number | null;
-  storage: Array<{
-    storage: string;
-    type?: string;
-    content?: string;
-    active?: number;
-    enabled?: number;
-    avail?: number;
-    total?: number;
-  }>;
-  isos: Array<{ volid?: string }>;
-  bridges: Array<{ iface?: string }>;
-  networks?: GuestIpNetwork[];
-  usedIps?: string[];
-};
 
 const selectClass =
   "mt-1 h-9 w-full rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm";
@@ -78,11 +61,7 @@ export default function CreateVmPage() {
   const [progress, setProgress] = useState<"idle" | "running" | "done" | "error">("idle");
   const [progressError, setProgressError] = useState<string | null>(null);
   const createdRef = useRef<{ hostId: string; node: string; vmid: number } | null>(null);
-  const { data: options } = useQuery({
-    queryKey: ["options", form.hostId],
-    enabled: Boolean(form.hostId),
-    queryFn: () => api<Options>(`/api/hosts/${form.hostId}/options`),
-  });
+  const { data: options } = useCreateOptions(form.hostId, form.ipMode);
 
   useEffect(() => {
     const creatable = (hosts?.hosts ?? []).filter(hostAllowsCreate);

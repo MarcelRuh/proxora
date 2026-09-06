@@ -41,20 +41,24 @@ export function UserScopeFields({
   const hostIds = grants.map((g) => g.hostId);
   const listed = hostIds.length ? allHosts.filter((h) => hostIds.includes(h.id)) : allHosts;
   const [openHost, setOpenHost] = useState<string | null>(null);
+  const [openGuestHost, setOpenGuestHost] = useState<string | null>(null);
+  const guestHostIds = [...new Set([...guests.map((g) => g.hostId), ...(openGuestHost ? [openGuestHost] : [])])].sort();
   const { data: inventory } = useQuery({
-    queryKey: ["scope-guests", listed.map((h) => h.id)],
-    enabled: listed.length > 0,
+    queryKey: ["scope-guests", guestHostIds],
+    enabled: guestHostIds.length > 0 && allHosts.length > 0,
     queryFn: async () => {
       return Promise.all(
-        listed.map(async (host) => {
-          const [vms, containers] = await Promise.all([
-            api<{ vms: Guest[] }>(`/api/hosts/${host.id}/vms`).catch(() => ({ vms: [] as Guest[] })),
-            api<{ containers: Guest[] }>(`/api/hosts/${host.id}/lxc`).catch(() => ({ containers: [] as Guest[] })),
-          ]);
-          return { host, vms: vms.vms, containers: containers.containers };
+        guestHostIds.map(async (id) => {
+          const host = allHosts.find((h) => h.id === id) ?? { id, name: id };
+          const row = await api<{ vms: Guest[]; containers: Guest[] }>(`/api/hosts/${id}/guests`).catch(() => ({
+            vms: [] as Guest[],
+            containers: [] as Guest[],
+          }));
+          return { host, vms: row.vms, containers: row.containers };
         }),
       );
     },
+    staleTime: 30_000,
   });
 
   useEffect(() => {
@@ -153,28 +157,47 @@ export function UserScopeFields({
         <p className="mb-1 font-medium">{t("users.guests")}</p>
         <p className="mb-2 text-xs text-muted-foreground">{t("users.guestsHint")}</p>
         <div className="space-y-3">
-          {(inventory ?? []).map((block) => (
-            <div key={block.host.id} className="rounded-[4px] border border-border p-2">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{block.host.name}</p>
-              <GuestChecks
-                hostId={block.host.id}
-                kind="vm"
-                items={block.vms}
-                guests={guests}
-                onToggle={toggleGuest}
-              />
-              <GuestChecks
-                hostId={block.host.id}
-                kind="lxc"
-                items={block.containers}
-                guests={guests}
-                onToggle={toggleGuest}
-              />
-              {block.vms.length === 0 && block.containers.length === 0 ? (
-                <p className="text-xs text-muted-foreground">{t("users.noGuestsOnHost")}</p>
-              ) : null}
-            </div>
-          ))}
+          {listed.map((host) => {
+            const loaded = inventory?.find((block) => block.host.id === host.id);
+            const expanded = openGuestHost === host.id || guests.some((g) => g.hostId === host.id);
+            return (
+              <div key={host.id} className="rounded-[4px] border border-border p-2">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{host.name}</p>
+                  {!expanded ? (
+                    <Button type="button" size="sm" variant="outline" onClick={() => setOpenGuestHost(host.id)}>
+                      {t("users.showGuests")}
+                    </Button>
+                  ) : null}
+                </div>
+                {expanded ? (
+                  loaded ? (
+                    <>
+                      <GuestChecks
+                        hostId={host.id}
+                        kind="vm"
+                        items={loaded.vms}
+                        guests={guests}
+                        onToggle={toggleGuest}
+                      />
+                      <GuestChecks
+                        hostId={host.id}
+                        kind="lxc"
+                        items={loaded.containers}
+                        guests={guests}
+                        onToggle={toggleGuest}
+                      />
+                      {loaded.vms.length === 0 && loaded.containers.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">{t("users.noGuestsOnHost")}</p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
+                  )
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
