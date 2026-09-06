@@ -19,6 +19,7 @@ import {
   createGuestTransferTicket,
   decodeGuestTransferMeta,
   encodeGuestTransferMeta,
+  GUEST_TRANSFER_TICKET_TTL_MS,
   takeGuestTransferTicket,
 } from "@/server/services/guest-file-tickets";
 import { NotFoundError } from "@/lib/errors";
@@ -107,6 +108,7 @@ describe("guest file explorer helpers", () => {
 describe("guest file stream transfer", () => {
   it("keeps editor warning far above the old 8 MB JSON cap", () => {
     expect(GUEST_FILE_EDITOR_WARN_BYTES).toBeGreaterThan(8 * 1024 * 1024);
+    expect(GUEST_TRANSFER_TICKET_TTL_MS).toBeGreaterThanOrEqual(30 * 60 * 1000);
     expect(attachmentDisposition("backup.tar.gz")).toContain('filename="backup.tar.gz"');
     expect(attachmentDisposition("äöü.bin")).toContain("filename*=UTF-8''");
   });
@@ -117,7 +119,7 @@ describe("guest file stream transfer", () => {
     expect(decodeGuestTransferMeta(encoded)).toEqual({ path: "/root/a.bin", password: "secret" });
   });
 
-  it("issues a one-time ticket bound to user and mode", () => {
+  it("issues a reusable ticket bound to user and mode", () => {
     const issued = createGuestTransferTicket({
       userId: "u1",
       hostId: "h1",
@@ -147,7 +149,7 @@ describe("guest file stream transfer", () => {
     });
     const row = takeGuestTransferTicket(upload.ticket, "u1", "upload");
     expect(row.mode).toBe("upload");
-    expect(() => takeGuestTransferTicket(upload.ticket, "u1", "upload")).toThrow(NotFoundError);
+    expect(takeGuestTransferTicket(upload.ticket, "u1", "upload").id).toBe(row.id);
   });
 
   it("rejects expired or foreign transfer tickets", () => {

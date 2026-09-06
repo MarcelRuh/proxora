@@ -13,19 +13,40 @@ function auditMeta(ticket: GuestTransferTicket) {
   return { path: ticket.path, sshHost: ticket.target, sshUser: ticket.username, mode: ticket.mode };
 }
 
+function loadTicket(
+  req: Request,
+  sessionUserId: string,
+  params: Record<string, string>,
+  kind: "vm" | "lxc",
+  mode: "download" | "upload",
+) {
+  const vmid = Number(params.vmid);
+  if (!Number.isInteger(vmid) || vmid < 1) throw new ValidationError("Invalid VMID");
+  const ticketId = new URL(req.url).searchParams.get("ticket")?.trim() ?? "";
+  if (!ticketId || ticketId.length > 80) throw new NotFoundError("Transfer abgelaufen oder ungültig");
+  const ticket = takeGuestTransferTicket(ticketId, sessionUserId, mode);
+  if (ticket.hostId !== params.id || ticket.kind !== kind || ticket.node !== params.node || ticket.vmid !== vmid) {
+    throw new NotFoundError("Transfer abgelaufen oder ungültig");
+  }
+  return ticket;
+}
+
+export function guestFileDownloadHeadRoute(kind: "vm" | "lxc") {
+  const permission = kind === "vm" ? "vm.files" : "lxc.files";
+  return apiRoute(permission, async (req, session, params) => {
+    const ticket = loadTicket(req, session.user.id, params, kind, "download");
+    assertGuestAccess(session.user, params.id, kind, ticket.vmid);
+    return new Response(null, { status: 200, headers: { "Cache-Control": "no-store" } });
+  });
+}
+
 export function guestFileDownloadRoute(kind: "vm" | "lxc") {
   const permission = kind === "vm" ? "vm.files" : "lxc.files";
   return apiRoute(permission, async (req, session, params) => {
-    const vmid = Number(params.vmid);
-    if (!Number.isInteger(vmid) || vmid < 1) throw new ValidationError("Invalid VMID");
-    assertGuestAccess(session.user, params.id, kind, vmid);
-    const ticketId = new URL(req.url).searchParams.get("ticket")?.trim() ?? "";
-    if (!ticketId || ticketId.length > 80) throw new NotFoundError("Transfer abgelaufen oder ungültig");
-    const ticket = takeGuestTransferTicket(ticketId, session.user.id, "download");
-    if (ticket.hostId !== params.id || ticket.kind !== kind || ticket.node !== params.node || ticket.vmid !== vmid) {
-      throw new NotFoundError("Transfer abgelaufen oder ungültig");
-    }
+    const ticket = loadTicket(req, session.user.id, params, kind, "download");
+    assertGuestAccess(session.user, params.id, kind, ticket.vmid);
     const host = await getHostOrThrow(params.id, session.user);
+    const vmid = ticket.vmid;
     const ip = await clientIp();
     try {
       const response = await streamGuestFileDownload(host, {
@@ -68,16 +89,10 @@ export function guestFileDownloadRoute(kind: "vm" | "lxc") {
 export function guestFileUploadRoute(kind: "vm" | "lxc") {
   const permission = kind === "vm" ? "vm.files" : "lxc.files";
   return apiRoute(permission, async (req, session, params) => {
-    const vmid = Number(params.vmid);
-    if (!Number.isInteger(vmid) || vmid < 1) throw new ValidationError("Invalid VMID");
-    assertGuestAccess(session.user, params.id, kind, vmid);
-    const ticketId = new URL(req.url).searchParams.get("ticket")?.trim() ?? "";
-    if (!ticketId || ticketId.length > 80) throw new NotFoundError("Transfer abgelaufen oder ungültig");
-    const ticket = takeGuestTransferTicket(ticketId, session.user.id, "upload");
-    if (ticket.hostId !== params.id || ticket.kind !== kind || ticket.node !== params.node || ticket.vmid !== vmid) {
-      throw new NotFoundError("Transfer abgelaufen oder ungültig");
-    }
+    const ticket = loadTicket(req, session.user.id, params, kind, "upload");
+    assertGuestAccess(session.user, params.id, kind, ticket.vmid);
     const host = await getHostOrThrow(params.id, session.user);
+    const vmid = ticket.vmid;
     const ip = await clientIp();
     try {
       const result = await streamGuestFileUpload(host, {

@@ -10,7 +10,7 @@ import {
   type GuestTransferMode,
 } from "@/lib/guest-files";
 
-export const GUEST_TRANSFER_TICKET_TTL_MS = 120_000;
+export const GUEST_TRANSFER_TICKET_TTL_MS = 30 * 60 * 1000;
 export const GUEST_TRANSFER_META_HEADER = "x-proxora-guest-files";
 
 export type GuestTransferTicket = {
@@ -96,6 +96,7 @@ export function createGuestTransferTicket(
   return { ticket: id, path, name: guestFileName(path), mode: input.mode };
 }
 
+/** Ticket stays valid until TTL so HEAD probes, proxy retries and slow multi-GB starts still work. */
 export function takeGuestTransferTicket(id: string, userId: string, mode: GuestTransferMode): GuestTransferTicket {
   pruneTickets();
   const row = tickets.get(id);
@@ -103,7 +104,6 @@ export function takeGuestTransferTicket(id: string, userId: string, mode: GuestT
     tickets.delete(id);
     throw new NotFoundError("Transfer abgelaufen oder ungültig");
   }
-  tickets.delete(id);
   return row;
 }
 

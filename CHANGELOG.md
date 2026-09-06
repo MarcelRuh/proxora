@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.5.1] – 2026-09-06
+
+### Fixed
+
+- Guest file transfers of multi-GB files (e.g. a Windows ISO) no longer fail with "Transfer abgelaufen oder ungültig". The ticket survives HEAD probes and proxy retries and stays valid for 30 minutes.
+
 ## [1.5.0] – 2026-09-06
 
 ### Changed

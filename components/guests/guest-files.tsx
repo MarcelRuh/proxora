@@ -310,7 +310,6 @@ export function GuestFilesPanel({
         const a = document.createElement("a");
         a.href = `${apiPath}/download?ticket=${encodeURIComponent(ticket)}`;
         a.download = entry.name;
-        a.rel = "noopener";
         document.body.appendChild(a);
         a.click();
         a.remove();
