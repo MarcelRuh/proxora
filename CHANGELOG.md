@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.7] – 2026-09-06
+
+### Changed
+
+- The Android server-URL screen uses the same status-bar spacing as the main view.
+
 ## [1.7.6] – 2026-09-06
 
 ### Fixed
