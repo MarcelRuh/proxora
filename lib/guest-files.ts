@@ -13,6 +13,32 @@ export type GuestFileEntry = {
   mtime: number | null;
 };
 
+export type GuestFileOp = "list" | "read" | "write" | "mkdir" | "delete";
+
+export type GuestFileRequest = {
+  kind: "vm" | "lxc";
+  node?: string;
+  vmid: number;
+  op: GuestFileOp;
+  via?: "agent" | "sftp";
+  target?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  path: string;
+  contentBase64?: string;
+};
+
+export type GuestFileResult = {
+  path: string;
+  via?: "agent" | "sftp";
+  entries?: GuestFileEntry[];
+  name?: string;
+  size?: number;
+  contentBase64?: string;
+  fingerprint?: string;
+};
+
 const TEXT_EXT =
   /\.(txt|md|json|ya?ml|xml|conf|cfg|ini|env|sh|bash|zsh|py|js|mjs|cjs|ts|tsx|jsx|css|html|htm|log|service|timer|list|toml|php|rb|go|rs|c|h|cc|cpp|hpp|sql|csv|properties|desktop|policy|rules)$/i;
 
@@ -96,4 +122,69 @@ export function decodeGuestFileContent(base64: string, max = GUEST_FILE_MAX_BYTE
   const buf = Buffer.from(compact, "base64");
   if (buf.length > max) throw new Error("File too large");
   return buf;
+}
+
+export const AGENT_FILE_MAX_BYTES = 48 * 1024;
+
+export const GUEST_FILE_SHORTCUTS = ["/", "/root", "/home", "/etc", "/var", "/tmp", "/opt", "/usr"];
+
+export function guestPathCrumbs(path: string): Array<{ name: string; path: string }> {
+  const resolved = resolveGuestPath(path);
+  const crumbs: Array<{ name: string; path: string }> = [{ name: "/", path: "/" }];
+  if (resolved === "/") return crumbs;
+  const parts = resolved.split("/").filter(Boolean);
+  let acc = "";
+  for (const part of parts) {
+    acc += `/${part}`;
+    crumbs.push({ name: part, path: acc });
+  }
+  return crumbs;
+}
+
+export function parseGuestListOutput(text: string, dir: string): GuestFileEntry[] {
+  const entries: GuestFileEntry[] = [];
+  const seen = new Set<string>();
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/\r$/, "");
+    if (!line) continue;
+    let entry: GuestFileEntry | null = null;
+    const tab = line.split("\t");
+    if (tab.length >= 4 && tab[0] && tab[0].length === 1) {
+      const kindChar = tab[0];
+      const size = Number(tab[1] ?? 0);
+      const mtime = Number(tab[2] ?? 0);
+      const name = tab.slice(3).join("\t");
+      if (!name || name === "." || name === "..") continue;
+      entry = {
+        name,
+        path: resolveGuestPath(dir, name),
+        type: kindChar === "d" ? "dir" : kindChar === "f" || kindChar === "l" ? "file" : "other",
+        size: Number.isFinite(size) ? size : 0,
+        mtime: Number.isFinite(mtime) && mtime > 0 ? Math.round(mtime * 1000) : null,
+      };
+    } else {
+      let name = line;
+      let type: GuestFileKind = "file";
+      if (name.endsWith("/")) {
+        type = "dir";
+        name = name.slice(0, -1);
+      } else if (name.endsWith("@") || name.endsWith("|") || name.endsWith("=")) {
+        type = "other";
+        name = name.slice(0, -1);
+      } else if (name.endsWith("*")) {
+        name = name.slice(0, -1);
+      }
+      if (!name || name === "." || name === "..") continue;
+      entry = { name, path: resolveGuestPath(dir, name), type, size: 0, mtime: null };
+    }
+    if (!entry || seen.has(entry.name)) continue;
+    seen.add(entry.name);
+    entries.push(entry);
+  }
+  entries.sort((a, b) => {
+    if (a.type === "dir" && b.type !== "dir") return -1;
+    if (a.type !== "dir" && b.type === "dir") return 1;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  });
+  return entries;
 }

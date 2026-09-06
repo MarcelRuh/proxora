@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.16] – 2026-09-06
+
+### Added
+
+- Guest files explorer (sidebar, breadcrumbs, size/date columns). Running VMs with QEMU guest agent open the filesystem without SSH. LXC still needs SSH in the container (Proxmox has no LXC file API). Agent read/write capped at 48 KB; SFTP stays at 8 MB.
+
 ## [1.4.15] – 2026-09-06
 
 ### Changed

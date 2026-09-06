@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   clampSftpPort,
   guestFileName,
+  guestPathCrumbs,
   guestPathParent,
   isAllowedSftpTarget,
   isProbablyTextFile,
+  parseGuestListOutput,
   resolveGuestPath,
 } from "@/lib/guest-files";
+import { encodeProxmoxFormBody } from "@/server/proxmox/http";
 import { shareHasPermission } from "@/lib/federation-access";
 import { hasPermission, ROLE_PRESETS } from "@/lib/permissions";
 
@@ -54,5 +57,36 @@ describe("guest file permissions", () => {
     expect(shareHasPermission("view", null, "lxc.files")).toBe(false);
     expect(shareHasPermission("control", null, "lxc.files")).toBe(true);
     expect(shareHasPermission("control", null, "vm.files")).toBe(true);
+  });
+});
+
+describe("guest file explorer helpers", () => {
+  it("builds breadcrumbs", () => {
+    expect(guestPathCrumbs("/")).toEqual([{ name: "/", path: "/" }]);
+    expect(guestPathCrumbs("/etc/nginx")).toEqual([
+      { name: "/", path: "/" },
+      { name: "etc", path: "/etc" },
+      { name: "nginx", path: "/etc/nginx" },
+    ]);
+  });
+
+  it("parses find -printf and ls -1Ap listings", () => {
+    const found = parseGuestListOutput("d\t4096\t1710000000.5\tetc\nf\t12\t1710000001\thosts\n", "/");
+    expect(found.map((e) => e.name)).toEqual(["etc", "hosts"]);
+    expect(found[0]?.type).toBe("dir");
+    expect(found[1]?.type).toBe("file");
+    expect(found[1]?.size).toBe(12);
+    const listed = parseGuestListOutput("bin/\nhosts\nscript.sh*\n", "/");
+    expect(listed.map((e) => [e.name, e.type])).toEqual([
+      ["bin", "dir"],
+      ["hosts", "file"],
+      ["script.sh", "file"],
+    ]);
+  });
+
+  it("encodes Proxmox agent command arrays as repeated form fields", () => {
+    expect(encodeProxmoxFormBody({ command: ["ls", "-1Ap", "--", "/etc"] })).toBe(
+      "command=ls&command=-1Ap&command=--&command=%2Fetc",
+    );
   });
 });

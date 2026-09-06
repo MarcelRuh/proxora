@@ -1,9 +1,21 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowUp,
+  ChevronRight,
+  Download,
+  File,
+  FilePlus,
+  Folder,
+  FolderPlus,
+  RefreshCw,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input, Textarea } from "@/components/ui/input";
 import { ConfirmAction } from "@/components/confirm-action";
@@ -11,11 +23,15 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import { api, ApiRequestError } from "@/lib/api";
 import { bytesToSize } from "@/lib/utils";
 import {
+  AGENT_FILE_MAX_BYTES,
   GUEST_FILE_MAX_BYTES,
+  GUEST_FILE_SHORTCUTS,
+  guestPathCrumbs,
   guestPathParent,
   isProbablyTextFile,
   resolveGuestPath,
   type GuestFileEntry,
+  type GuestFileResult,
 } from "@/lib/guest-files";
 
 type Session = {
@@ -23,15 +39,6 @@ type Session = {
   port: number;
   username: string;
   password: string;
-};
-
-type FileResult = {
-  path: string;
-  entries?: GuestFileEntry[];
-  name?: string;
-  size?: number;
-  contentBase64?: string;
-  fingerprint?: string;
 };
 
 const selectClass =
@@ -64,6 +71,15 @@ function decodeBase64(value: string): Uint8Array {
   return out;
 }
 
+function formatMtime(value: number | null): string {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return "—";
+  }
+}
+
 export function GuestFilesPanel({
   hostId,
   node,
@@ -71,6 +87,7 @@ export function GuestFilesPanel({
   kind,
   ips,
   running,
+  agentEnabled,
 }: {
   hostId: string;
   node: string;
@@ -78,6 +95,7 @@ export function GuestFilesPanel({
   kind: "vm" | "lxc";
   ips: string[];
   running: boolean;
+  agentEnabled?: boolean;
 }) {
   const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -86,39 +104,99 @@ export function GuestFilesPanel({
   const [username, setUsername] = useState("root");
   const [password, setPassword] = useState("");
   const [session, setSession] = useState<Session | null>(null);
+  const [via, setVia] = useState<"agent" | "sftp" | null>(null);
   const [path, setPath] = useState("/");
   const [entries, setEntries] = useState<GuestFileEntry[]>([]);
-  const [fingerprint, setFingerprint] = useState("");
   const [busy, setBusy] = useState(false);
   const [mkdirName, setMkdirName] = useState("");
   const [newFileName, setNewFileName] = useState("");
   const [editor, setEditor] = useState<{ path: string; name: string; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showSsh, setShowSsh] = useState(kind === "lxc");
+  const [agentError, setAgentError] = useState("");
+  const opened = useRef(false);
 
   const apiPath = `/api/hosts/${hostId}/${kind === "vm" ? "vms" : "lxc"}/${encodeURIComponent(node)}/${vmid}/files`;
   const ipOptions = useMemo(() => Array.from(new Set(ips.filter(Boolean))), [ips]);
+  const crumbs = guestPathCrumbs(path);
+  const parent = guestPathParent(path);
+  const connected = via !== null;
+  const maxBytes = via === "agent" ? AGENT_FILE_MAX_BYTES : GUEST_FILE_MAX_BYTES;
 
-  async function call(op: "list" | "read" | "write" | "mkdir" | "delete", extra: Record<string, unknown> = {}) {
+  async function request(op: "list" | "read" | "write" | "mkdir" | "delete", extra: Record<string, unknown> = {}) {
+    const mode = extra.via === "sftp" || session ? "sftp" : "agent";
     const creds = session;
-    if (!creds && op !== "list") throw new Error(t("files.needConnect"));
-    const auth = creds ?? {
-      target: target.trim(),
-      port: Number(port) || 22,
-      username: username.trim(),
-      password,
-    };
-    return api<FileResult>(apiPath, {
+    if (mode === "sftp" && !creds && extra.via !== "sftp") {
+      throw new Error(t("files.needConnect"));
+    }
+    return api<GuestFileResult>(apiPath, {
       method: "POST",
       body: JSON.stringify({
         op,
-        target: auth.target,
-        port: auth.port,
-        username: auth.username,
-        password: auth.password,
+        via: mode,
+        ...(mode === "sftp"
+          ? {
+              target: creds?.target ?? target.trim(),
+              port: creds?.port ?? (Number(port) || 22),
+              username: creds?.username ?? username.trim(),
+              password: creds?.password ?? password,
+            }
+          : {}),
         ...extra,
       }),
     });
   }
+
+  async function loadDir(nextPath: string, mode: "agent" | "sftp", creds?: Session | null) {
+    setBusy(true);
+    try {
+      const result = await api<GuestFileResult>(apiPath, {
+        method: "POST",
+        body: JSON.stringify({
+          op: "list",
+          path: nextPath,
+          via: mode,
+          ...(mode === "sftp" && creds
+            ? {
+                target: creds.target,
+                port: creds.port,
+                username: creds.username,
+                password: creds.password,
+              }
+            : {}),
+        }),
+      });
+      setVia(mode);
+      setPath(result.path || nextPath);
+      setEntries(result.entries ?? []);
+      setAgentError("");
+      if (mode === "agent") setShowSsh(false);
+      return true;
+    } catch (error) {
+      const message = error instanceof ApiRequestError || error instanceof Error ? error.message : t("common.failed");
+      if (mode === "agent") {
+        setAgentError(message);
+        setShowSsh(true);
+        setVia(null);
+      } else {
+        toast.error(message);
+      }
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (opened.current) return;
+    if (kind !== "vm" || !running || !agentEnabled) {
+      setShowSsh(true);
+      return;
+    }
+    opened.current = true;
+    void loadDir("/", "agent");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per guest
+  }, [kind, running, hostId, node, vmid]);
 
   async function connect() {
     const next: Session = {
@@ -131,57 +209,17 @@ export function GuestFilesPanel({
       toast.error(t("files.needAuth"));
       return;
     }
-    setBusy(true);
-    try {
-      const result = await api<FileResult>(apiPath, {
-        method: "POST",
-        body: JSON.stringify({
-          op: "list",
-          path: "/",
-          target: next.target,
-          port: next.port,
-          username: next.username,
-          password: next.password,
-        }),
-      });
-      setSession(next);
-      setPath(result.path || "/");
-      setEntries(result.entries ?? []);
-      setFingerprint(result.fingerprint ?? "");
-    } catch (error) {
-      toast.error(error instanceof ApiRequestError || error instanceof Error ? error.message : t("common.failed"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function refresh(nextPath = path, creds = session) {
-    if (!creds) return;
-    setBusy(true);
-    try {
-      const result = await api<FileResult>(apiPath, {
-        method: "POST",
-        body: JSON.stringify({
-          op: "list",
-          path: nextPath,
-          target: creds.target,
-          port: creds.port,
-          username: creds.username,
-          password: creds.password,
-        }),
-      });
-      setPath(result.path || nextPath);
-      setEntries(result.entries ?? []);
-      if (result.fingerprint) setFingerprint(result.fingerprint);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("common.failed"));
-    } finally {
-      setBusy(false);
-    }
+    const ok = await loadDir("/", "sftp", next);
+    if (ok) setSession(next);
   }
 
   async function openDir(next: string) {
-    await refresh(resolveGuestPath(next));
+    if (!via) return;
+    await loadDir(resolveGuestPath(next), via, session);
+  }
+
+  async function call(op: "read" | "write" | "mkdir" | "delete", extra: Record<string, unknown> = {}) {
+    return request(op, extra);
   }
 
   async function download(entry: GuestFileEntry) {
@@ -218,11 +256,10 @@ export function GuestFilesPanel({
     if (!editor) return;
     setSaving(true);
     try {
-      const encoded = bytesToBase64(new TextEncoder().encode(editor.text));
-      await call("write", { path: editor.path, contentBase64: encoded });
+      await call("write", { path: editor.path, contentBase64: bytesToBase64(new TextEncoder().encode(editor.text)) });
       toast.success(t("files.saved"));
       setEditor(null);
-      await refresh();
+      if (via) await loadDir(path, via, session);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("common.failed"));
     } finally {
@@ -231,17 +268,16 @@ export function GuestFilesPanel({
   }
 
   async function upload(file: File) {
-    if (file.size > GUEST_FILE_MAX_BYTES) {
-      toast.error(t("files.tooLarge", { size: bytesToSize(GUEST_FILE_MAX_BYTES) }));
+    if (file.size > maxBytes) {
+      toast.error(t("files.tooLarge", { size: bytesToSize(maxBytes) }));
       return;
     }
     setBusy(true);
     try {
       const buf = new Uint8Array(await file.arrayBuffer());
-      const dest = resolveGuestPath(path, file.name);
-      await call("write", { path: dest, contentBase64: bytesToBase64(buf) });
+      await call("write", { path: resolveGuestPath(path, file.name), contentBase64: bytesToBase64(buf) });
       toast.success(t("files.uploaded"));
-      await refresh();
+      if (via) await loadDir(path, via, session);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("common.failed"));
     } finally {
@@ -257,7 +293,7 @@ export function GuestFilesPanel({
       await call("mkdir", { path: resolveGuestPath(path, name) });
       setMkdirName("");
       toast.success(t("files.mkdirOk"));
-      await refresh();
+      if (via) await loadDir(path, via, session);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("common.failed"));
     } finally {
@@ -274,7 +310,7 @@ export function GuestFilesPanel({
       await call("write", { path: dest, contentBase64: "" });
       setNewFileName("");
       toast.success(t("files.saved"));
-      await refresh();
+      if (via) await loadDir(path, via, session);
       setEditor({ path: dest, name, text: "" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("common.failed"));
@@ -288,7 +324,7 @@ export function GuestFilesPanel({
     try {
       await call("delete", { path: entry.path });
       toast.success(t("files.deleted"));
-      await refresh();
+      if (via) await loadDir(path, via, session);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("common.failed"));
     } finally {
@@ -296,132 +332,58 @@ export function GuestFilesPanel({
     }
   }
 
-  const parent = guestPathParent(path);
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("files.title")}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-sm text-muted-foreground">{t("files.body")}</p>
-        {!running ? <p className="text-sm text-muted-foreground">{t("files.stopped")}</p> : null}
-
-        {session ? (
-          <>
-            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <span className="font-mono">
-                {t("files.connected", { user: session.username, host: session.target })}
-                {fingerprint ? ` · ${fingerprint}` : ""}
-              </span>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => void refresh()}>
-                  {t("common.refresh")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setSession(null);
-                    setEntries([]);
-                    setPath("/");
-                    setFingerprint("");
-                  }}
-                >
-                  {t("files.disconnect")}
-                </Button>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 font-mono text-sm">
-              {parent !== null ? (
-                <Button size="sm" variant="ghost" disabled={busy} onClick={() => void openDir(parent)}>
-                  {t("files.parent")}
-                </Button>
-              ) : null}
-              <span className="break-all">{path}</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <input
-                ref={fileRef}
-                type="file"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = "";
-                  if (file) void upload(file);
+    <Card className="overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <div>
+          <h2 className="text-base font-semibold">{t("files.title")}</h2>
+          <p className="text-xs text-muted-foreground">
+            {via === "agent"
+              ? t("files.viaAgent")
+              : via === "sftp"
+                ? t("files.viaSftp")
+                : kind === "vm"
+                  ? t("files.bodyAgent")
+                  : t("files.bodyLxc")}
+          </p>
+        </div>
+        {connected ? (
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => via && void loadDir(path, via, session)}>
+              <RefreshCw className="h-4 w-4" />
+              {t("common.refresh")}
+            </Button>
+            {via === "sftp" ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setSession(null);
+                  setVia(null);
+                  setEntries([]);
+                  setPath("/");
+                  setShowSsh(true);
                 }}
-              />
-              <Button size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
-                {t("files.upload")}
+              >
+                {t("files.disconnect")}
               </Button>
-              <div className="flex gap-1">
-                <Input
-                  className="h-8 w-36"
-                  placeholder={t("files.folderName")}
-                  value={mkdirName}
-                  onChange={(e) => setMkdirName(e.target.value)}
-                />
-                <Button size="sm" variant="outline" disabled={busy || !mkdirName.trim()} onClick={() => void makeDir()}>
-                  {t("files.mkdir")}
-                </Button>
-              </div>
-              <div className="flex gap-1">
-                <Input
-                  className="h-8 w-36"
-                  placeholder={t("files.fileName")}
-                  value={newFileName}
-                  onChange={(e) => setNewFileName(e.target.value)}
-                />
-                <Button size="sm" variant="outline" disabled={busy || !newFileName.trim()} onClick={() => void makeFile()}>
-                  {t("files.newFile")}
-                </Button>
-              </div>
-            </div>
-            <div className="divide-y divide-border rounded-md border border-border">
-              {entries.length === 0 ? (
-                <p className="px-3 py-4 text-sm text-muted-foreground">{t("files.empty")}</p>
-              ) : (
-                entries.map((entry) => (
-                  <div key={entry.path} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                    <button
-                      type="button"
-                      className="min-w-0 flex-1 truncate text-left hover:underline"
-                      disabled={busy}
-                      onClick={() => {
-                        if (entry.type === "dir") void openDir(entry.path);
-                        else void edit(entry);
-                      }}
-                    >
-                      {entry.type === "dir" ? `${entry.name}/` : entry.name}
-                    </button>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {entry.type === "dir" ? t("files.dir") : bytesToSize(entry.size, 0)}
-                    </span>
-                    <div className="flex shrink-0 gap-1">
-                      {entry.type === "file" ? (
-                        <Button size="sm" variant="ghost" disabled={busy} onClick={() => void download(entry)}>
-                          {t("files.download")}
-                        </Button>
-                      ) : null}
-                      <ConfirmAction
-                        title={t("files.deleteTitle", { name: entry.name })}
-                        description={entry.path}
-                        actionLabel={t("files.delete")}
-                        destructive
-                        onConfirm={() => remove(entry)}
-                      >
-                        <Button size="sm" variant="ghost" disabled={busy}>
-                          {t("files.delete")}
-                        </Button>
-                      </ConfirmAction>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      <CardContent className="p-0">
+        {!running ? <p className="px-4 py-3 text-sm text-muted-foreground">{t("files.stopped")}</p> : null}
+        {kind === "vm" && running && !agentEnabled && !connected ? (
+          <p className="px-4 py-3 text-sm text-muted-foreground">{t("files.agentOff")}</p>
+        ) : null}
+        {agentError && !connected ? <p className="px-4 py-3 text-sm text-destructive">{agentError}</p> : null}
+
+        {!connected && showSsh ? (
+          <div className="grid gap-3 border-b border-border p-4 sm:grid-cols-2">
+            <p className="text-sm text-muted-foreground sm:col-span-2">
+              {kind === "lxc" ? t("files.lxcNeedsSsh") : t("files.sshFallback")}
+            </p>
             <label className="text-sm">
               {t("files.host")}
               {ipOptions.length ? (
@@ -463,7 +425,153 @@ export function GuestFilesPanel({
               </Button>
             </div>
           </div>
-        )}
+        ) : null}
+
+        {kind === "vm" && !connected && !showSsh && busy ? (
+          <p className="px-4 py-6 text-sm text-muted-foreground">{t("files.opening")}</p>
+        ) : null}
+
+        {kind === "vm" && !connected && agentError && !showSsh ? (
+          <div className="px-4 py-3">
+            <Button size="sm" variant="outline" onClick={() => setShowSsh(true)}>
+              {t("files.useSsh")}
+            </Button>
+          </div>
+        ) : null}
+
+        {connected ? (
+          <div className="flex min-h-[28rem] flex-col md:flex-row">
+            <nav className="w-full shrink-0 border-b border-border p-2 md:w-44 md:border-b-0 md:border-r">
+              {GUEST_FILE_SHORTCUTS.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void openDir(item)}
+                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary/10 ${
+                    path === item ? "bg-primary/15 text-foreground" : "text-muted-foreground"
+                  }`}
+                >
+                  <Folder className="h-4 w-4 shrink-0" />
+                  <span className="truncate font-mono">{item === "/" ? t("files.root") : item}</span>
+                </button>
+              ))}
+            </nav>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1 border-b border-border px-3 py-2">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  disabled={busy || parent === null}
+                  onClick={() => parent && void openDir(parent)}
+                  aria-label={t("files.parent")}
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </Button>
+                {crumbs.map((crumb, index) => (
+                  <span key={crumb.path} className="flex items-center text-sm">
+                    {index > 0 ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /> : null}
+                    <button
+                      type="button"
+                      className="rounded px-1.5 py-0.5 font-mono hover:bg-primary/10"
+                      disabled={busy}
+                      onClick={() => void openDir(crumb.path)}
+                    >
+                      {crumb.name}
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2 border-b border-border px-3 py-2">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) void upload(file);
+                  }}
+                />
+                <Button size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
+                  <Upload className="h-4 w-4" />
+                  {t("files.upload")}
+                </Button>
+                <div className="flex gap-1">
+                  <Input className="h-8 w-32" placeholder={t("files.folderName")} value={mkdirName} onChange={(e) => setMkdirName(e.target.value)} />
+                  <Button size="sm" variant="outline" disabled={busy || !mkdirName.trim()} onClick={() => void makeDir()}>
+                    <FolderPlus className="h-4 w-4" />
+                    {t("files.mkdir")}
+                  </Button>
+                </div>
+                <div className="flex gap-1">
+                  <Input className="h-8 w-32" placeholder={t("files.fileName")} value={newFileName} onChange={(e) => setNewFileName(e.target.value)} />
+                  <Button size="sm" variant="outline" disabled={busy || !newFileName.trim()} onClick={() => void makeFile()}>
+                    <FilePlus className="h-4 w-4" />
+                    {t("files.newFile")}
+                  </Button>
+                </div>
+              </div>
+              <div className="max-h-[28rem] overflow-auto">
+                <div className="sticky top-0 grid grid-cols-[1fr_7rem_10rem_auto] gap-2 border-b border-border bg-card px-3 py-1.5 text-xs text-muted-foreground">
+                  <span>{t("files.colName")}</span>
+                  <span>{t("files.colSize")}</span>
+                  <span>{t("files.colMtime")}</span>
+                  <span />
+                </div>
+                {entries.length === 0 ? (
+                  <p className="px-3 py-8 text-sm text-muted-foreground">{busy ? t("common.loading") : t("files.empty")}</p>
+                ) : (
+                  entries.map((entry) => (
+                    <div
+                      key={entry.path}
+                      className="grid grid-cols-[1fr_7rem_10rem_auto] items-center gap-2 border-b border-border/60 px-3 py-1.5 text-sm hover:bg-primary/5"
+                    >
+                      <button
+                        type="button"
+                        className="flex min-w-0 items-center gap-2 text-left"
+                        disabled={busy}
+                        onClick={() => {
+                          if (entry.type === "dir") void openDir(entry.path);
+                          else void edit(entry);
+                        }}
+                      >
+                        {entry.type === "dir" ? (
+                          <Folder className="h-4 w-4 shrink-0 text-primary" />
+                        ) : (
+                          <File className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        )}
+                        <span className="truncate">{entry.type === "dir" ? `${entry.name}/` : entry.name}</span>
+                      </button>
+                      <span className="text-xs text-muted-foreground">
+                        {entry.type === "dir" ? t("files.dir") : bytesToSize(entry.size, 0)}
+                      </span>
+                      <span className="truncate text-xs text-muted-foreground">{formatMtime(entry.mtime)}</span>
+                      <div className="flex justify-end gap-1">
+                        {entry.type === "file" ? (
+                          <Button size="icon" variant="ghost" disabled={busy} onClick={() => void download(entry)} aria-label={t("files.download")}>
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                        <ConfirmAction
+                          title={t("files.deleteTitle", { name: entry.name })}
+                          description={entry.path}
+                          actionLabel={t("files.delete")}
+                          destructive
+                          onConfirm={() => remove(entry)}
+                        >
+                          <Button size="icon" variant="ghost" disabled={busy} aria-label={t("files.delete")}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </ConfirmAction>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
       </CardContent>
 
       <Dialog open={Boolean(editor)} onOpenChange={(open) => !open && !saving && setEditor(null)}>

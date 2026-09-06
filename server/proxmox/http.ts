@@ -45,10 +45,22 @@ function toFormBody(body?: Record<string, unknown>): string | undefined {
   if (!body) return undefined;
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(body)) {
-    if (value === undefined || value === null || value === "") continue;
+    if (value === undefined || value === null) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item === undefined || item === null) continue;
+        params.append(key, String(item));
+      }
+      continue;
+    }
+    if (value === "") continue;
     params.set(key, String(value));
   }
   return params.toString();
+}
+
+export function encodeProxmoxFormBody(body: Record<string, unknown>): string {
+  return toFormBody(body) ?? "";
 }
 
 export class ProxmoxHttpClient {
@@ -79,8 +91,8 @@ export class ProxmoxHttpClient {
     return this.request<T>("GET", path, { query, timeoutMs });
   }
 
-  async post<T>(path: string, body?: Record<string, unknown>, query?: Query): Promise<T> {
-    return this.request<T>("POST", path, { body, query });
+  async post<T>(path: string, body?: Record<string, unknown>, query?: Query, timeoutMs?: number): Promise<T> {
+    return this.request<T>("POST", path, { body, query, timeoutMs });
   }
 
   async put<T>(path: string, body?: Record<string, unknown>, query?: Query): Promise<T> {

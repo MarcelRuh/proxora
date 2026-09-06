@@ -403,6 +403,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           kind={kind}
           ips={ips}
           running={running}
+          agentEnabled={Boolean(data?.agentEnabled)}
         />
       ) : null}
 

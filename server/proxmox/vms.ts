@@ -145,6 +145,40 @@ export class VmApi {
     );
   }
 
+  agentFileRead(node: string, vmid: number, file: string) {
+    return this.http.get<unknown>(
+      `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/agent/file-read`,
+      { file },
+      20_000,
+    );
+  }
+
+  agentFileWrite(node: string, vmid: number, file: string, contentBase64: string) {
+    return this.http.post<unknown>(
+      `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/agent/file-write`,
+      { file, content: contentBase64 },
+      undefined,
+      20_000,
+    );
+  }
+
+  agentExec(node: string, vmid: number, command: string[]) {
+    return this.http.post<{ pid?: number; result?: { pid?: number } }>(
+      `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/agent/exec`,
+      { command },
+      undefined,
+      20_000,
+    );
+  }
+
+  agentExecStatus(node: string, vmid: number, pid: number) {
+    return this.http.get<unknown>(
+      `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/agent/exec-status`,
+      { pid },
+      12_000,
+    );
+  }
+
   termproxy(node: string, vmid: number) {
     return this.http.post<{ port: string; ticket: string; user: string }>(
       `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/termproxy`,

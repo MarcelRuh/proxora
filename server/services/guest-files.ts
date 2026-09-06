@@ -11,32 +11,16 @@ import {
   resolveGuestPath,
   type GuestFileEntry,
   type GuestFileKind,
+  type GuestFileOp,
+  type GuestFileRequest,
+  type GuestFileResult,
 } from "@/lib/guest-files";
 import { shareHasPermission, type ShareLevel } from "@/lib/federation-access";
 import { outboundToken, peerHttpBase } from "@/server/services/wireguard-service";
+import { clientForHost } from "@/server/services/host-service";
+import { guestAgentFiles } from "@/server/services/guest-agent-files";
 
-export type GuestFileOp = "list" | "read" | "write" | "mkdir" | "delete";
-
-export type GuestFileRequest = {
-  kind: "vm" | "lxc";
-  vmid: number;
-  op: GuestFileOp;
-  target: string;
-  port?: number;
-  username: string;
-  password: string;
-  path: string;
-  contentBase64?: string;
-};
-
-export type GuestFileResult = {
-  path: string;
-  entries?: GuestFileEntry[];
-  name?: string;
-  size?: number;
-  contentBase64?: string;
-  fingerprint?: string;
-};
+export type { GuestFileOp, GuestFileRequest, GuestFileResult };
 
 const CONNECT_MS = 12_000;
 const OP_MS = 45_000;
@@ -257,16 +241,23 @@ export async function guestSftp(input: GuestFileRequest): Promise<GuestFileResul
   } catch (error) {
     throw new ValidationError(error instanceof Error ? error.message : "Invalid path");
   }
-  return withSftp(input.target, port, input.username, input.password, async (sftp, fingerprint) => {
+  const target = input.target?.trim() ?? "";
+  const username = input.username?.trim() ?? "";
+  const password = input.password ?? "";
+  if (!target || !username || !password) {
+    throw new ValidationError("SSH-Zugangsdaten fehlen");
+  }
+  return withSftp(target, port, username, password, async (sftp, fingerprint) => {
     switch (input.op) {
       case "list": {
         const entries = await listDir(sftp, path);
-        return { path, entries, fingerprint };
+        return { path, via: "sftp", entries, fingerprint };
       }
       case "read": {
         const buf = await readFile(sftp, path);
         return {
           path,
+          via: "sftp",
           name: guestFileName(path),
           size: buf.length,
           contentBase64: buf.toString("base64"),
@@ -276,15 +267,15 @@ export async function guestSftp(input: GuestFileRequest): Promise<GuestFileResul
       case "write": {
         const buf = decodeGuestFileContent(input.contentBase64 ?? "");
         await writeFile(sftp, path, buf);
-        return { path, name: guestFileName(path), size: buf.length, fingerprint };
+        return { path, via: "sftp", name: guestFileName(path), size: buf.length, fingerprint };
       }
       case "mkdir": {
         await mkdir(sftp, path);
-        return { path, fingerprint };
+        return { path, via: "sftp", fingerprint };
       }
       case "delete": {
         await remove(sftp, path);
-        return { path, fingerprint };
+        return { path, via: "sftp", fingerprint };
       }
       default:
         throw new ValidationError("Unknown file operation");
@@ -318,6 +309,11 @@ async function proxyGuestFilesToPeer(host: Host, input: GuestFileRequest): Promi
 }
 
 export async function runGuestFileOp(host: Host, input: GuestFileRequest): Promise<GuestFileResult> {
+  const viaAgent = input.kind === "vm" && input.via !== "sftp" && !input.password;
+  if (viaAgent) {
+    const client = await clientForHost(host);
+    return guestAgentFiles(client, input);
+  }
   if (host.origin === HostOrigin.PEER) return proxyGuestFilesToPeer(host, input);
   try {
     return await guestSftp(input);

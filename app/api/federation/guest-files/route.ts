@@ -38,6 +38,7 @@ export async function POST(request: Request) {
     if (!payload.target.trim()) throw new ValidationError("SSH host fehlt");
     const data = await guestSftp({
       kind: payload.kind,
+      node: "",
       vmid: payload.vmid,
       op: payload.op,
       target: payload.target,

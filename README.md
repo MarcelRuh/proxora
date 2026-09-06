@@ -77,6 +77,7 @@ Preserves `.env` and data volumes, syncs from GitHub, then runs `docker compose 
 - Backup jobs, run-now, restore, and backup file delete
 - xterm.js consoles (VM serial, LXC, node shell) via a credential-safe WebSocket proxy
 - SFTP file panel on guests (browse, edit, upload, download) via SSH to the guest IP
+- Guest file explorer: QEMU agent on VMs (no SSH), SFTP fallback / LXC
 - Storage overview including ZFS pool health
 - Proxmox APT updates with a job queue
 - Users, roles, per-action RBAC, optional per-host and per-VM allow-lists
