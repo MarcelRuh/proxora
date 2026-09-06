@@ -6,10 +6,14 @@ import {
   guestFileName,
   guestPathCrumbs,
   guestPathParent,
+  guestRenameDest,
+  hasGuestSshAuth,
   isAllowedSftpTarget,
   isProbablyTextFile,
+  looksLikeSshPrivateKey,
   parseGuestListOutput,
   resolveGuestPath,
+  uploadNameConflicts,
 } from "@/lib/guest-files";
 import {
   createGuestTransferTicket,
@@ -174,5 +178,75 @@ describe("guest file stream transfer", () => {
       mode: "download",
     });
     expect(() => takeGuestTransferTicket(fresh.ticket, "other", "download")).toThrow(NotFoundError);
+  });
+
+  it("accepts a private key without a password", () => {
+    const pem =
+      "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmU=\n-----END OPENSSH PRIVATE KEY-----";
+    const issued = createGuestTransferTicket({
+      userId: "u1",
+      hostId: "h1",
+      kind: "lxc",
+      node: "pve",
+      vmid: 101,
+      path: "/root/a.bin",
+      target: "10.0.0.8",
+      username: "root",
+      privateKey: pem,
+      mode: "download",
+    });
+    const row = takeGuestTransferTicket(issued.ticket, "u1", "download");
+    expect(row.password).toBe("");
+    expect(row.privateKey).toContain("BEGIN OPENSSH PRIVATE KEY");
+    expect(() =>
+      createGuestTransferTicket({
+        userId: "u1",
+        hostId: "h1",
+        kind: "lxc",
+        node: "pve",
+        vmid: 101,
+        path: "/root/a.bin",
+        target: "10.0.0.8",
+        username: "root",
+        mode: "download",
+      }),
+    ).toThrow(/Passwort oder Schlüssel/);
+  });
+
+  it("round-trips federation meta large enough for an SSH key", () => {
+    const privateKey = `-----BEGIN OPENSSH PRIVATE KEY-----\n${"A".repeat(8_000)}\n-----END OPENSSH PRIVATE KEY-----`;
+    const encoded = encodeGuestTransferMeta({ path: "/root/a.bin", privateKey });
+    expect(encoded).not.toContain("PRIVATE KEY");
+    expect(decodeGuestTransferMeta(encoded)).toEqual({ path: "/root/a.bin", privateKey });
+  });
+});
+
+describe("guest SSH key, rename and overwrite helpers", () => {
+  it("detects PEM/OpenSSH private keys", () => {
+    expect(looksLikeSshPrivateKey("-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----")).toBe(
+      true,
+    );
+    expect(looksLikeSshPrivateKey("-----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY-----")).toBe(true);
+    expect(looksLikeSshPrivateKey("-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----")).toBe(true);
+    expect(looksLikeSshPrivateKey("ssh-ed25519 AAAA")).toBe(false);
+    expect(hasGuestSshAuth({ password: "x" })).toBe(true);
+    expect(hasGuestSshAuth({ privateKey: "-----BEGIN OPENSSH PRIVATE KEY-----\n" })).toBe(true);
+    expect(hasGuestSshAuth({ password: "  ", privateKey: "not-a-key" })).toBe(false);
+  });
+
+  it("renames only inside the same directory", () => {
+    expect(guestRenameDest("/etc/hosts", "hosts.bak")).toBe("/etc/hosts.bak");
+    expect(guestRenameDest("/var/www/index.html", "home.html")).toBe("/var/www/home.html");
+    expect(() => guestRenameDest("/", "root")).toThrow(/Invalid path/);
+    expect(() => guestRenameDest("/etc/hosts", "../passwd")).toThrow(/Invalid name/);
+    expect(() => guestRenameDest("/etc/hosts", "a/b")).toThrow(/Invalid name/);
+    expect(() => guestRenameDest("/etc/hosts", ".")).toThrow(/Invalid name/);
+  });
+
+  it("lists upload names that already exist", () => {
+    expect(uploadNameConflicts([{ name: "a.txt" }, { name: "b.txt" }], [{ name: "a.txt" }, { name: "c.txt" }])).toEqual([
+      "a.txt",
+    ]);
+    expect(uploadNameConflicts([], [{ name: "a.txt" }])).toEqual([]);
   });
 });

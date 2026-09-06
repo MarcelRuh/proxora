@@ -9,6 +9,7 @@ import {
   FilePlus,
   Folder,
   FolderPlus,
+  Pencil,
   RefreshCw,
   Trash2,
   Upload,
@@ -20,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input, Textarea } from "@/components/ui/input";
 import { ConfirmAction } from "@/components/confirm-action";
+import { GuestFileEditor } from "@/components/guests/guest-file-editor";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { api, ApiRequestError } from "@/lib/api";
 import { bytesToSize, formatPercent } from "@/lib/utils";
@@ -29,10 +31,15 @@ import {
   AGENT_FILE_MAX_BYTES,
   GUEST_FILE_EDITOR_WARN_BYTES,
   GUEST_FILE_SHORTCUTS,
+  GUEST_SSH_KEY_MAX,
   guestPathCrumbs,
   guestPathParent,
+  guestRenameDest,
+  hasGuestSshAuth,
   isProbablyTextFile,
+  looksLikeSshPrivateKey,
   resolveGuestPath,
+  uploadNameConflicts,
   type GuestFileEntry,
   type GuestFileResult,
   type GuestTransferMode,
@@ -43,7 +50,20 @@ type Session = {
   port: number;
   username: string;
   password: string;
+  privateKey: string;
+  passphrase: string;
 };
+
+function sshBody(creds: Session) {
+  return {
+    target: creds.target,
+    port: creds.port,
+    username: creds.username,
+    ...(creds.password ? { password: creds.password } : {}),
+    ...(creds.privateKey ? { privateKey: creds.privateKey } : {}),
+    ...(creds.passphrase ? { passphrase: creds.passphrase } : {}),
+  };
+}
 
 type Transfer = {
   name: string;
@@ -109,10 +129,13 @@ export function GuestFilesPanel({
 }) {
   const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
+  const keyFileRef = useRef<HTMLInputElement>(null);
   const [target, setTarget] = useState(ips[0] ?? "");
   const [port, setPort] = useState("22");
   const [username, setUsername] = useState("root");
   const [password, setPassword] = useState("");
+  const [privateKey, setPrivateKey] = useState("");
+  const [passphrase, setPassphrase] = useState("");
   const [session, setSession] = useState<Session | null>(null);
   const [via, setVia] = useState<"agent" | "sftp" | null>(null);
   const [path, setPath] = useState("/");
@@ -126,6 +149,9 @@ export function GuestFilesPanel({
   const [agentError, setAgentError] = useState("");
   const [dragging, setDragging] = useState(false);
   const [transfer, setTransfer] = useState<Transfer | null>(null);
+  const [rename, setRename] = useState<{ path: string; name: string } | null>(null);
+  const [renameTo, setRenameTo] = useState("");
+  const [overwrite, setOverwrite] = useState<{ files: File[]; conflicts: string[] } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const opened = useRef(false);
 
@@ -137,7 +163,7 @@ export function GuestFilesPanel({
   const maxBytes = via === "agent" ? AGENT_FILE_MAX_BYTES : null;
   const transferring = Boolean(transfer);
 
-  async function request(op: "list" | "read" | "write" | "mkdir" | "delete" | "transfer-ticket", extra: Record<string, unknown> = {}) {
+  async function request(op: "list" | "read" | "write" | "mkdir" | "delete" | "rename" | "transfer-ticket", extra: Record<string, unknown> = {}) {
     const mode = extra.via === "sftp" || session ? "sftp" : "agent";
     const creds = session;
     if (mode === "sftp" && !creds && extra.via !== "sftp") {
@@ -148,14 +174,14 @@ export function GuestFilesPanel({
       body: JSON.stringify({
         op,
         via: mode,
-        ...(mode === "sftp"
-          ? {
-              target: creds?.target ?? target.trim(),
-              port: creds?.port ?? (Number(port) || 22),
-              username: creds?.username ?? username.trim(),
-              password: creds?.password ?? password,
-            }
-          : {}),
+        ...(mode === "sftp" && creds ? sshBody(creds) : mode === "sftp" ? sshBody({
+          target: target.trim(),
+          port: Number(port) || 22,
+          username: username.trim(),
+          password,
+          privateKey,
+          passphrase,
+        }) : {}),
         ...extra,
       }),
     });
@@ -170,14 +196,7 @@ export function GuestFilesPanel({
           op: "list",
           path: nextPath,
           via: mode,
-          ...(mode === "sftp" && creds
-            ? {
-                target: creds.target,
-                port: creds.port,
-                username: creds.username,
-                password: creds.password,
-              }
-            : {}),
+          ...(mode === "sftp" && creds ? sshBody(creds) : {}),
         }),
       });
       setVia(mode);
@@ -218,8 +237,10 @@ export function GuestFilesPanel({
       port: Number(port) || 22,
       username: username.trim() || "root",
       password,
+      privateKey: privateKey.trim(),
+      passphrase,
     };
-    if (!next.target || !next.password) {
+    if (!next.target || !hasGuestSshAuth(next)) {
       toast.error(t("files.needAuth"));
       return;
     }
@@ -232,7 +253,7 @@ export function GuestFilesPanel({
     await loadDir(resolveGuestPath(next), via, session);
   }
 
-  async function call(op: "read" | "write" | "mkdir" | "delete", extra: Record<string, unknown> = {}) {
+  async function call(op: "read" | "write" | "mkdir" | "delete" | "rename", extra: Record<string, unknown> = {}) {
     return request(op, extra);
   }
 
@@ -246,10 +267,7 @@ export function GuestFilesPanel({
         mode,
         via: "sftp",
         path: filePath,
-        target: creds.target,
-        port: creds.port,
-        username: creds.username,
-        password: creds.password,
+        ...sshBody(creds),
       }),
     });
     if (!result.ticket) throw new Error(t("common.failed"));
@@ -389,10 +407,22 @@ export function GuestFilesPanel({
     }
   }
 
-  async function uploadFiles(files: File[]) {
+  async function uploadFiles(files: File[], policy?: "overwrite" | "skip") {
     if (!files.length) return;
+    const conflicts = uploadNameConflicts(entries, files);
+    if (conflicts.length && !policy) {
+      setOverwrite({ files, conflicts });
+      return;
+    }
+    const skip = new Set(policy === "skip" ? conflicts : []);
+    const queued = files.filter((file) => !skip.has(file.name));
+    if (!queued.length) {
+      setOverwrite(null);
+      return;
+    }
+    setOverwrite(null);
     if (via === "agent") {
-      const file = files[0];
+      const file = queued[0];
       if (!file) return;
       if (maxBytes && file.size > maxBytes) {
         toast.error(t("files.tooLarge", { size: bytesToSize(maxBytes) }));
@@ -412,10 +442,10 @@ export function GuestFilesPanel({
       return;
     }
     try {
-      for (const file of files) {
+      for (const file of queued) {
         await sftpPut(resolveGuestPath(path, file.name), file, file.name);
       }
-      toast.success(files.length > 1 ? t("files.uploadedMany", { count: files.length }) : t("files.uploaded"));
+      toast.success(queued.length > 1 ? t("files.uploadedMany", { count: queued.length }) : t("files.uploaded"));
       if (via) await loadDir(path, via, session);
     } catch (error) {
       if (isAbortError(error)) toast.message(t("files.transferCancelled"));
@@ -442,6 +472,10 @@ export function GuestFilesPanel({
   async function makeFile() {
     const name = newFileName.trim();
     if (!name) return;
+    if (entries.some((entry) => entry.name === name)) {
+      toast.error(t("files.exists"));
+      return;
+    }
     setBusy(true);
     try {
       const dest = resolveGuestPath(path, name);
@@ -473,6 +507,51 @@ export function GuestFilesPanel({
     } finally {
       setBusy(false);
     }
+  }
+
+  async function applyRename() {
+    if (!rename) return;
+    const name = renameTo.trim();
+    if (!name || name === rename.name) {
+      setRename(null);
+      return;
+    }
+    let dest: string;
+    try {
+      dest = guestRenameDest(rename.path, name);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("common.failed"));
+      return;
+    }
+    if (entries.some((entry) => entry.name === name)) {
+      toast.error(t("files.exists"));
+      return;
+    }
+    setBusy(true);
+    try {
+      await call("rename", { path: rename.path, to: dest });
+      toast.success(t("files.renameOk"));
+      setRename(null);
+      if (via) await loadDir(path, via, session);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("common.failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadKeyFile(file: File | undefined) {
+    if (!file) return;
+    if (file.size > GUEST_SSH_KEY_MAX) {
+      toast.error(t("files.keyTooLarge"));
+      return;
+    }
+    const text = await file.text();
+    if (!looksLikeSshPrivateKey(text)) {
+      toast.error(t("files.badKey"));
+      return;
+    }
+    setPrivateKey(text);
   }
 
   return (
@@ -552,13 +631,52 @@ export function GuestFilesPanel({
               <Input className="mt-1" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
             </label>
             <label className="text-sm">
-              {t("files.password")}
+              {t("files.passwordOptional")}
               <Input
                 className="mt-1"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void connect();
+                }}
+              />
+            </label>
+            <label className="text-sm sm:col-span-2">
+              {t("files.privateKey")}
+              <Textarea
+                className="mt-1 min-h-24 font-mono text-xs"
+                value={privateKey}
+                onChange={(e) => setPrivateKey(e.target.value)}
+                placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <span className="mt-1 block text-xs text-muted-foreground">{t("files.privateKeyHint")}</span>
+              <input
+                ref={keyFileRef}
+                type="file"
+                className="hidden"
+                accept=".pem,.key,text/plain"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  void loadKeyFile(file);
+                }}
+              />
+              <Button type="button" size="sm" variant="outline" className="mt-2" onClick={() => keyFileRef.current?.click()}>
+                {t("files.loadKey")}
+              </Button>
+            </label>
+            <label className="text-sm">
+              {t("files.passphrase")}
+              <Input
+                className="mt-1"
+                type="password"
+                value={passphrase}
+                onChange={(e) => setPassphrase(e.target.value)}
+                autoComplete="off"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") void connect();
                 }}
@@ -762,6 +880,18 @@ export function GuestFilesPanel({
                       </span>
                       <span className="truncate text-xs text-muted-foreground">{formatMtime(entry.mtime)}</span>
                       <div className="flex justify-end gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          disabled={busy || transferring}
+                          onClick={() => {
+                            setRename({ path: entry.path, name: entry.name });
+                            setRenameTo(entry.name);
+                          }}
+                          aria-label={t("files.rename")}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
                         {entry.type === "file" ? (
                           <Button size="icon" variant="ghost" disabled={busy} onClick={() => void download(entry)} aria-label={t("files.download")}>
                             <Download className="h-4 w-4" />
@@ -794,10 +924,10 @@ export function GuestFilesPanel({
             <DialogTitle>{editor?.name}</DialogTitle>
             <DialogDescription className="font-mono">{editor?.path}</DialogDescription>
           </DialogHeader>
-          <Textarea
-            className="min-h-[50vh] font-mono text-xs [tab-size:2]"
+          <GuestFileEditor
             value={editor?.text ?? ""}
-            onChange={(e) => setEditor((cur) => (cur ? { ...cur, text: e.target.value } : cur))}
+            disabled={saving}
+            onChange={(text) => setEditor((cur) => (cur ? { ...cur, text } : cur))}
           />
           <div className="mt-3 flex items-center justify-end gap-2">
             {saving && transfer ? (
@@ -822,6 +952,66 @@ export function GuestFilesPanel({
             </Button>
             <Button disabled={saving} onClick={() => void saveEditor()}>
               {t("files.saveFile")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(rename)}
+        onOpenChange={(open) => {
+          if (!open && !busy) setRename(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("files.renameTitle", { name: rename?.name ?? "" })}</DialogTitle>
+            <DialogDescription className="font-mono">{rename?.path}</DialogDescription>
+          </DialogHeader>
+          <Input
+            value={renameTo}
+            onChange={(e) => setRenameTo(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void applyRename();
+            }}
+            autoFocus
+          />
+          <div className="mt-3 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setRename(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button disabled={busy || !renameTo.trim()} onClick={() => void applyRename()}>
+              {t("files.rename")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(overwrite)}
+        onOpenChange={(open) => {
+          if (!open) setOverwrite(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("files.overwriteTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("files.overwriteBody", { names: overwrite?.conflicts.join(", ") ?? "" })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-3 flex flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={() => setOverwrite(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => overwrite && void uploadFiles(overwrite.files, "skip")}
+            >
+              {t("files.skipExisting")}
+            </Button>
+            <Button onClick={() => overwrite && void uploadFiles(overwrite.files, "overwrite")}>
+              {t("files.overwrite")}
             </Button>
           </div>
         </DialogContent>

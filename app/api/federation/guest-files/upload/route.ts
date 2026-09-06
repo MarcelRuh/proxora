@@ -4,17 +4,26 @@ import { handleRouteError, json } from "@/server/http/respond";
 import { requireSharedGuestFiles } from "@/server/services/federation-service";
 import { sftpUploadFromStream } from "@/server/services/guest-files";
 import { decodeGuestTransferMeta, GUEST_TRANSFER_META_HEADER } from "@/server/services/guest-file-tickets";
+import { GUEST_SSH_KEY_MAX, hasGuestSshAuth } from "@/lib/guest-files";
 
-const metaSchema = z.object({
-  remoteHostId: z.string().min(1),
-  kind: z.enum(["vm", "lxc"]),
-  vmid: z.number().int().positive(),
-  target: z.string().min(1).max(253),
-  port: z.number().int().min(1).max(65535).optional(),
-  username: z.string().min(1).max(64),
-  password: z.string().min(1).max(512),
-  path: z.string().min(1).max(4096),
-});
+const metaSchema = z
+  .object({
+    remoteHostId: z.string().min(1),
+    kind: z.enum(["vm", "lxc"]),
+    vmid: z.number().int().positive(),
+    target: z.string().min(1).max(253),
+    port: z.number().int().min(1).max(65535).optional(),
+    username: z.string().min(1).max(64),
+    password: z.string().max(512).optional(),
+    privateKey: z.string().max(GUEST_SSH_KEY_MAX).optional(),
+    passphrase: z.string().max(512).optional(),
+    path: z.string().min(1).max(4096),
+  })
+  .superRefine((data, ctx) => {
+    if (!hasGuestSshAuth(data)) {
+      ctx.addIssue({ code: "custom", message: "SSH-Passwort oder Schlüssel fehlt", path: ["password"] });
+    }
+  });
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
@@ -36,6 +45,8 @@ export async function POST(request: Request) {
       port: payload.port,
       username: payload.username,
       password: payload.password,
+      privateKey: payload.privateKey,
+      passphrase: payload.passphrase,
       path: payload.path,
       body: request.body,
     });

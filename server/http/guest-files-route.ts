@@ -9,24 +9,30 @@ import { assertGuestAccess } from "@/server/auth/session-core";
 import { getHostOrThrow } from "@/server/services/host-service";
 import { runGuestFileOp, type GuestFileOp } from "@/server/services/guest-files";
 import { createGuestTransferTicket } from "@/server/services/guest-file-tickets";
-import { GUEST_FILE_MAX_BYTES } from "@/lib/guest-files";
+import { GUEST_FILE_MAX_BYTES, GUEST_SSH_KEY_MAX, hasGuestSshAuth } from "@/lib/guest-files";
 
 const bodySchema = z
   .object({
-    op: z.enum(["list", "read", "write", "mkdir", "delete", "transfer-ticket"]),
+    op: z.enum(["list", "read", "write", "mkdir", "delete", "rename", "transfer-ticket"]),
     mode: z.enum(["download", "upload"]).optional(),
     via: z.enum(["agent", "sftp"]).optional(),
     target: z.string().min(1).max(253).optional(),
     port: z.number().int().min(1).max(65535).optional(),
     username: z.string().min(1).max(64).optional(),
-    password: z.string().min(1).max(512).optional(),
+    password: z.string().max(512).optional(),
+    privateKey: z.string().max(GUEST_SSH_KEY_MAX).optional(),
+    passphrase: z.string().max(512).optional(),
     path: z.string().min(1).max(4096),
+    to: z.string().min(1).max(4096).optional(),
     contentBase64: z.string().max(Math.ceil(GUEST_FILE_MAX_BYTES * 1.4) + 32).optional(),
   })
   .superRefine((data, ctx) => {
-    const via = data.via ?? (data.password ? "sftp" : "agent");
-    if (via === "sftp" && (!data.target || !data.username || !data.password)) {
+    const via = data.via ?? (hasGuestSshAuth(data) ? "sftp" : "agent");
+    if (via === "sftp" && (!data.target || !data.username || !hasGuestSshAuth(data))) {
       ctx.addIssue({ code: "custom", message: "SSH-Zugangsdaten fehlen" });
+    }
+    if (data.op === "rename" && !data.to) {
+      ctx.addIssue({ code: "custom", message: "Neuer Name fehlt", path: ["to"] });
     }
   });
 
@@ -36,6 +42,7 @@ const AUDIT: Record<GuestFileOp, string> = {
   write: AUDIT_ACTIONS.GUEST_FILES_WRITE,
   mkdir: AUDIT_ACTIONS.GUEST_FILES_MKDIR,
   delete: AUDIT_ACTIONS.GUEST_FILES_DELETE,
+  rename: AUDIT_ACTIONS.GUEST_FILES_RENAME,
 };
 
 export function guestFilesRoute(kind: "vm" | "lxc") {
@@ -45,11 +52,11 @@ export function guestFilesRoute(kind: "vm" | "lxc") {
     if (!Number.isInteger(vmid) || vmid < 1) throw new ValidationError("Invalid VMID");
     assertGuestAccess(session.user, params.id, kind, vmid);
     const body = bodySchema.parse(await req.json());
-    const via = body.via ?? (kind === "vm" && !body.password ? "agent" : "sftp");
+    const via = body.via ?? (kind === "vm" && !hasGuestSshAuth(body) ? "agent" : "sftp");
     if (via === "agent" && kind !== "vm") {
       throw new ValidationError("Der QEMU Agent gibt es nur bei VMs. LXC braucht SSH im Container.");
     }
-    if ((body.op === "write" || body.op === "mkdir") && !body.path) {
+    if ((body.op === "write" || body.op === "mkdir" || body.op === "rename") && !body.path) {
       throw new ValidationError("Path fehlt");
     }
     const host = await getHostOrThrow(params.id, session.user);
@@ -72,6 +79,8 @@ export function guestFilesRoute(kind: "vm" | "lxc") {
         port: body.port,
         username: body.username ?? "",
         password: body.password ?? "",
+        privateKey: body.privateKey,
+        passphrase: body.passphrase,
         mode,
       });
       return json({
@@ -92,7 +101,10 @@ export function guestFilesRoute(kind: "vm" | "lxc") {
       port: body.port,
       username: body.username,
       password: body.password,
+      privateKey: body.privateKey,
+      passphrase: body.passphrase,
       path: body.path,
+      to: body.to,
       contentBase64: body.contentBase64,
     });
     await writeAuditLog({
@@ -102,7 +114,14 @@ export function guestFilesRoute(kind: "vm" | "lxc") {
       target: `${kind.toUpperCase()} ${vmid} ${body.path}`,
       hostId: params.id,
       result: "SUCCESS",
-      metadata: { op: body.op, path: body.path, via, sshHost: body.target ?? null, sshUser: body.username ?? null },
+      metadata: {
+        op: body.op,
+        path: body.path,
+        to: body.to ?? null,
+        via,
+        sshHost: body.target ?? null,
+        sshUser: body.username ?? null,
+      },
     });
     return json(result);
   });

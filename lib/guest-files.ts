@@ -5,6 +5,7 @@ export const GUEST_FILE_MAX_BYTES = 8 * 1024 * 1024;
 /** Soft warning before opening a huge text file in the in-browser editor. */
 export const GUEST_FILE_EDITOR_WARN_BYTES = 32 * 1024 * 1024;
 export const GUEST_FILE_MAX_PATH = 4096;
+export const GUEST_SSH_KEY_MAX = 32 * 1024;
 
 export type GuestFileKind = "file" | "dir" | "other";
 
@@ -16,7 +17,7 @@ export type GuestFileEntry = {
   mtime: number | null;
 };
 
-export type GuestFileOp = "list" | "read" | "write" | "mkdir" | "delete";
+export type GuestFileOp = "list" | "read" | "write" | "mkdir" | "delete" | "rename";
 
 export type GuestFileRequest = {
   kind: "vm" | "lxc";
@@ -28,7 +29,10 @@ export type GuestFileRequest = {
   port?: number;
   username?: string;
   password?: string;
+  privateKey?: string;
+  passphrase?: string;
   path: string;
+  to?: string;
   contentBase64?: string;
 };
 
@@ -114,6 +118,31 @@ export function clampSftpPort(port: unknown): number {
   const n = typeof port === "number" ? port : Number(port ?? 22);
   if (!Number.isInteger(n) || n < 1 || n > 65535) throw new Error("Invalid SSH port");
   return n;
+}
+
+export function looksLikeSshPrivateKey(raw: string): boolean {
+  const text = raw.trim();
+  if (!text || text.length > GUEST_SSH_KEY_MAX) return false;
+  return /^-----BEGIN (OPENSSH |RSA |EC |DSA |ENCRYPTED )?PRIVATE KEY-----/m.test(text);
+}
+
+export function hasGuestSshAuth(input: { password?: string; privateKey?: string }): boolean {
+  return Boolean(input.password?.trim() || looksLikeSshPrivateKey(input.privateKey ?? ""));
+}
+
+export function guestRenameDest(from: string, newName: string): string {
+  const name = newName.trim();
+  if (!name || name.includes("/") || name.includes("\\") || name === "." || name === "..") {
+    throw new Error("Invalid name");
+  }
+  const parent = guestPathParent(from);
+  if (parent === null) throw new Error("Invalid path");
+  return resolveGuestPath(parent, name);
+}
+
+export function uploadNameConflicts(existing: readonly { name: string }[], files: readonly { name: string }[]): string[] {
+  const have = new Set(existing.map((row) => row.name));
+  return files.map((file) => file.name).filter((name) => have.has(name));
 }
 
 export function isProbablyTextFile(name: string, bytes?: Uint8Array): boolean {

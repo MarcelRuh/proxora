@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.4.20] – 2026-09-06
+
+### Added
+
+- Guest files: confirm before overwriting existing names on upload; rename files and folders in the same directory; editor line numbers and Ctrl/Cmd+F search; SSH private key (and optional passphrase) alongside password.
+
 ## [1.4.19] – 2026-09-06
 
 ### Changed

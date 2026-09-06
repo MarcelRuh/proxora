@@ -3,20 +3,32 @@ import { ValidationError } from "@/lib/errors";
 import { handleRouteError, json } from "@/server/http/respond";
 import { requireSharedGuestFiles } from "@/server/services/federation-service";
 import { guestSftp } from "@/server/services/guest-files";
-import { GUEST_FILE_MAX_BYTES } from "@/lib/guest-files";
+import { GUEST_FILE_MAX_BYTES, GUEST_SSH_KEY_MAX, hasGuestSshAuth } from "@/lib/guest-files";
 
-const bodySchema = z.object({
-  remoteHostId: z.string().min(1),
-  kind: z.enum(["vm", "lxc"]),
-  vmid: z.number().int().positive(),
-  op: z.enum(["list", "read", "write", "mkdir", "delete"]),
-  target: z.string().min(1).max(253),
-  port: z.number().int().min(1).max(65535).optional(),
-  username: z.string().min(1).max(64),
-  password: z.string().min(1).max(512),
-  path: z.string().min(1).max(4096),
-  contentBase64: z.string().max(Math.ceil(GUEST_FILE_MAX_BYTES * 1.4) + 32).optional(),
-});
+const bodySchema = z
+  .object({
+    remoteHostId: z.string().min(1),
+    kind: z.enum(["vm", "lxc"]),
+    vmid: z.number().int().positive(),
+    op: z.enum(["list", "read", "write", "mkdir", "delete", "rename"]),
+    target: z.string().min(1).max(253),
+    port: z.number().int().min(1).max(65535).optional(),
+    username: z.string().min(1).max(64),
+    password: z.string().max(512).optional(),
+    privateKey: z.string().max(GUEST_SSH_KEY_MAX).optional(),
+    passphrase: z.string().max(512).optional(),
+    path: z.string().min(1).max(4096),
+    to: z.string().min(1).max(4096).optional(),
+    contentBase64: z.string().max(Math.ceil(GUEST_FILE_MAX_BYTES * 1.4) + 32).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!hasGuestSshAuth(data)) {
+      ctx.addIssue({ code: "custom", message: "SSH-Passwort oder Schlüssel fehlt", path: ["password"] });
+    }
+    if (data.op === "rename" && !data.to) {
+      ctx.addIssue({ code: "custom", message: "Neuer Name fehlt", path: ["to"] });
+    }
+  });
 
 export async function POST(request: Request) {
   try {
@@ -32,7 +44,10 @@ export async function POST(request: Request) {
       port: payload.port,
       username: payload.username,
       password: payload.password,
+      privateKey: payload.privateKey,
+      passphrase: payload.passphrase,
       path: payload.path,
+      to: payload.to,
       contentBase64: payload.contentBase64,
     });
     return json(data);

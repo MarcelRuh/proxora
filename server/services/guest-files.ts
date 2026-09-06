@@ -10,7 +10,10 @@ import {
   clampSftpPort,
   decodeGuestFileContent,
   guestFileName,
+  guestPathParent,
+  hasGuestSshAuth,
   isAllowedSftpTarget,
+  looksLikeSshPrivateKey,
   resolveGuestPath,
   type GuestFileEntry,
   type GuestFileKind,
@@ -71,16 +74,56 @@ function withTimeout<T>(ms: number, work: Promise<T>, label: string): Promise<T>
   });
 }
 
-async function openSftp(
-  target: string,
-  port: number,
-  username: string,
-  password: string,
-): Promise<{ client: Client; sftp: SFTPWrapper; fingerprint: string }> {
-  const host = isAllowedSftpTarget(target);
-  const user = username.trim();
-  if (!user || user.length > 64) throw new ValidationError("SSH-Benutzer fehlt");
-  if (!password || password.length > 512) throw new ValidationError("SSH-Passwort fehlt");
+type SshAuth = {
+  target: string;
+  port: number;
+  username: string;
+  password?: string;
+  privateKey?: string;
+  passphrase?: string;
+};
+
+function parseSshAuth(input: {
+  target?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  privateKey?: string;
+  passphrase?: string;
+}): SshAuth {
+  const target = input.target?.trim() ?? "";
+  const username = input.username?.trim() ?? "";
+  const password = input.password ?? "";
+  const privateKey = input.privateKey?.trim() ?? "";
+  const passphrase = input.passphrase ?? "";
+  let port: number;
+  try {
+    port = clampSftpPort(input.port ?? 22);
+    isAllowedSftpTarget(target);
+  } catch (error) {
+    throw new ValidationError(error instanceof Error ? error.message : "Invalid SSH host");
+  }
+  if (!username || username.length > 64) throw new ValidationError("SSH-Benutzer fehlt");
+  if (!hasGuestSshAuth({ password, privateKey })) {
+    throw new ValidationError("SSH-Passwort oder Schlüssel fehlt");
+  }
+  if (privateKey && !looksLikeSshPrivateKey(privateKey)) {
+    throw new ValidationError("Ungültiger SSH-Schlüssel");
+  }
+  return {
+    target,
+    port,
+    username,
+    password: password || undefined,
+    privateKey: privateKey || undefined,
+    passphrase: passphrase || undefined,
+  };
+}
+
+async function openSftp(auth: SshAuth): Promise<{ client: Client; sftp: SFTPWrapper; fingerprint: string }> {
+  const host = isAllowedSftpTarget(auth.target);
+  const password = auth.password ?? "";
+  const privateKey = auth.privateKey ?? "";
 
   return new Promise((resolve, reject) => {
     const client = new Client();
@@ -101,9 +144,11 @@ async function openSftp(
       CONNECT_MS + 2_000,
     );
 
-    client.on("keyboard-interactive", (_name, _instr, _lang, prompts, done) => {
-      done(prompts.map(() => password));
-    });
+    if (password) {
+      client.on("keyboard-interactive", (_name, _instr, _lang, prompts, done) => {
+        done(prompts.map(() => password));
+      });
+    }
     client.on("ready", () => {
       client.sftp((err, sftp) => {
         if (err || !sftp) {
@@ -122,11 +167,12 @@ async function openSftp(
     });
     client.connect({
       host,
-      port,
-      username: user,
-      password,
+      port: auth.port,
+      username: auth.username,
       readyTimeout: CONNECT_MS,
-      tryKeyboard: true,
+      tryKeyboard: Boolean(password),
+      ...(password ? { password } : {}),
+      ...(privateKey ? { privateKey, passphrase: auth.passphrase || undefined } : {}),
       hostVerifier: (key: Buffer) => {
         fingerprint = Buffer.isBuffer(key) ? key.toString("hex").slice(0, 32) : String(key).slice(0, 32);
         return true;
@@ -135,14 +181,8 @@ async function openSftp(
   });
 }
 
-async function withSftp<T>(
-  target: string,
-  port: number,
-  username: string,
-  password: string,
-  fn: (sftp: SFTPWrapper, fingerprint: string) => Promise<T>,
-): Promise<T> {
-  const session = await openSftp(target, port, username, password);
+async function withSftp<T>(auth: SshAuth, fn: (sftp: SFTPWrapper, fingerprint: string) => Promise<T>): Promise<T> {
+  const session = await openSftp(auth);
   try {
     return await withTimeout(OP_MS, fn(session.sftp, session.fingerprint), "SSH-Zeitüberschreitung");
   } catch (error) {
@@ -254,32 +294,69 @@ async function remove(sftp: SFTPWrapper, path: string): Promise<void> {
   });
 }
 
+function isMissingPath(error: unknown): boolean {
+  const code = typeof error === "object" && error && "code" in error ? (error as { code?: unknown }).code : undefined;
+  if (code === 2 || code === "ENOENT") return true;
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /no such file/i.test(message);
+}
+
+async function renamePath(sftp: SFTPWrapper, from: string, to: string): Promise<void> {
+  if (from === "/" || to === "/") throw new ValidationError("Root lässt sich nicht umbenennen");
+  const exists = await new Promise<boolean>((resolve, reject) => {
+    sftp.stat(to, (err) => {
+      if (!err) resolve(true);
+      else if (isMissingPath(err)) resolve(false);
+      else reject(err);
+    });
+  });
+  if (exists) throw new ValidationError("Ziel existiert schon");
+  await new Promise<void>((resolve, reject) => {
+    sftp.rename(from, to, (err) => (err ? reject(err) : resolve()));
+  });
+}
+
 type StreamCreds = {
   target: string;
   port?: number;
   username: string;
-  password: string;
+  password?: string;
+  privateKey?: string;
+  passphrase?: string;
   path: string;
 };
 
 async function parseStreamCreds(input: StreamCreds) {
+  const auth = parseSshAuth(input);
   try {
-    return {
-      path: resolveGuestPath(input.path || "/"),
-      port: clampSftpPort(input.port ?? 22),
-      username: input.username,
-      password: input.password,
-      target: input.target,
-    };
+    return { ...auth, path: resolveGuestPath(input.path || "/") };
   } catch (error) {
     throw new ValidationError(error instanceof Error ? error.message : "Invalid path");
   }
 }
 
+function sshWire(auth: {
+  target: string;
+  port: number;
+  username: string;
+  password?: string;
+  privateKey?: string;
+  passphrase?: string;
+}) {
+  return {
+    target: auth.target,
+    port: auth.port,
+    username: auth.username,
+    password: auth.password ?? "",
+    privateKey: auth.privateKey ?? "",
+    passphrase: auth.passphrase ?? "",
+  };
+}
+
 /** Stream a guest file over SFTP. SSH stays open until the HTTP body ends. */
 export async function sftpDownloadResponse(input: StreamCreds): Promise<Response> {
   const creds = await parseStreamCreds(input);
-  const session = await openSftp(creds.target, creds.port, creds.username, creds.password);
+  const session = await openSftp(creds);
   try {
     const attrs = await new Promise<{ size: number; mode: number }>((resolve, reject) => {
       session.sftp.stat(creds.path, (err, next) => {
@@ -324,7 +401,7 @@ export async function sftpUploadFromStream(input: StreamCreds & { body: Readable
   size: number;
 }> {
   const creds = await parseStreamCreds(input);
-  const session = await openSftp(creds.target, creds.port, creds.username, creds.password);
+  const session = await openSftp(creds);
   let total = 0;
   const out = session.sftp.createWriteStream(creds.path, { flags: "w", mode: 0o644 });
   try {
@@ -363,7 +440,17 @@ export async function sftpUploadFromStream(input: StreamCreds & { body: Readable
 
 async function proxyGuestFileDownloadToPeer(
   host: Host,
-  input: { target: string; port: number; username: string; password: string; path: string; kind: "vm" | "lxc"; vmid: number },
+  input: {
+    target: string;
+    port: number;
+    username: string;
+    password?: string;
+    privateKey?: string;
+    passphrase?: string;
+    path: string;
+    kind: "vm" | "lxc";
+    vmid: number;
+  },
 ): Promise<Response> {
   if (!host.peerId || !host.remoteHostId) throw new ValidationError("Peer host is incomplete");
   const peer = await prisma.wireguardPeer.findUnique({ where: { id: host.peerId } });
@@ -380,10 +467,7 @@ async function proxyGuestFileDownloadToPeer(
       remoteHostId: host.remoteHostId,
       kind: input.kind,
       vmid: input.vmid,
-      target: input.target,
-      port: input.port,
-      username: input.username,
-      password: input.password,
+      ...sshWire(input),
       path: input.path,
     }),
   });
@@ -410,7 +494,9 @@ export async function streamGuestFileDownload(
     target: string;
     port: number;
     username: string;
-    password: string;
+    password?: string;
+    privateKey?: string;
+    passphrase?: string;
     path: string;
   },
 ): Promise<Response> {
@@ -431,7 +517,9 @@ async function proxyGuestFileUploadToPeer(
     target: string;
     port: number;
     username: string;
-    password: string;
+    password?: string;
+    privateKey?: string;
+    passphrase?: string;
     path: string;
     body: ReadableStream<Uint8Array> | null;
     contentLength?: string | null;
@@ -448,10 +536,7 @@ async function proxyGuestFileUploadToPeer(
       remoteHostId: host.remoteHostId,
       kind: input.kind,
       vmid: input.vmid,
-      target: input.target,
-      port: input.port,
-      username: input.username,
-      password: input.password,
+      ...sshWire(input),
       path: input.path,
     }),
   };
@@ -481,7 +566,9 @@ export async function streamGuestFileUpload(
     target: string;
     port: number;
     username: string;
-    password: string;
+    password?: string;
+    privateKey?: string;
+    passphrase?: string;
     path: string;
     body: ReadableStream<Uint8Array> | null;
     contentLength?: string | null;
@@ -498,20 +585,13 @@ export async function streamGuestFileUpload(
 
 export async function guestSftp(input: GuestFileRequest): Promise<GuestFileResult> {
   let path: string;
-  let port: number;
   try {
     path = resolveGuestPath(input.path || "/");
-    port = clampSftpPort(input.port ?? 22);
   } catch (error) {
     throw new ValidationError(error instanceof Error ? error.message : "Invalid path");
   }
-  const target = input.target?.trim() ?? "";
-  const username = input.username?.trim() ?? "";
-  const password = input.password ?? "";
-  if (!target || !username || !password) {
-    throw new ValidationError("SSH-Zugangsdaten fehlen");
-  }
-  return withSftp(target, port, username, password, async (sftp, fingerprint) => {
+  const auth = parseSshAuth(input);
+  return withSftp(auth, async (sftp, fingerprint) => {
     switch (input.op) {
       case "list": {
         const entries = await listDir(sftp, path);
@@ -540,6 +620,19 @@ export async function guestSftp(input: GuestFileRequest): Promise<GuestFileResul
       case "delete": {
         await remove(sftp, path);
         return { path, via: "sftp", fingerprint };
+      }
+      case "rename": {
+        let dest: string;
+        try {
+          dest = resolveGuestPath(input.to || "");
+        } catch (error) {
+          throw new ValidationError(error instanceof Error ? error.message : "Invalid path");
+        }
+        if (guestPathParent(path) !== guestPathParent(dest)) {
+          throw new ValidationError("Umbenennen nur im selben Ordner");
+        }
+        await renamePath(sftp, path, dest);
+        return { path: dest, via: "sftp", name: guestFileName(dest), fingerprint };
       }
       default:
         throw new ValidationError("Unknown file operation");
@@ -573,7 +666,7 @@ async function proxyGuestFilesToPeer(host: Host, input: GuestFileRequest): Promi
 }
 
 export async function runGuestFileOp(host: Host, input: GuestFileRequest): Promise<GuestFileResult> {
-  const viaAgent = input.kind === "vm" && input.via !== "sftp" && !input.password;
+  const viaAgent = input.kind === "vm" && input.via !== "sftp" && !hasGuestSshAuth(input);
   if (viaAgent) {
     const client = await clientForHost(host);
     return guestAgentFiles(client, input);

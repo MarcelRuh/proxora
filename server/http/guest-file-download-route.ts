@@ -35,6 +35,8 @@ export function guestFileDownloadRoute(kind: "vm" | "lxc") {
         port: ticket.port,
         username: ticket.username,
         password: ticket.password,
+        privateKey: ticket.privateKey,
+        passphrase: ticket.passphrase,
         path: ticket.path,
       });
       await writeAuditLog({
@@ -85,6 +87,8 @@ export function guestFileUploadRoute(kind: "vm" | "lxc") {
         port: ticket.port,
         username: ticket.username,
         password: ticket.password,
+        privateKey: ticket.privateKey,
+        passphrase: ticket.passphrase,
         path: ticket.path,
         body: req.body,
         contentLength: req.headers.get("content-length"),

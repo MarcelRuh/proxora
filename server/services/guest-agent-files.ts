@@ -3,6 +3,7 @@ import {
   AGENT_FILE_MAX_BYTES,
   decodeGuestFileContent,
   guestFileName,
+  guestPathParent,
   parseGuestListOutput,
   resolveGuestPath,
   type GuestFileEntry,
@@ -155,6 +156,21 @@ export async function guestAgentFiles(client: ProxmoxClient, input: GuestFileReq
           await agentExecOk(client, node, vmid, ["rm", "-f", "--", path]);
         }
         return { path, via: "agent" };
+      case "rename": {
+        let dest: string;
+        try {
+          dest = resolveGuestPath(input.to || "");
+        } catch (error) {
+          throw new ValidationError(error instanceof Error ? error.message : "Invalid path");
+        }
+        if (path === "/" || dest === "/" || guestPathParent(path) !== guestPathParent(dest)) {
+          throw new ValidationError("Umbenennen nur im selben Ordner");
+        }
+        const exists = await agentExec(client, node, vmid, ["test", "-e", dest]);
+        if (exists.exitcode === 0) throw new ValidationError("Ziel existiert schon");
+        await agentExecOk(client, node, vmid, ["mv", "--", path, dest]);
+        return { path: dest, via: "agent", name: guestFileName(dest) };
+      }
       default:
         throw new ValidationError("Unknown file operation");
     }

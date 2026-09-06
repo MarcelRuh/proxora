@@ -6,6 +6,8 @@ export const logger = pino({
     paths: [
       "secret",
       "password",
+      "passphrase",
+      "privateKey",
       "token",
       "ticket",
       "encryptedSecret",
@@ -14,6 +16,8 @@ export const logger = pino({
       "headers.cookie",
       "*.secret",
       "*.password",
+      "*.passphrase",
+      "*.privateKey",
       "*.token",
       "*.ticket",
       "*.encryptedSecret",
