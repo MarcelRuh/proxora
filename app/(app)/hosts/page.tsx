@@ -139,6 +139,11 @@ function HostSection({
                 <p className="text-xs text-muted-foreground">
                   {remote ? t("peers.sharedBy", { name: host.peerName ?? title }) : host.url}
                 </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {host.isClusterMember
+                    ? t("cluster.named", { name: host.clusterName || t("cluster.title") })
+                    : t("cluster.standalone")}
+                </p>
               </div>
               <HostStateBadge state={host.connectionState} />
             </CardHeader>

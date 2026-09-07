@@ -123,7 +123,120 @@ export function NotificationsSection() {
           </div>
         </CardContent>
       </Card>
+      <SmtpChannelForm />
     </div>
+  );
+}
+
+function SmtpChannelForm() {
+  const { t } = useI18n();
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    name: "E-Mail",
+    host: "",
+    port: "587",
+    username: "",
+    password: "",
+    from: "",
+    to: "",
+    events: [...NOTIFICATION_TOPICS],
+  });
+  const create = useMutation({
+    mutationFn: () =>
+      api("/api/notifications", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "smtp",
+          name: form.name,
+          events: form.events,
+          config: {
+            host: form.host,
+            port: Number(form.port) || 587,
+            username: form.username,
+            password: form.password,
+            from: form.from,
+            to: form.to,
+            events: form.events,
+          },
+        }),
+      }),
+    onSuccess: () => {
+      toast.success(t("settings.channelSaved"));
+      setForm((prev) => ({ ...prev, password: "" }));
+      void qc.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const test = useMutation({
+    mutationFn: () =>
+      api("/api/notifications/test", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "smtp",
+          config: {
+            host: form.host,
+            port: Number(form.port) || 587,
+            username: form.username,
+            password: form.password,
+            from: form.from,
+            to: form.to,
+          },
+        }),
+      }),
+    onSuccess: () => toast.success(t("settings.testSent")),
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const ready = Boolean(form.host && form.from && form.to);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("settings.addSmtp")}</CardTitle>
+      </CardHeader>
+      <CardContent className="grid max-w-xl gap-3">
+        <p className="text-sm text-muted-foreground">{t("settings.smtpHint")}</p>
+        <div className="space-y-1">
+          <Label>{t("create.name")}</Label>
+          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <Label>{t("settings.smtpHost")}</Label>
+            <Input value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label>{t("settings.smtpPort")}</Label>
+            <Input value={form.port} onChange={(e) => setForm({ ...form, port: e.target.value })} />
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <Label>{t("login.username")}</Label>
+            <Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label>{t("login.password")}</Label>
+            <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+          </div>
+        </div>
+        <div className="space-y-1">
+          <Label>{t("settings.smtpFrom")}</Label>
+          <Input value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} />
+        </div>
+        <div className="space-y-1">
+          <Label>{t("settings.smtpTo")}</Label>
+          <Input value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })} />
+        </div>
+        <EventChecks value={form.events} onChange={(events) => setForm({ ...form, events })} />
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => create.mutate()} disabled={create.isPending || !ready}>
+            {t("settings.saveChannel")}
+          </Button>
+          <Button type="button" variant="outline" disabled={test.isPending || !ready} onClick={() => test.mutate()}>
+            {test.isPending ? t("common.loading") : t("settings.testChannel")}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

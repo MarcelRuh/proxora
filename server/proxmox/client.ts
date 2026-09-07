@@ -1,5 +1,6 @@
 import { ProxmoxHttpClient } from "@/server/proxmox/http";
 import { ClusterApi, TaskApi, UpdateApi } from "@/server/proxmox/tasks";
+import { GuestFirewallApi, HaApi, ReplicationApi } from "@/server/proxmox/cluster-extra";
 import { LxcApi } from "@/server/proxmox/lxc";
 import { NodeApi } from "@/server/proxmox/nodes";
 import { StorageApi, ZfsApi } from "@/server/proxmox/storage";
@@ -27,6 +28,9 @@ export class ProxmoxClient {
   readonly updates: UpdateApi;
   readonly cluster: ClusterApi;
   readonly backup: BackupApi;
+  readonly ha: HaApi;
+  readonly replication: ReplicationApi;
+  readonly firewall: GuestFirewallApi;
 
   constructor(config: ProxmoxConnectionConfig) {
     this.http = new ProxmoxHttpClient(config);
@@ -39,6 +43,9 @@ export class ProxmoxClient {
     this.updates = new UpdateApi(this.http);
     this.cluster = new ClusterApi(this.http);
     this.backup = new BackupApi(this.http);
+    this.ha = new HaApi(this.http);
+    this.replication = new ReplicationApi(this.http);
+    this.firewall = new GuestFirewallApi(this.http);
   }
 
   dispose() {

@@ -30,7 +30,7 @@ object OriginCookies {
       return
     }
     val suffix = buildString {
-      append("; Path=/; Max-Age=604800")
+      append("; Path=/; Max-Age=${Prefs.cookieMaxAge(context)}")
       if (url.startsWith("https://", ignoreCase = true)) append("; Secure")
     }
     val left = AtomicInteger(pairs.size)

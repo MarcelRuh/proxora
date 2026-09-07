@@ -9,6 +9,7 @@ import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { verifyPassword } from "@/lib/password";
 import { ValidationError } from "@/lib/errors";
 import { generateTotpSecret, totpOtpauthUrl, verifyTotp } from "@/lib/totp";
+import { generateRecoveryCodes, hashRecoveryCodes } from "@/lib/recovery-codes";
 import QRCode from "qrcode";
 import { destroyUserSessions } from "@/server/auth/session";
 
@@ -20,11 +21,18 @@ const schema = z.discriminatedUnion("action", [
     code: z.string().min(6),
     password: z.string().min(1),
   }),
+  z.object({
+    action: z.literal("recovery"),
+    password: z.string().min(1),
+  }),
 ]);
 
 export const GET = apiRoute(null, async (_req, session) => {
   const user = await prisma.user.findUnique({ where: { id: session.user.id } });
-  return json({ enabled: Boolean(user?.totpEnabled) });
+  return json({
+    enabled: Boolean(user?.totpEnabled),
+    recoveryRemaining: user?.totpRecoveryHashes.length ?? 0,
+  });
 });
 
 export const POST = apiRoute(null, async (req, session) => {
@@ -43,9 +51,14 @@ export const POST = apiRoute(null, async (req, session) => {
   if (body.action === "enable") {
     if (user.totpEnabled) throw new ValidationError("2FA is already enabled");
     if (!verifyTotp(body.secret, body.code)) throw new ValidationError("INVALID_TOTP");
+    const codes = generateRecoveryCodes();
     await prisma.user.update({
       where: { id: user.id },
-      data: { totpEnabled: true, totpSecret: encryptSecret(body.secret) },
+      data: {
+        totpEnabled: true,
+        totpSecret: encryptSecret(body.secret),
+        totpRecoveryHashes: hashRecoveryCodes(codes),
+      },
     });
     await writeAuditLog({
       userId: session.user.id,
@@ -54,7 +67,27 @@ export const POST = apiRoute(null, async (req, session) => {
       target: session.user.username,
       result: "SUCCESS",
     });
-    return json({ enabled: true });
+    return json({ enabled: true, recoveryCodes: codes });
+  }
+
+  if (body.action === "recovery") {
+    if (!user.totpEnabled) throw new ValidationError("2FA is not enabled");
+    if (!(await verifyPassword(body.password, user.passwordHash))) {
+      throw new ValidationError("CURRENT_PASSWORD_INVALID");
+    }
+    const codes = generateRecoveryCodes();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { totpRecoveryHashes: hashRecoveryCodes(codes) },
+    });
+    await writeAuditLog({
+      userId: session.user.id,
+      ip: await clientIp(),
+      action: AUDIT_ACTIONS.TOTP_RECOVERY,
+      target: session.user.username,
+      result: "SUCCESS",
+    });
+    return json({ recoveryCodes: codes, recoveryRemaining: codes.length });
   }
 
   if (!user.totpEnabled || !user.totpSecret) throw new ValidationError("2FA is not enabled");
@@ -70,7 +103,7 @@ export const POST = apiRoute(null, async (req, session) => {
   if (!verifyTotp(secret, body.code)) throw new ValidationError("INVALID_TOTP");
   await prisma.user.update({
     where: { id: user.id },
-    data: { totpEnabled: false, totpSecret: null },
+    data: { totpEnabled: false, totpSecret: null, totpRecoveryHashes: [] },
   });
   await destroyUserSessions(user.id, session.id);
   await writeAuditLog({

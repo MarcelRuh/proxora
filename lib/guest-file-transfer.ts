@@ -398,6 +398,7 @@ export type AndroidDownloadBridge = {
   appendDownload: (id: string, base64Chunk: string) => void;
   finishDownload: (id: string) => void;
   abortDownload?: (id: string) => void;
+  setCookieMaxAge?: (seconds: number) => void;
 };
 
 export const ANDROID_DOWNLOAD_CHUNK = 24 * 1024;

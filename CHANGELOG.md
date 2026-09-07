@@ -4,6 +4,26 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.0.0] – 2026-09-07
+
+GitHub releases before **v2.0.0** were removed. This is the current download line (web + Android APK). Older tags stay in git history but are not published as releases.
+
+### Added
+
+- Session list and per-device sign-out; TOTP recovery codes; SMTP notification channels.
+- Guest HA (only when the Proxmox host is a cluster member), PCI/USB passthrough, guest firewall rules, SPICE `.vv` download, Cloud-Init editor.
+- Cluster status (quorum, nodes, ZFS replication list) on clustered hosts; standalone hosts hide HA/migration/replication.
+- Postgres dump download for admins; Android biometric lock, blob/data downloads, APK install after download, cookie Max-Age follows `SESSION_DAYS`.
+
+### Changed
+
+- Android release builds use R8; dead `/ws/push` Android push socket is gone (browser Web Push stays).
+- Inbox read state is only per-user (`InboxRead`); unused `InboxEvent.readAt` was dropped.
+
+### Not in 2.0
+
+- Passkeys/WebAuthn, SSO/OIDC, Ceph/SDN UI, PBS prune, certificate pinning (LAN self-signed still uses the existing TLS toggle).
+
 ## [1.7.16] – 2026-09-07
 
 ### Added

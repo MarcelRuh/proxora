@@ -2,13 +2,20 @@ package app.proxora
 
 import android.app.Dialog
 import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import android.net.ConnectivityManager
+import android.net.Network
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Message
+import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -32,10 +39,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.LinearLayoutCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import org.json.JSONObject
 import java.util.ArrayDeque
 
 class MainActivity : AppCompatActivity() {
@@ -50,9 +59,21 @@ class MainActivity : AppCompatActivity() {
   private var fileCallback: ValueCallback<Array<Uri>>? = null
   private var loadedServer: String? = null
   private val extraWindows = ArrayDeque<Dialog>()
+  private var pendingApkId = -1L
+  private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
   companion object {
     const val ACTION_RELOAD = "app.proxora.RELOAD"
+  }
+
+  private val downloadComplete = object : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+      val id = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) ?: return
+      if (id == pendingApkId && pendingApkId > 0) {
+        pendingApkId = -1L
+        installDownloadedApk(id)
+      }
+    }
   }
 
   private val filePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -154,6 +175,15 @@ class MainActivity : AppCompatActivity() {
       startDownload(url, userAgent, contentDisposition, mimeType)
     }
 
+    ContextCompat.registerReceiver(
+      this,
+      downloadComplete,
+      IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+      ContextCompat.RECEIVER_EXPORTED,
+    )
+    watchNetwork()
+    maybeUnlock()
+
     onBackPressedDispatcher.addCallback(
       this,
       object : OnBackPressedCallback(true) {
@@ -202,8 +232,14 @@ class MainActivity : AppCompatActivity() {
   }
 
   override fun onDestroy() {
+    try {
+      unregisterReceiver(downloadComplete)
+    } catch (_: Exception) {
+    }
+    networkCallback?.let { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) }
     snapshotSession()
-    while (extraWindows.isNotEmpty()) extraWindows.removeLast().dismiss()
+    extraWindows.forEach { it.dismiss() }
+    extraWindows.clear()
     webView.destroy()
     super.onDestroy()
   }
@@ -464,8 +500,12 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun startDownload(url: String, userAgent: String, contentDisposition: String, mimeType: String) {
-    if (url.startsWith("blob:") || url.startsWith("data:")) return
     val name = URLUtil.guessFileName(url, contentDisposition, mimeType)
+    if (url.startsWith("blob:") || url.startsWith("data:")) {
+      saveWebUrl(url, name)
+      return
+    }
+    val apk = name.endsWith(".apk", ignoreCase = true) || mimeType.contains("android.package")
     val request = DownloadManager.Request(Uri.parse(url)).apply {
       setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
       setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
@@ -473,8 +513,83 @@ class MainActivity : AppCompatActivity() {
       addRequestHeader("User-Agent", userAgent)
       CookieManager.getInstance().getCookie(url)?.let { addRequestHeader("Cookie", it) }
     }
-    getSystemService(DownloadManager::class.java).enqueue(request)
+    val id = getSystemService(DownloadManager::class.java).enqueue(request)
+    if (apk) pendingApkId = id
     Toast.makeText(this, getString(R.string.download_started, name), Toast.LENGTH_SHORT).show()
+  }
+
+  private fun saveWebUrl(url: String, name: String) {
+    val urlJs = JSONObject.quote(url)
+    val nameJs = JSONObject.quote(name)
+    webView.evaluateJavascript(
+      """
+      (function(){
+        var b = window.ProxoraAndroid;
+        if (!b || !b.beginDownload) return;
+        fetch($urlJs).then(function(r){ return r.blob(); }).then(function(blob){
+          var reader = new FileReader();
+          reader.onloadend = function(){
+            var data = String(reader.result || '');
+            var comma = data.indexOf(',');
+            var raw = comma >= 0 ? data.slice(comma + 1) : data;
+            var id = 'blob-' + Date.now();
+            b.beginDownload(id, $nameJs, blob.type || 'application/octet-stream');
+            var step = 32768;
+            for (var i = 0; i < raw.length; i += step) b.appendDownload(id, raw.slice(i, i + step));
+            b.finishDownload(id);
+          };
+          reader.readAsDataURL(blob);
+        }).catch(function(){});
+      })();
+      """.trimIndent(),
+      null,
+    )
+  }
+
+  private fun watchNetwork() {
+    val cm = getSystemService(ConnectivityManager::class.java)
+    val callback = object : ConnectivityManager.NetworkCallback() {
+      override fun onAvailable(network: Network) {
+        runOnUiThread { if (showingError) retryLoad() }
+      }
+    }
+    networkCallback = callback
+    cm.registerDefaultNetworkCallback(callback)
+  }
+
+  private fun maybeUnlock() {
+    if (!Prefs.biometricLock(this)) return
+    webView.visibility = View.INVISIBLE
+    BiometricGate.prompt(
+      this,
+      {
+        webView.visibility = View.VISIBLE
+      },
+      {
+        finish()
+      },
+    )
+  }
+
+  private fun installDownloadedApk(id: Long) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+      startActivity(
+        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))
+          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+      )
+      Toast.makeText(this, R.string.install_permission, Toast.LENGTH_LONG).show()
+      return
+    }
+    val uri = getSystemService(DownloadManager::class.java).getUriForDownloadedFile(id) ?: return
+    try {
+      startActivity(
+        Intent(Intent.ACTION_VIEW)
+          .setDataAndType(uri, "application/vnd.android.package-archive")
+          .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
+      )
+    } catch (_: Exception) {
+      Toast.makeText(this, R.string.download_failed, Toast.LENGTH_LONG).show()
+    }
   }
 
   private fun extractUris(data: Intent): Array<Uri>? {

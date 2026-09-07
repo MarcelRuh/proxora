@@ -16,6 +16,7 @@ import { verifyPassword } from "@/lib/password";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { decryptSecret } from "@/lib/crypto";
 import { createTotpTicket, readTotpTicket, verifyTotp } from "@/lib/totp";
+import { consumeRecoveryCode, looksLikeRecoveryCode } from "@/lib/recovery-codes";
 import { toSessionUser } from "@/server/auth/session-core";
 
 const loginSchema = z.object({
@@ -49,16 +50,37 @@ export async function POST(request: NextRequest) {
       } catch {
         return json({ error: "Invalid 2FA code", code: "INVALID_TOTP" }, 401);
       }
-      if (!verifyTotp(secret, body.totp)) {
-        await writeAuditLog({
-          userId: user.id,
-          ip,
-          action: AUDIT_ACTIONS.LOGIN_FAILED,
-          target: user.username,
-          result: "FAILURE",
-          error: "Invalid TOTP",
+      const totpOk = verifyTotp(secret, body.totp);
+      let recoveryHashes = user.totpRecoveryHashes ?? [];
+      if (!totpOk) {
+        if (!looksLikeRecoveryCode(body.totp)) {
+          await writeAuditLog({
+            userId: user.id,
+            ip,
+            action: AUDIT_ACTIONS.LOGIN_FAILED,
+            target: user.username,
+            result: "FAILURE",
+            error: "Invalid TOTP",
+          });
+          return json({ error: "Invalid 2FA code", code: "INVALID_TOTP" }, 401);
+        }
+        const next = consumeRecoveryCode(recoveryHashes, body.totp);
+        if (!next) {
+          await writeAuditLog({
+            userId: user.id,
+            ip,
+            action: AUDIT_ACTIONS.LOGIN_FAILED,
+            target: user.username,
+            result: "FAILURE",
+            error: "Invalid recovery code",
+          });
+          return json({ error: "Invalid 2FA code", code: "INVALID_TOTP" }, 401);
+        }
+        recoveryHashes = next;
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { totpRecoveryHashes: recoveryHashes },
         });
-        return json({ error: "Invalid 2FA code", code: "INVALID_TOTP" }, 401);
       }
       return finishLogin(user, ip);
     }

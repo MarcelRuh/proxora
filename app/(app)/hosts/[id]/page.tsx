@@ -19,6 +19,7 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import type { PublicHost } from "@/lib/types";
 import { HostEditorDialog } from "@/components/hosts/host-editor";
 import { HostMaintenanceButton } from "@/components/hosts/host-maintenance";
+import { HostClusterCard } from "@/components/hosts/host-cluster-card";
 import { QueryGate } from "@/components/layout/query-gate";
 
 type Status = {
@@ -106,6 +107,9 @@ export default function HostDetailPage() {
         }
       />
       <QueryGate isLoading={isPending && !data} error={null} onRetry={() => void refetch()}>
+      {meta?.host ? (
+        <HostClusterCard hostId={params.id} isClusterMember={meta.host.isClusterMember} />
+      ) : null}
       {nodes.map((item) => {
         const st = item.status;
         return (

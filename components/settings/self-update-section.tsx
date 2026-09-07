@@ -188,6 +188,11 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
                 {t("proxora.check")}
               </Button>
               {canApply ? (
+                <Button size="sm" variant="outline" asChild>
+                  <a href="/api/proxora/backup">{t("proxora.backup")}</a>
+                </Button>
+              ) : null}
+              {canApply ? (
                 status.updateAvailable ? (
                   <ConfirmAction
                     title={t("proxora.confirmTitle")}

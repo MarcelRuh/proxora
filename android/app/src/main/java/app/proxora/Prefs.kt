@@ -15,6 +15,9 @@ object Prefs {
   private const val KEY_COOKIES_URL = "origin_cookies_url"
   private const val KEY_LAST_URL = "last_page_url"
   private const val KEY_MIGRATED = "secure_migrated"
+  private const val KEY_MAX_AGE = "cookie_max_age"
+  private const val KEY_BIOMETRIC = "biometric_lock"
+  private const val DEFAULT_MAX_AGE = 7 * 24 * 60 * 60
 
   @Volatile private var cached: SharedPreferences? = null
 
@@ -103,6 +106,20 @@ object Prefs {
   fun saveLastPageUrl(context: Context, server: String, page: String) {
     val persistable = persistablePageUrl(server, page) ?: return
     prefs(context).edit().putString(KEY_LAST_URL, persistable).commit()
+  }
+
+  fun cookieMaxAge(context: Context): Int =
+    prefs(context).getInt(KEY_MAX_AGE, DEFAULT_MAX_AGE).coerceIn(60, 365 * 24 * 60 * 60)
+
+  fun saveCookieMaxAge(context: Context, seconds: Int) {
+    prefs(context).edit().putInt(KEY_MAX_AGE, seconds.coerceIn(60, 365 * 24 * 60 * 60)).commit()
+  }
+
+  fun biometricLock(context: Context): Boolean =
+    prefs(context).getBoolean(KEY_BIOMETRIC, false)
+
+  fun saveBiometricLock(context: Context, enabled: Boolean) {
+    prefs(context).edit().putBoolean(KEY_BIOMETRIC, enabled).commit()
   }
 }
 

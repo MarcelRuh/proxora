@@ -6,6 +6,7 @@ import {
   discordWaitUrl,
   type DiscordNotificationEvent,
 } from "@/lib/discord-embed";
+import { parseSmtpConfig, sendSmtpMail } from "@/server/notifications/smtp";
 
 export type NotificationEvent = DiscordNotificationEvent;
 
@@ -66,3 +67,14 @@ export const webhookProvider: NotificationProvider = {
 
 registerNotificationProvider(discordProvider);
 registerNotificationProvider(webhookProvider);
+
+export const smtpProvider: NotificationProvider = {
+  type: "smtp",
+  async send(event, config) {
+    const smtp = parseSmtpConfig(config);
+    const text = [event.title, event.message, event.host, event.node].filter(Boolean).join("\n");
+    await sendSmtpMail(smtp, `[Proxora] ${event.title}`, text);
+  },
+};
+
+registerNotificationProvider(smtpProvider);

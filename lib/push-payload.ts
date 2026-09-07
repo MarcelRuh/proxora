@@ -1,4 +1,3 @@
-export const PUSH_WS_PATH = "/ws/push";
 export const PUSH_VAPID_SETTING_KEY = "push.vapid";
 
 export type PushPayload = {

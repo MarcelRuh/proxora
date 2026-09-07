@@ -28,6 +28,7 @@ export type SessionUser = {
 export type AuthSession = {
   id: string;
   user: SessionUser;
+  expiresAt: Date;
 };
 
 type SessionUserSource = {
@@ -77,8 +78,9 @@ export function toSessionUser(user: SessionUserSource): SessionUser {
   };
 }
 
-function sessionDays(): number {
-  return Number(process.env.SESSION_DAYS ?? 7);
+export function sessionDays(): number {
+  const n = Number(process.env.SESSION_DAYS ?? 7);
+  return Number.isFinite(n) && n > 0 ? Math.min(365, n) : 7;
 }
 
 export async function createSession(userId: string, ip?: string, userAgent?: string) {
@@ -132,6 +134,7 @@ export async function getSessionFromToken(token: string | undefined | null): Pro
   return {
     id: record.id,
     user: toSessionUser(record.user),
+    expiresAt: record.expiresAt,
   };
 }
 

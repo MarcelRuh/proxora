@@ -9,7 +9,7 @@ import { api } from "@/lib/api";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-type TotpStatus = { enabled: boolean };
+type TotpStatus = { enabled: boolean; recoveryRemaining: number };
 type TotpBegin = { secret: string; otpauth: string; qr: string };
 
 export function TotpSection() {
@@ -20,6 +20,7 @@ export function TotpSection() {
     queryFn: () => api<TotpStatus>("/api/account/totp"),
   });
   const [pending, setPending] = useState<TotpBegin | null>(null);
+  const [codes, setCodes] = useState<string[] | null>(null);
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,13 +42,14 @@ export function TotpSection() {
     if (!pending) return;
     setBusy(true);
     try {
-      await api("/api/account/totp", {
+      const res = await api<{ recoveryCodes?: string[] }>("/api/account/totp", {
         method: "POST",
         body: JSON.stringify({ action: "enable", secret: pending.secret, code }),
       });
       toast.success(t("settings.totpEnabled"));
       setPending(null);
       setCode("");
+      setCodes(res.recoveryCodes ?? null);
       await qc.invalidateQueries({ queryKey: ["account-totp"] });
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
@@ -67,6 +69,7 @@ export function TotpSection() {
       toast.success(t("settings.totpDisabled"));
       setCode("");
       setPassword("");
+      setCodes(null);
       await qc.invalidateQueries({ queryKey: ["account-totp"] });
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
@@ -82,6 +85,25 @@ export function TotpSection() {
     }
   }
 
+  async function regenerate() {
+    setBusy(true);
+    try {
+      const res = await api<{ recoveryCodes: string[] }>("/api/account/totp", {
+        method: "POST",
+        body: JSON.stringify({ action: "recovery", password }),
+      });
+      setCodes(res.recoveryCodes);
+      setPassword("");
+      toast.success(t("settings.recoveryNew"));
+      await qc.invalidateQueries({ queryKey: ["account-totp"] });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      toast.error(message === "CURRENT_PASSWORD_INVALID" ? t("password.wrong") : message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -89,6 +111,19 @@ export function TotpSection() {
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <p className="text-muted-foreground">{t("settings.totpHint")}</p>
+        {codes?.length ? (
+          <div className="space-y-2 rounded-[4px] border border-warning/40 bg-warning/10 p-3">
+            <p className="font-medium">{t("settings.recoveryOnce")}</p>
+            <ul className="grid gap-1 font-mono text-xs sm:grid-cols-2">
+              {codes.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            <Button type="button" size="sm" variant="outline" onClick={() => setCodes(null)}>
+              {t("common.close")}
+            </Button>
+          </div>
+        ) : null}
         {data?.enabled ? (
           <form
             className="grid max-w-md gap-3"
@@ -98,6 +133,9 @@ export function TotpSection() {
             }}
           >
             <p className="text-success">{t("settings.totpOn")}</p>
+            <p className="text-xs text-muted-foreground">
+              {t("settings.recoveryLeft", { n: data.recoveryRemaining })}
+            </p>
             <div className="space-y-1">
               <Label>{t("login.totp")}</Label>
               <Input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} />
@@ -106,9 +144,14 @@ export function TotpSection() {
               <Label>{t("settings.currentPassword")}</Label>
               <Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
-            <Button type="submit" variant="destructive" disabled={busy || code.replace(/\s/g, "").length < 6 || !password}>
-              {t("settings.totpDisable")}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" variant="destructive" disabled={busy || code.replace(/\s/g, "").length < 6 || !password}>
+                {t("settings.totpDisable")}
+              </Button>
+              <Button type="button" variant="outline" disabled={busy || !password} onClick={() => void regenerate()}>
+                {t("settings.recoveryRegen")}
+              </Button>
+            </div>
           </form>
         ) : pending ? (
           <div className="grid max-w-md gap-3">

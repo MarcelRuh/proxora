@@ -7,7 +7,7 @@ import { eventsFromConfig, eventsSeenFromConfig, eventsWithNewTopics, NOTIFICATI
 import { assertSafeWebhookUrl } from "@/lib/webhook-url";
 
 const schema = z.object({
-  type: z.enum(["discord", "webhook"]),
+  type: z.enum(["discord", "webhook", "smtp"]),
   name: z.string().min(1),
   enabled: z.boolean().optional(),
   events: z.array(z.enum(NOTIFICATION_TOPICS)).optional(),
@@ -33,7 +33,7 @@ export const GET = apiRoute("notifications.view", async () => {
 export const POST = apiRoute("notifications.create", async (req) => {
   const body = schema.parse(await req.json());
   const config = configWithEvents({ ...body.config }, body.events);
-  if (config.url) config.url = assertSafeWebhookUrl(String(config.url));
+  if (body.type !== "smtp" && config.url) config.url = assertSafeWebhookUrl(String(config.url));
   const channel = await prisma.notificationChannel.create({
     data: {
       type: body.type,

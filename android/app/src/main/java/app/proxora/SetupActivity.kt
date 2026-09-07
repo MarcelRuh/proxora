@@ -49,6 +49,12 @@ class SetupActivity : AppCompatActivity() {
       setTextColor(getColor(R.color.proxora_muted))
       isChecked = Prefs.allowInsecureTls(this@SetupActivity)
     }
+    val biometric = CheckBox(this).apply {
+      text = getString(R.string.setup_biometric)
+      setTextColor(getColor(R.color.proxora_muted))
+      isChecked = Prefs.biometricLock(this@SetupActivity)
+      isEnabled = BiometricGate.available(this@SetupActivity)
+    }
     fun submit() {
       val normalized = ServerUrl.normalize(url.text.toString())
       if (normalized == null) {
@@ -56,6 +62,7 @@ class SetupActivity : AppCompatActivity() {
         return
       }
       Prefs.save(this, normalized, insecure.isChecked)
+      Prefs.saveBiometricLock(this, biometric.isChecked && BiometricGate.available(this))
       setResult(RESULT_OK)
       finish()
     }
@@ -83,7 +90,8 @@ class SetupActivity : AppCompatActivity() {
         setPadding(0, dp(10), 0, dp(18))
       })
       addView(url)
-      addView(insecure.apply { setPadding(0, dp(12), 0, dp(16)) })
+      addView(insecure.apply { setPadding(0, dp(12), 0, dp(8)) })
+      addView(biometric.apply { setPadding(0, dp(4), 0, dp(16)) })
       addView(connect, buttonRowParams())
     }
 

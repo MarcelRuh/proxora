@@ -16,4 +16,8 @@
   <string name="error_body">Proxora antwortet nicht. Prüfe URL, VPN und ob die Instanz läuft.</string>
   <string name="error_retry">Erneut versuchen</string>
   <string name="error_ssl_title">Zertifikat abgelehnt</string>
+  <string name="setup_biometric">App mit Biometrie / Geräte-PIN sperren</string>
+  <string name="biometric_title">Proxora entsperren</string>
+  <string name="biometric_body">Bestätige, dass du es bist.</string>
+  <string name="install_permission">Erlaube die Installation aus dieser App, dann APK erneut öffnen.</string>
 </resources>

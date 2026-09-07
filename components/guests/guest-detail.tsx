@@ -31,6 +31,8 @@ import { peerHostAllowsPermission } from "@/lib/federation-access";
 import { hostAllowsMigrate } from "@/lib/guest-migrate";
 import { openGuestToolWindow } from "@/lib/guest-tool-window";
 import { isWindowsOstype } from "@/lib/iso-images";
+import { GuestHaCard } from "@/components/guests/guest-ha-card";
+import { GuestFirewallCard } from "@/components/guests/guest-firewall-card";
 
 type GuestPayload = {
   status: Record<string, unknown>;
@@ -445,6 +447,24 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           }}
         />
       ) : null}
+
+      {isCluster ? (
+        <GuestHaCard
+          hostId={params.hostId}
+          kind={kind}
+          node={params.node}
+          vmid={Number(params.vmid)}
+          canEdit={can.config}
+        />
+      ) : null}
+
+      <GuestFirewallCard
+        hostId={params.hostId}
+        kind={kind}
+        node={params.node}
+        vmid={Number(params.vmid)}
+        canEdit={can.config}
+      />
 
       <Card>
         <CardHeader>

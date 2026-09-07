@@ -12,6 +12,7 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import type { Locale } from "@/lib/i18n/messages";
 import { applyWindowsGuestHardware } from "@/lib/windows-guest";
 import { isWindowsOstype } from "@/lib/iso-images";
+import { isCloudInitKey, isPciKey, isUsbKey } from "@/lib/guest-passthrough";
 import { MemoryField } from "@/components/guests/memory-field";
 
 const SKIP = new Set(["digest"]);
@@ -121,11 +122,17 @@ export function GuestConfigForm({
   const nets = keys.filter(isNet);
   const disks = keys.filter(isDisk);
   const mounts = keys.filter(isMp);
+  const pci = keys.filter(isPciKey);
+  const usb = keys.filter(isUsbKey);
+  const cloud = keys.filter(isCloudInitKey);
   const rest = keys.filter(
     (k) =>
       !isNet(k) &&
       !isDisk(k) &&
       !isMp(k) &&
+      !isPciKey(k) &&
+      !isUsbKey(k) &&
+      !isCloudInitKey(k) &&
       !FLAG_KEYS.has(k) &&
       !primary.includes(k) &&
       !HARDWARE_KEYS.includes(k) &&
@@ -443,6 +450,65 @@ export function GuestConfigForm({
           ))}
         </div>
       </Section>
+
+      {kind === "vm" ? (
+        <Section title={t("config.passthrough")} description={t("config.passthroughBody")}>
+          <div className="space-y-3">
+            {pci.map((key) => (
+              <RowField key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} onRemove={() => removeField(key)} />
+            ))}
+            {usb.map((key) => (
+              <RowField key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} onRemove={() => removeField(key)} />
+            ))}
+            {readOnly ? null : (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setField(nextIndexedKey("hostpci", Object.keys(form)), "0000:00:00.0")}
+                >
+                  {t("config.addPci")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setField(nextIndexedKey("usb", Object.keys(form)), "host=1234:5678")}
+                >
+                  {t("config.addUsb")}
+                </Button>
+              </div>
+            )}
+          </div>
+        </Section>
+      ) : null}
+
+      {kind === "vm" ? (
+        <Section title={t("config.cloudinit")} description={t("config.cloudinitBody")}>
+          <div className="space-y-2">
+            {["ciuser", "cipassword", "sshkeys", "nameserver", "searchdomain"].map((key) => (
+              <RowField
+                key={key}
+                name={key}
+                value={form[key] ?? ""}
+                onChange={(v) => (v ? setField(key, v) : removeField(key))}
+                onRemove={() => removeField(key)}
+              />
+            ))}
+            {cloud.filter((key) => /^ipconfig\d+$/.test(key) || key === "cicustom" || key === "citype").map((key) => (
+              <RowField key={key} name={key} value={form[key] ?? ""} onChange={(v) => setField(key, v)} onRemove={() => removeField(key)} />
+            ))}
+            {readOnly ? null : (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setField(nextIndexedKey("ipconfig", Object.keys(form)), "ip=dhcp")}
+              >
+                {t("config.addIpconfig")}
+              </Button>
+            )}
+          </div>
+        </Section>
+      ) : null}
 
       <Section title={t("config.other")} description={t("config.otherBody")}>
         <div className="space-y-2">

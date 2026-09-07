@@ -43,6 +43,7 @@ import { LocaleSwitch } from "@/components/i18n/locale-switch";
 import { PushSubscriber } from "@/components/push/push-subscriber";
 import { InboxMenu } from "@/components/layout/inbox-menu";
 import { AndroidUpdateBanner } from "@/components/layout/android-update-banner";
+import { AndroidSessionTtl } from "@/components/layout/android-session-ttl";
 import { UiThemeSelect } from "@/components/theme/ui-theme-select";
 import type { MessageKey } from "@/lib/i18n/messages";
 
@@ -177,6 +178,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
         </header>
         <main className="flex-1 p-3 md:p-6">
           <AndroidUpdateBanner />
+          <AndroidSessionTtl />
           {children}
         </main>
       </div>

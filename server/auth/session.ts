@@ -19,6 +19,7 @@ export {
   getSessionFromToken,
   hashPassword,
   sessionCookieOptions,
+  sessionDays,
   verifyPassword,
 } from "@/server/auth/session-core";
 export type { AuthSession, SessionUser } from "@/server/auth/session-core";

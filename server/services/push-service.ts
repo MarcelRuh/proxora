@@ -7,7 +7,6 @@ import { assertSafePushUrl } from "@/lib/webhook-url";
 import { PUSH_VAPID_SETTING_KEY, buildPushPayload, type PushPayload } from "@/lib/push-payload";
 import { toSessionUser } from "@/server/auth/session-core";
 import { userReceivesInboxPush } from "@/server/services/inbox-service";
-import { broadcastPush } from "@/server/ws/push-hub";
 
 type VapidKeys = { publicKey: string; privateKey: string };
 
@@ -126,7 +125,6 @@ export async function sendInboxPush(event: {
   href: string | null;
 }): Promise<void> {
   const payload = buildPushPayload(event);
-  broadcastPush(payload, event.hostId);
 
   const subscriptions = await prisma.pushSubscription.findMany({
     include: {

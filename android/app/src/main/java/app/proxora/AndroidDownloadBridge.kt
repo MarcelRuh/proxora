@@ -64,6 +64,11 @@ class AndroidDownloadBridge(context: Context) {
     jobs.remove(sanitizeId(id))?.file?.delete()
   }
 
+  @JavascriptInterface
+  fun setCookieMaxAge(seconds: Int) {
+    Prefs.saveCookieMaxAge(app, seconds)
+  }
+
   @Suppress("DEPRECATION")
   private fun publish(job: Job) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

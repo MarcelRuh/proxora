@@ -3,6 +3,7 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
 import { TotpSection } from "@/components/settings/totp-section";
+import { SessionsSection } from "@/components/settings/sessions-section";
 import { GuestNetworksSection } from "@/components/settings/guest-networks-section";
 import { NotificationsSection } from "@/components/settings/notifications-section";
 import { DiskAlertsSection } from "@/components/settings/disk-alerts-section";
@@ -17,6 +18,7 @@ export default function SettingsPage() {
       <AppearanceSection />
       <ChangePasswordForm />
       <TotpSection />
+      <SessionsSection />
       <GuestNetworksSection />
       <DiskAlertsSection />
       <div id="meldungen" className="space-y-3">

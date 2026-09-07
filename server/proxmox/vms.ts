@@ -191,4 +191,10 @@ export class VmApi {
       { websocket: 1, ...extra },
     );
   }
+
+  spiceproxy(node: string, vmid: number) {
+    return this.http.post<Record<string, unknown>>(
+      `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/spiceproxy`,
+    );
+  }
 }

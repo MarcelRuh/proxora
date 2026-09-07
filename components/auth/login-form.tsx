@@ -74,12 +74,12 @@ export function LoginForm({ next }: { next: string }) {
                 <Label htmlFor="totp">{t("login.totp")}</Label>
                 <Input
                   id="totp"
-                  inputMode="numeric"
                   autoComplete="one-time-code"
                   value={totp}
                   onChange={(e) => setTotp(e.target.value)}
                   autoFocus
                 />
+                <p className="text-xs text-muted-foreground">{t("login.recoveryHint")}</p>
               </div>
             ) : (
               <>

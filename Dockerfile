@@ -29,7 +29,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV LISTEN_HOST=0.0.0.0
 ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
-RUN apt-get update && apt-get install -y --no-install-recommends openssl libssl3 ca-certificates wget && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends openssl libssl3 ca-certificates wget postgresql-client && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 RUN npm ci --omit=dev && npx prisma generate

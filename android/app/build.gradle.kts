@@ -22,8 +22,8 @@ android {
     applicationId = "app.proxora"
     minSdk = 26
     targetSdk = 35
-    versionCode = 186
-    versionName = "1.7.16"
+    versionCode = 200
+    versionName = "2.0.0"
   }
 
   val releaseStorePath = signingProp("PROXORA_KEYSTORE_FILE", "storeFile")
@@ -54,7 +54,8 @@ android {
 
   buildTypes {
     release {
-      isMinifyEnabled = false
+      isMinifyEnabled = true
+      isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
     }
@@ -81,4 +82,5 @@ dependencies {
   implementation("androidx.activity:activity-ktx:1.9.3")
   implementation("androidx.webkit:webkit:1.12.1")
   implementation("androidx.security:security-crypto:1.1.0-alpha06")
+  implementation("androidx.biometric:biometric:1.1.0")
 }

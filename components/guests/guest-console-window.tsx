@@ -85,8 +85,15 @@ export function GuestConsoleWindow({ kind }: { kind: "vm" | "lxc" }) {
             >
               {t("guest.consoleVga")}
             </Button>
-            <Button size="sm" variant={mode === "serial" ? "default" : "outline"} onClick={() => setMode("serial")}>
-              {t("guest.consoleSerial")}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const href = `/api/hosts/${params.hostId}/vms/${params.node}/${params.vmid}/spice`;
+                window.open(href, "_blank");
+              }}
+            >
+              {t("guest.spice")}
             </Button>
           </div>
         ) : null}
