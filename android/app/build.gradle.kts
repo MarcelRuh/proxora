@@ -22,8 +22,8 @@ android {
     applicationId = "app.proxora"
     minSdk = 26
     targetSdk = 35
-    versionCode = 185
-    versionName = "1.7.15"
+    versionCode = 186
+    versionName = "1.7.16"
   }
 
   val releaseStorePath = signingProp("PROXORA_KEYSTORE_FILE", "storeFile")
@@ -80,4 +80,5 @@ dependencies {
   implementation("com.google.android.material:material:1.12.0")
   implementation("androidx.activity:activity-ktx:1.9.3")
   implementation("androidx.webkit:webkit:1.12.1")
+  implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }

@@ -324,8 +324,8 @@ export const GuestTable = memo(function GuestTable({
         ref={scrollRef}
         className={
           virtualize
-            ? "max-h-[min(70vh,720px)] overflow-auto rounded-[4px] border border-border"
-            : "overflow-x-auto rounded-[4px] border border-border"
+            ? "hidden max-h-[min(70vh,720px)] overflow-auto rounded-[4px] border border-border md:block"
+            : "hidden overflow-x-auto rounded-[4px] border border-border md:block"
         }
       >
         <table className={`w-full text-left text-sm ${mixed ? "min-w-[1080px]" : showHost ? "min-w-[860px]" : "min-w-[720px]"}`}>
@@ -603,6 +603,113 @@ export const GuestTable = memo(function GuestTable({
             )}
           </tbody>
         </table>
+      </div>
+      <div className="grid gap-2 md:hidden">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 w-full" />)
+        ) : filtered.length === 0 ? (
+          <p className="rounded-[4px] border border-border px-3 py-6 text-sm text-muted-foreground">
+            {items.length === 0 ? (noGrants ? t("guests.noGrants") : t("dashboard.noGuests")) : t("table.noMatches")}
+          </p>
+        ) : (
+          filtered.map((g) => {
+            const hid = g.hostId ?? hostId ?? "";
+            const row = rowKind(g);
+            const prefix = row === "vm" ? "vm" : "lxc";
+            const guest = { hostId: hid, kind: row, vmid: g.vmid };
+            const kindLabel = row === "vm" ? "VM" : "LXC";
+            const detailBase = row === "vm" ? "vms" : "containers";
+            const running = g.status === "running";
+            const stopped = g.status === "stopped";
+            const key = rowKey(g);
+            const rowBusy = busyId === `${hid}:${g.vmid}` || bulkBusy;
+            const ips = uniqueGuestIps(g.ips);
+            const canConsole = userHasPermission(user, `${prefix}.console` as Permission, hid, guest);
+            const canStart = userHasPermission(user, `${prefix}.start` as Permission, hid, guest);
+            const canShutdown = userHasPermission(user, `${prefix}.shutdown` as Permission, hid, guest);
+            const canFiles = userHasAnyPermission(
+              user,
+              [guestFilePermission(row, "read"), guestFilePermission(row, "write")],
+              hid,
+              guest,
+            );
+            return (
+              <article key={key} className="rounded-[4px] border border-border bg-card/40 p-3">
+                <div className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 accent-primary"
+                    checked={selected.has(key)}
+                    onChange={() => {
+                      setSelected((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(key)) next.delete(key);
+                        else next.add(key);
+                        return next;
+                      });
+                    }}
+                    aria-label={`${g.vmid} ${g.name}`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link className="truncate font-medium hover:underline" href={`/${detailBase}/${hid}/${g.node}/${g.vmid}`}>
+                        {g.name}
+                      </Link>
+                      <span className="font-mono text-xs text-muted-foreground">{g.vmid}</span>
+                      {mixed ? <Badge variant={row === "vm" ? "default" : "muted"}>{kindLabel}</Badge> : null}
+                      <GuestStateBadge status={g.status} />
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {showHost ? `${g.hostName ?? hid} · ${g.node}` : g.node}
+                      {ips.length ? ` · ${ips.join(", ")}` : ""}
+                    </p>
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      <GuestCpuBar guest={g} />
+                      <GuestRamBar guest={g} />
+                      <GuestDiskBar guest={g} />
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {canStart ? (
+                        <Button size="icon" variant="ghost" title={t("guest.start")} disabled={!stopped || rowBusy} onClick={() => void guestAction(hid, g.node, g.vmid, "start", row)}>
+                          <Play className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                      {canShutdown ? (
+                        <Button size="icon" variant="ghost" title={t("guest.shutdown")} disabled={!running || rowBusy} onClick={() => void guestAction(hid, g.node, g.vmid, "shutdown", row)}>
+                          <Square className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                      {canConsole ? (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title={t("guest.console")}
+                          onClick={() =>
+                            openGuestToolWindow({ kind: row, hostId: hid, node: g.node, vmid: g.vmid, tool: "console" })
+                          }
+                        >
+                          <Terminal className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                      {canFiles ? (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title={t("files.show")}
+                          onClick={() =>
+                            openGuestToolWindow({ kind: row, hostId: hid, node: g.node, vmid: g.vmid, tool: "files" })
+                          }
+                        >
+                          <FolderOpen className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            );
+          })
+        )}
       </div>
     </div>
   );

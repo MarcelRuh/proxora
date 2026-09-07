@@ -1,17 +1,60 @@
 package app.proxora
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.net.Uri
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 
 object Prefs {
   private const val FILE = "proxora"
+  private const val SECURE_FILE = "proxora_secure"
   private const val KEY_URL = "server_url"
   private const val KEY_INSECURE = "allow_insecure_tls"
   private const val KEY_COOKIES = "origin_cookies"
   private const val KEY_COOKIES_URL = "origin_cookies_url"
   private const val KEY_LAST_URL = "last_page_url"
+  private const val KEY_MIGRATED = "secure_migrated"
 
-  private fun prefs(context: Context) = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+  @Volatile private var cached: SharedPreferences? = null
+
+  private fun prefs(context: Context): SharedPreferences {
+    cached?.let { return it }
+    synchronized(this) {
+      cached?.let { return it }
+      val app = context.applicationContext
+      val created = try {
+        val master = MasterKey.Builder(app).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
+        EncryptedSharedPreferences.create(
+          app,
+          SECURE_FILE,
+          master,
+          EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+          EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+        )
+      } catch (_: Exception) {
+        app.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+      }
+      migrateFromPlain(app, created)
+      cached = created
+      return created
+    }
+  }
+
+  private fun migrateFromPlain(context: Context, dest: SharedPreferences) {
+    if (dest.getBoolean(KEY_MIGRATED, false)) return
+    val old = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+    val editor = dest.edit()
+    if (old !== dest && old.all.isNotEmpty()) {
+      old.getString(KEY_URL, null)?.let { editor.putString(KEY_URL, it) }
+      editor.putBoolean(KEY_INSECURE, old.getBoolean(KEY_INSECURE, false))
+      old.getString(KEY_COOKIES, null)?.let { editor.putString(KEY_COOKIES, it) }
+      old.getString(KEY_COOKIES_URL, null)?.let { editor.putString(KEY_COOKIES_URL, it) }
+      old.getString(KEY_LAST_URL, null)?.let { editor.putString(KEY_LAST_URL, it) }
+      old.edit().clear().commit()
+    }
+    editor.putBoolean(KEY_MIGRATED, true).commit()
+  }
 
   fun serverUrl(context: Context): String? =
     prefs(context).getString(KEY_URL, null)?.takeIf { it.isNotBlank() }
@@ -31,7 +74,7 @@ object Prefs {
   }
 
   fun clear(context: Context) {
-    prefs(context).edit().clear().commit()
+    prefs(context).edit().clear().putBoolean(KEY_MIGRATED, true).commit()
   }
 
   fun saveCookies(context: Context, url: String, header: String) {

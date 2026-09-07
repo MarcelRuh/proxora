@@ -8,7 +8,7 @@ import { useI18n } from "@/components/i18n/locale-provider";
 export function GuestUsageBar({ percent, detail }: { percent: number; detail?: string }) {
   const value = Number.isFinite(percent) ? percent : 0;
   return (
-    <div className="min-w-[7.5rem] max-w-[12rem]">
+    <div className="min-w-0 w-full max-w-[12rem]">
       <div className="mb-1 whitespace-nowrap text-right text-[11px] tabular-nums text-muted-foreground">
         {detail ?? `${Math.round(value)}%`}
       </div>

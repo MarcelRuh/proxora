@@ -236,8 +236,8 @@ export function VncConsole({ hostId, node, vmid, running, fill }: Props) {
     <div
       ref={shellRef}
       className={cn(
-        "vnc-shell flex flex-col overflow-hidden rounded-xl border border-border bg-[#020617]",
-        fill ? "h-full min-h-0" : "h-[min(70vh,720px)] min-h-[420px]",
+        "vnc-shell relative flex flex-col overflow-hidden rounded-xl border border-border bg-[#020617]",
+        fill ? "h-full min-h-0" : "h-[min(70vh,720px)] min-h-[240px] md:min-h-[420px]",
       )}
     >
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2 text-xs text-slate-300">
@@ -254,7 +254,7 @@ export function VncConsole({ hostId, node, vmid, running, fill }: Props) {
         </span>
         <span className="text-slate-500">VGA {vmid} @ {node}</span>
         {status === "connected" ? (
-          <span className="text-slate-400">{t("guest.consoleInputGrabbed")}</span>
+          <span className="hidden text-slate-400 sm:inline">{t("guest.consoleInputGrabbed")}</span>
         ) : null}
         {detail && status === "error" ? <span className="text-red-400">{detail}</span> : null}
         <div className="ml-auto flex flex-wrap items-center gap-1">
@@ -284,11 +284,106 @@ export function VncConsole({ hostId, node, vmid, running, fill }: Props) {
         </div>
       </div>
       {running ? (
-        <div
-          ref={containerRef}
-          className="vnc-console-screen min-h-0 flex-1 touch-none select-none"
-          onPointerDown={() => focusRfb(containerRef.current, rfbRef.current)}
-        />
+        <div className="flex shrink-0 flex-wrap gap-1 border-b border-white/10 px-2 py-1 md:hidden">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-2 text-[11px]"
+            disabled={status !== "connected"}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              rfbRef.current?.sendKey(0xff1b, "Escape", true);
+            }}
+            onPointerUp={() => rfbRef.current?.sendKey(0xff1b, "Escape", false)}
+          >
+            {t("guest.consoleEsc")}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-2 text-[11px]"
+            disabled={status !== "connected"}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              rfbRef.current?.sendKey(0xff09, "Tab", true);
+            }}
+            onPointerUp={() => rfbRef.current?.sendKey(0xff09, "Tab", false)}
+          >
+            {t("guest.consoleTab")}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-2 text-[11px]"
+            disabled={status !== "connected"}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              rfbRef.current?.sendKey(0xffe3, "ControlLeft", true);
+            }}
+            onPointerUp={() => rfbRef.current?.sendKey(0xffe3, "ControlLeft", false)}
+          >
+            {t("guest.consoleCtrl")}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-2 text-[11px]"
+            disabled={status !== "connected"}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              rfbRef.current?.sendKey(0xffe9, "AltLeft", true);
+            }}
+            onPointerUp={() => rfbRef.current?.sendKey(0xffe9, "AltLeft", false)}
+          >
+            {t("guest.consoleAlt")}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-2 text-[11px]"
+            disabled={status !== "connected"}
+            onClick={() => {
+              const input = shellRef.current?.querySelector("textarea[data-vnc-kb]");
+              if (input instanceof HTMLTextAreaElement) input.focus();
+            }}
+          >
+            {t("guest.consoleKeyboard")}
+          </Button>
+        </div>
+      ) : null}
+      {running ? (
+        <>
+          <textarea
+            data-vnc-kb=""
+            aria-hidden
+            autoCapitalize="off"
+            autoCorrect="off"
+            className="pointer-events-none absolute h-px w-px opacity-0"
+            tabIndex={-1}
+            onKeyDown={(event) => {
+              const rfb = rfbRef.current;
+              if (!rfb || event.key.length !== 1 && event.key !== "Backspace" && event.key !== "Enter") return;
+              if (event.key.length === 1) return;
+              event.preventDefault();
+              const keysym = rfbKeysymFromKeyboardEvent(event);
+              if (!keysym) return;
+              rfb.sendKey(keysym, event.code || null, true);
+              rfb.sendKey(keysym, event.code || null, false);
+            }}
+            onInput={(event) => {
+              const rfb = rfbRef.current;
+              const text = event.currentTarget.value;
+              event.currentTarget.value = "";
+              if (!rfb || !text) return;
+              sendClipboardAsKeys((keysym, code, down) => rfb.sendKey(keysym, code, down), text);
+            }}
+          />
+          <div
+            ref={containerRef}
+            className="vnc-console-screen min-h-0 flex-1 touch-none select-none"
+            onPointerDown={() => focusRfb(containerRef.current, rfbRef.current)}
+          />
+        </>
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-sm text-slate-400">
           {t("guest.consoleVmStoppedHint")}

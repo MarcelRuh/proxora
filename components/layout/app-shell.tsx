@@ -41,6 +41,8 @@ import { ProgressBar } from "@/components/ui/misc";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { LocaleSwitch } from "@/components/i18n/locale-switch";
 import { PushSubscriber } from "@/components/push/push-subscriber";
+import { InboxMenu } from "@/components/layout/inbox-menu";
+import { AndroidUpdateBanner } from "@/components/layout/android-update-banner";
 import { UiThemeSelect } from "@/components/theme/ui-theme-select";
 import type { MessageKey } from "@/lib/i18n/messages";
 
@@ -143,8 +145,9 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
           >
             <Search className="h-3.5 w-3.5" />
             {t("nav.search")}
-            <kbd className="ml-auto text-[10px] text-sidebar-muted">⌘K</kbd>
+            <kbd className="ml-auto hidden text-[10px] text-sidebar-muted sm:inline">⌘K</kbd>
           </button>
+          {userHasAnyPermission(user, ["hosts.view", "notifications.view"]) ? <InboxMenu /> : null}
           {userHasAnyPermission(user, ["proxora.update", "updates.view"]) ? <SidebarVersion /> : null}
           <UiThemeSelect />
           <LocaleSwitch className="px-1" />
@@ -169,9 +172,13 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </Button>
           <BrandMark className="h-8 w-8" />
-          <span className="proxora-logo text-sm">{APP_NAME.toUpperCase()}</span>
+          <span className="proxora-logo min-w-0 flex-1 truncate text-sm">{APP_NAME.toUpperCase()}</span>
+          {userHasAnyPermission(user, ["hosts.view", "notifications.view"]) ? <InboxMenu compact /> : null}
         </header>
-        <main className="flex-1 p-4 md:p-6">{children}</main>
+        <main className="flex-1 p-3 md:p-6">
+          <AndroidUpdateBanner />
+          {children}
+        </main>
       </div>
       <CommandSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </div>
@@ -195,7 +202,7 @@ function NavLink({
     <Link
       href={href}
       className={cn(
-        "app-nav-link flex items-center gap-2.5 px-3 py-2.5 text-sm font-medium transition-colors",
+        "app-nav-link flex min-h-11 items-center gap-2.5 px-3 py-2.5 text-sm font-medium transition-colors lg:min-h-0",
         active ? "proxora-nav-active" : "text-sidebar-muted hover:bg-primary/10 hover:text-foreground",
       )}
     >

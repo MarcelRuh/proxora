@@ -45,6 +45,80 @@ export async function recordInboxEvent(event: NotificationEvent): Promise<InboxR
   };
 }
 
+export function unreadInboxCount(eventIds: string[], readIds: Iterable<string>): number {
+  const read = new Set(readIds);
+  return eventIds.filter((id) => !read.has(id)).length;
+}
+
+export async function listInboxForUser(user: SessionUser) {
+  const scoped =
+    user.allowedHostIds == null
+      ? {}
+      : { OR: [{ hostId: null }, { hostId: { in: user.allowedHostIds } }] };
+  const rows = await prisma.inboxEvent.findMany({
+    where: scoped,
+    orderBy: { createdAt: "desc" },
+    take: 40,
+  });
+  const events = rows.filter((row) => inboxVisibleTo(user, row.hostId));
+  const reads = events.length
+    ? await prisma.inboxRead.findMany({
+        where: { userId: user.id, eventId: { in: events.map((row) => row.id) } },
+        select: { eventId: true, readAt: true },
+      })
+    : [];
+  const readAtById = new Map(reads.map((row) => [row.eventId, row.readAt]));
+  return {
+    unread: unreadInboxCount(
+      events.map((row) => row.id),
+      readAtById.keys(),
+    ),
+    events: events.map((row) => ({
+      id: row.id,
+      topic: row.topic,
+      level: row.level,
+      title: row.title,
+      message: row.message,
+      hostId: row.hostId,
+      name: row.name,
+      refId: row.refId,
+      node: row.node,
+      href: row.href,
+      readAt: readAtById.get(row.id) ?? null,
+      createdAt: row.createdAt,
+    })),
+  };
+}
+
+export async function markInboxReadForUser(
+  user: SessionUser,
+  body: { ids?: string[]; all?: boolean },
+) {
+  const scoped =
+    user.allowedHostIds == null
+      ? {}
+      : { OR: [{ hostId: null }, { hostId: { in: user.allowedHostIds } }] };
+  let ids: string[] = [];
+  if (body.all) {
+    const rows = await prisma.inboxEvent.findMany({
+      where: scoped,
+      select: { id: true, hostId: true },
+    });
+    ids = rows.filter((row) => inboxVisibleTo(user, row.hostId)).map((row) => row.id);
+  } else if (body.ids?.length) {
+    const rows = await prisma.inboxEvent.findMany({
+      where: { id: { in: body.ids }, ...scoped },
+      select: { id: true, hostId: true },
+    });
+    ids = rows.filter((row) => inboxVisibleTo(user, row.hostId)).map((row) => row.id);
+  }
+  if (!ids.length) return;
+  await prisma.inboxRead.createMany({
+    data: ids.map((eventId) => ({ userId: user.id, eventId })),
+    skipDuplicates: true,
+  });
+}
+
 export function inboxVisibleTo(user: SessionUser, hostId: string | null): boolean {
   if (!hostId) return true;
   return canAccessHost(user, hostId);

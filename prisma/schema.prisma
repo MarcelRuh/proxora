@@ -74,6 +74,7 @@ model User {
   hostAccess         UserHostAccess[]
   guestAccess        UserGuestAccess[]
   pushSubscriptions  PushSubscription[]
+  inboxReads         InboxRead[]
 }
 
 model Role {
@@ -214,10 +215,22 @@ model InboxEvent {
   href      String?
   readAt    DateTime?
   createdAt DateTime  @default(now())
+  reads     InboxRead[]
 
   @@index([createdAt])
   @@index([readAt])
   @@index([hostId])
+}
+
+model InboxRead {
+  userId    String
+  eventId   String
+  readAt    DateTime @default(now())
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event     InboxEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@id([userId, eventId])
+  @@index([userId, readAt])
 }
 
 model PushSubscription {

@@ -29,8 +29,10 @@ If you already installed a debug-signed APK (1.7.7 and earlier), uninstall it on
 
 1. Install the APK (sideload; not on Play Store).
 2. Enter your Proxora URL, e.g. `https://proxora.home.arpa`.
-3. Sign in as usual (TOTP included). The session stays until you change the server URL.
+3. Sign in as usual (TOTP included). The session stays until you change the server URL. Cookies are stored encrypted on the device.
 4. Optional: allow a self-signed TLS certificate for LAN installs.
+
+If a newer APK is on GitHub, a banner appears after sign-in and downloads it through your instance.
 
 Consoles and the file explorer open in the same view (Android has no desktop popups). Use the system back button to return.
 

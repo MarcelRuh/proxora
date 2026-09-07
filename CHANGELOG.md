@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.16] – 2026-09-07
+
+### Added
+
+- Android shows an in-app banner when a newer APK is on GitHub and downloads it from the instance.
+- Inbox is per user (read state is no longer global) and visible in the app shell.
+- Guest lists use cards on small screens; VGA console gets extra keys and an on-screen keyboard on the phone.
+
+### Changed
+
+- Android stores the session cookie in EncryptedSharedPreferences.
+- Dialogs and the shell fit the phone viewport more tightly.
+
 ## [1.7.15] – 2026-09-07
 
 ### Changed
