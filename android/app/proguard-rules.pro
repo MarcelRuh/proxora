@@ -6,3 +6,10 @@
     <init>(...);
     @android.webkit.JavascriptInterface <methods>;
 }
+
+# EncryptedSharedPreferences / Tink; annotations are compile-only.
+-keep class androidx.security.crypto.** { *; }
+-keep class com.google.crypto.tink.** { *; }
+-dontwarn com.google.crypto.tink.**
+-dontwarn javax.annotation.**
+-dontwarn javax.annotation.concurrent.**

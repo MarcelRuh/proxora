@@ -83,4 +83,5 @@ dependencies {
   implementation("androidx.webkit:webkit:1.12.1")
   implementation("androidx.security:security-crypto:1.1.0-alpha06")
   implementation("androidx.biometric:biometric:1.1.0")
+  compileOnly("com.google.code.findbugs:jsr305:3.0.2")
 }

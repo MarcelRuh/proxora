@@ -18,6 +18,7 @@ GitHub releases before **v2.0.0** were removed. This is the current download lin
 ### Changed
 
 - Android release builds use R8; dead `/ws/push` Android push socket is gone (browser Web Push stays).
+- R8 keeps Tink/`javax.annotation` warnings from failing the signed APK build.
 - Inbox read state is only per-user (`InboxRead`); unused `InboxEvent.readAt` was dropped.
 
 ### Not in 2.0
