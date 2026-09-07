@@ -180,10 +180,10 @@ export const PERMISSION_CATALOG: PermissionMeta[] = [
   { id: "settings.view", group: "system", de: "Einstellungen ansehen", en: "View settings" },
   { id: "settings.update", group: "system", de: "Einstellungen ändern", en: "Change settings" },
   { id: "peers.manage", group: "system", de: "WireGuard und Host-Freigaben", en: "WireGuard and host sharing" },
-  { id: "notifications.view", group: "system", de: "Meldungskanäle ansehen", en: "View notification channels" },
-  { id: "notifications.create", group: "system", de: "Meldungskanal anlegen", en: "Create notification channel" },
-  { id: "notifications.update", group: "system", de: "Meldungskanal ändern", en: "Edit notification channel" },
-  { id: "notifications.delete", group: "system", de: "Meldungskanal löschen", en: "Delete notification channel" },
+  { id: "notifications.view", group: "system", de: "Webhooks ansehen", en: "View webhook channels" },
+  { id: "notifications.create", group: "system", de: "Webhook anlegen", en: "Create webhook channel" },
+  { id: "notifications.update", group: "system", de: "Webhook ändern", en: "Edit webhook channel" },
+  { id: "notifications.delete", group: "system", de: "Webhook löschen", en: "Delete webhook channel" },
 ];
 
 /** Old coarse role strings still stored in existing DBs. */

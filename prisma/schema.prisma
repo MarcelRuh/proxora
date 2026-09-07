@@ -74,8 +74,6 @@ model User {
   auditLogs          AuditLog[]
   hostAccess         UserHostAccess[]
   guestAccess        UserGuestAccess[]
-  pushSubscriptions  PushSubscription[]
-  inboxReads         InboxRead[]
 }
 
 model Role {
@@ -201,49 +199,6 @@ model NotificationChannel {
   config    String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-}
-
-model InboxEvent {
-  id        String    @id @default(cuid())
-  topic     String
-  level     String
-  title     String
-  message   String
-  hostId    String?
-  name      String?
-  refId     String?
-  node      String?
-  href      String?
-  createdAt DateTime  @default(now())
-  reads     InboxRead[]
-
-  @@index([createdAt])
-  @@index([hostId])
-}
-
-model InboxRead {
-  userId    String
-  eventId   String
-  readAt    DateTime @default(now())
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  event     InboxEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  @@id([userId, eventId])
-  @@index([userId, readAt])
-}
-
-model PushSubscription {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  endpoint  String   @unique
-  p256dh    String
-  auth      String
-  userAgent String   @default("")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
 }
 
 model Job {

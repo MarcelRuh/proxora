@@ -21,7 +21,7 @@ export default function SettingsPage() {
       <SessionsSection />
       <GuestNetworksSection />
       <DiskAlertsSection />
-      <div id="meldungen" className="space-y-3">
+      <div id="webhooks" className="space-y-3">
         <h2 className="proxora-title text-2xl">{t("settings.notifications")}</h2>
         <NotificationsSection />
       </div>

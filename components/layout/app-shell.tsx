@@ -40,8 +40,6 @@ import type { SelfUpdateStatus } from "@/components/settings/self-update-section
 import { ProgressBar } from "@/components/ui/misc";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { LocaleSwitch } from "@/components/i18n/locale-switch";
-import { PushSubscriber } from "@/components/push/push-subscriber";
-import { InboxMenu } from "@/components/layout/inbox-menu";
 import { AndroidUpdateBanner } from "@/components/layout/android-update-banner";
 import { AndroidSessionTtl } from "@/components/layout/android-session-ttl";
 import { UiThemeSelect } from "@/components/theme/ui-theme-select";
@@ -101,7 +99,6 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
   return (
     <div className="app-shell relative flex h-dvh overflow-hidden bg-background">
       <UiAtmosphere />
-      <PushSubscriber />
       <aside
         className={cn(
           "app-sidebar fixed inset-y-0 left-0 z-40 flex h-dvh shrink-0 flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground backdrop-blur-md transition-transform lg:static lg:inset-auto lg:h-auto lg:self-stretch lg:translate-x-0",
@@ -148,7 +145,6 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             {t("nav.search")}
             <kbd className="ml-auto hidden text-[10px] text-sidebar-muted sm:inline">⌘K</kbd>
           </button>
-          {userHasAnyPermission(user, ["hosts.view", "notifications.view"]) ? <InboxMenu /> : null}
           {userHasAnyPermission(user, ["proxora.update", "updates.view"]) ? <SidebarVersion /> : null}
           <UiThemeSelect />
           <LocaleSwitch className="px-1" />
@@ -174,7 +170,6 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
           </Button>
           <BrandMark className="h-8 w-8" />
           <span className="proxora-logo min-w-0 flex-1 truncate text-sm">{APP_NAME.toUpperCase()}</span>
-          {userHasAnyPermission(user, ["hosts.view", "notifications.view"]) ? <InboxMenu compact /> : null}
         </header>
         <main className="flex-1 p-3 md:p-6">
           <AndroidUpdateBanner />
