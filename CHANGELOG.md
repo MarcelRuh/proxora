@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.7.15] – 2026-09-07
+
+### Changed
+
+- Android no longer shows system notifications and no longer asks for ntfy. Inbox stays in the web UI (and browser Web Push / Discord if configured).
+
 ## [1.7.14] – 2026-09-07
 
 ### Changed

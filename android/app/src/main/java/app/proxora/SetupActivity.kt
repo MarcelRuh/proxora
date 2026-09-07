@@ -55,9 +55,7 @@ class SetupActivity : AppCompatActivity() {
         Toast.makeText(this, R.string.setup_invalid, Toast.LENGTH_LONG).show()
         return
       }
-      val previous = Prefs.serverUrl(this)
       Prefs.save(this, normalized, insecure.isChecked)
-      if (previous != normalized) PushRegistrar.unregister(this)
       setResult(RESULT_OK)
       finish()
     }

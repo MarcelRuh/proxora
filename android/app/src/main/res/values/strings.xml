@@ -16,11 +16,4 @@
   <string name="error_body">Proxora antwortet nicht. Prüfe URL, VPN und ob die Instanz läuft.</string>
   <string name="error_retry">Erneut versuchen</string>
   <string name="error_ssl_title">Zertifikat abgelehnt</string>
-  <string name="notify_channel">Meldungen</string>
-  <string name="notify_channel_desc">Inbox von deiner Proxora-Instanz</string>
-  <string name="notify_overflow">%1$d neue Meldungen</string>
-  <string name="push_distributor_title">Push im Hintergrund</string>
-  <string name="push_distributor_body">Damit Meldungen ankommen, wenn Proxora zu ist, ohne dauerhafte Leiste und ohne Extra-Akku: ntfy einmal installieren. Die App bleibt im Hintergrund stumm.</string>
-  <string name="push_distributor_install">ntfy installieren</string>
-  <string name="push_distributor_later">Später</string>
 </resources>

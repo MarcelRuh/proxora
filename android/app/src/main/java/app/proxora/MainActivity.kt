@@ -1,14 +1,11 @@
 package app.proxora
 
-import android.Manifest
 import android.app.Dialog
 import android.app.DownloadManager
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Message
@@ -49,7 +46,6 @@ class MainActivity : AppCompatActivity() {
   private lateinit var errorBody: TextView
   private var showingError = false
   private var pendingReload = false
-  private var pendingOpen: String? = null
   private var restoreBundle: Bundle? = null
   private var fileCallback: ValueCallback<Array<Uri>>? = null
   private var loadedServer: String? = null
@@ -57,10 +53,6 @@ class MainActivity : AppCompatActivity() {
 
   companion object {
     const val ACTION_RELOAD = "app.proxora.RELOAD"
-  }
-
-  private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-    startBackgroundPush()
   }
 
   private val filePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -179,9 +171,7 @@ class MainActivity : AppCompatActivity() {
     if (!Prefs.serverUrl(this).isNullOrBlank()) loadServer(clearSessionIfChanged = false)
     if (savedInstanceState == null) {
       handleShortcut(intent)
-      handleOpen(intent)
     }
-    requestNotifyPermission()
   }
 
   override fun onSaveInstanceState(outState: Bundle) {
@@ -193,19 +183,15 @@ class MainActivity : AppCompatActivity() {
     super.onNewIntent(intent)
     setIntent(intent)
     handleShortcut(intent)
-    handleOpen(intent)
   }
 
   override fun onResume() {
     super.onResume()
-    AppForeground.resumed = true
     val server = Prefs.serverUrl(this)
     if (!server.isNullOrBlank() && server != loadedServer) loadServer(clearSessionIfChanged = true)
-    PushRegistrar.register(this)
   }
 
   override fun onPause() {
-    AppForeground.resumed = false
     snapshotSession()
     super.onPause()
   }
@@ -298,95 +284,6 @@ class MainActivity : AppCompatActivity() {
     reloadPage()
   }
 
-  private fun handleOpen(intent: Intent?) {
-    val path = intent?.getStringExtra(InboxNotifier.EXTRA_PATH) ?: return
-    val server = Prefs.serverUrl(this) ?: return
-    val target =
-      if (path.startsWith("http://") || path.startsWith("https://")) path
-      else server.trimEnd('/') + if (path.startsWith("/")) path else "/$path"
-    Prefs.saveLastPageUrl(this, server, target)
-    if (::webView.isInitialized && !webView.url.isNullOrBlank()) {
-      webView.loadUrl(target)
-    } else {
-      pendingOpen = target
-    }
-  }
-
-  private fun requestNotifyPermission() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-      checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-    ) {
-      notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-      return
-    }
-    startBackgroundPush()
-  }
-
-  private fun startBackgroundPush() {
-    PushRegistrar.register(this)
-    window.decorView.postDelayed({ maybeOfferDistributor() }, 1200)
-  }
-
-  private fun maybeOfferDistributor() {
-    if (isFinishing || Prefs.distributorPrompted(this)) return
-    if (PushRegistrar.hasDistributor(this) || !Prefs.pushEndpoint(this).isNullOrBlank()) return
-    Prefs.setDistributorPrompted(this)
-    val dialog = androidx.appcompat.app.AppCompatDialog(this, R.style.Theme_Proxora)
-    val title = TextView(this).apply {
-      text = getString(R.string.push_distributor_title)
-      setTextColor(getColor(R.color.proxora_fg))
-      textSize = 18f
-    }
-    val body = TextView(this).apply {
-      text = getString(R.string.push_distributor_body)
-      setTextColor(getColor(R.color.proxora_muted))
-      setPadding(0, dp(8), 0, dp(16))
-    }
-    val install = proxoraFilledButton(getString(R.string.push_distributor_install)) {
-      dialog.dismiss()
-      openNtfy()
-    }
-    val later = proxoraOutlinedButton(getString(R.string.push_distributor_later)) { dialog.dismiss() }
-    val card = LinearLayout(this).apply {
-      orientation = LinearLayout.VERTICAL
-      setBackgroundResource(R.drawable.quick_actions_card)
-      setPadding(dp(20), dp(20), dp(20), dp(20))
-      addView(title)
-      addView(body)
-      addView(install, buttonRowParams())
-      addView(later, buttonRowParams(dp(12)))
-    }
-    val scrim = FrameLayout(this).apply {
-      setBackgroundColor(0x99000000.toInt())
-      setOnClickListener { dialog.dismiss() }
-      addView(
-        card,
-        FrameLayout.LayoutParams(proxoraCardWidth(), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
-      )
-    }
-    card.isClickable = true
-    dialog.setContentView(
-      scrim,
-      ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
-    )
-    dialog.window?.apply {
-      setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-      setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-      setDimAmount(0.6f)
-      setGravity(Gravity.CENTER)
-    }
-    dialog.show()
-  }
-
-  private fun openNtfy() {
-    val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=io.heckel.ntfy"))
-    try {
-      startActivity(market)
-    } catch (_: Exception) {
-      startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://ntfy.sh/app")))
-    }
-  }
-
   private fun reloadPage() {
     hideError()
     webView.reload()
@@ -447,18 +344,11 @@ class MainActivity : AppCompatActivity() {
       CookieManager.getInstance().flush()
       webView.clearCache(true)
       webView.clearHistory()
-      PushRegistrar.unregister(this)
     }
     hideError()
     val bundle = restoreBundle
     restoreBundle = null
     OriginCookies.restore(this, url) {
-      val open = pendingOpen
-      pendingOpen = null
-      if (open != null) {
-        webView.loadUrl(open)
-        return@restore
-      }
       val restored = bundle?.let { webView.restoreState(it) }
       if (restored == null || restored.size == 0) {
         webView.loadUrl(Prefs.lastPageUrl(this, url) ?: url)
@@ -481,7 +371,6 @@ class MainActivity : AppCompatActivity() {
       override fun onPageFinished(view: WebView, url: String?) {
         if (view !== webView) return
         snapshotSession()
-        PushRegistrar.register(this@MainActivity)
         if (pendingReload && !webView.url.isNullOrBlank()) {
           pendingReload = false
           webView.reload()

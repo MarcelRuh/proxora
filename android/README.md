@@ -35,5 +35,3 @@ If you already installed a debug-signed APK (1.7.7 and earlier), uninstall it on
 Consoles and the file explorer open in the same view (Android has no desktop popups). Use the system back button to return.
 
 The system status bar (clock, battery) stays visible. Long-press the app icon (or long-press in the app) for **Reload** or **Change server**.
-
-Inbox events (host down, backup failed, disk full, …) appear as Android notifications as soon as the instance records them. Allow notifications when the app asks. For alerts while Proxora is closed, install [ntfy](https://ntfy.sh/) once — it is a silent push distributor, not a second Proxora UI.
