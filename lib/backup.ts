@@ -69,10 +69,11 @@ export function parseKeepLast(prune: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Proxmox rejects jobs that set both `starttime` (legacy clock) and `schedule` (calendar). */
 export function jobSchedulePayload(schedule: string): Record<string, unknown> {
   const trimmed = schedule.trim();
   if (/^\d{1,2}:\d{2}$/.test(trimmed)) {
-    return { schedule: trimmed, starttime: trimmed };
+    return { starttime: trimmed };
   }
   return { schedule: trimmed };
 }

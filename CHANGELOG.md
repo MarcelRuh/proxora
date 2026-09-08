@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.0.1] – 2026-09-08
+
+### Fixed
+
+- Creating a backup job with a clock time (`03:00`) no longer sends both `starttime` and `schedule` to Proxmox.
+
 ## [2.0.0] – 2026-09-07
 
 GitHub releases before **v2.0.0** were removed. This is the current download line (web + Android APK). Older tags stay in git history but are not published as releases.

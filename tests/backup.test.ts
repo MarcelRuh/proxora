@@ -43,7 +43,9 @@ describe("backup job helpers", () => {
   it("builds prune and clock schedule payloads", () => {
     expect(pruneKeepLast(3)).toBe("keep-last=3");
     expect(parseKeepLast("keep-last=7,keep-daily=2")).toBe(7);
-    expect(jobSchedulePayload("21:30")).toEqual({ schedule: "21:30", starttime: "21:30" });
+    expect(jobSchedulePayload("21:30")).toEqual({ starttime: "21:30" });
+    expect(jobSchedulePayload("03:00")).toEqual({ starttime: "03:00" });
+    expect(jobSchedulePayload("mon,tue 02:00")).toEqual({ schedule: "mon,tue 02:00" });
   });
 
   it("treats unix seconds as milliseconds", () => {
