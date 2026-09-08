@@ -3,6 +3,7 @@ import {
   backupCtimeMs,
   guestNeedsStopForRestore,
   jobSchedulePayload,
+  isBackupJobScheduleConflict,
   newBackupJobId,
   normalizeBackupJob,
   parseBackupVolid,
@@ -132,7 +133,6 @@ export function jobBody(input: {
   vmid?: string;
   node?: string;
   keepLast?: number | null;
-  update?: boolean;
 }) {
   const vmid = String(input.vmid ?? "").replace(/\s+/g, "");
   const all = Boolean(input.all);
@@ -150,8 +150,47 @@ export function jobBody(input: {
     node: input.node || undefined,
     "prune-backups": pruneKeepLast(input.keepLast),
     "notes-template": "{{guestname}}",
-    ...jobSchedulePayload(input.schedule, { update: Boolean(input.update) }),
+    ...jobSchedulePayload(input.schedule),
   });
+}
+
+export async function upsertBackupJob(
+  client: ProxmoxClient,
+  input: {
+    id: string;
+    update: boolean;
+    enabled?: boolean;
+    schedule: string;
+    storage: string;
+    mode?: string;
+    compress?: string;
+    all?: boolean;
+    vmid?: string;
+    node?: string;
+    keepLast?: number | null;
+  },
+) {
+  const payload = jobBody({ ...input, id: input.update ? undefined : input.id });
+  if (!input.update) {
+    await client.backup.createJob({ ...payload, id: input.id });
+    return;
+  }
+  const jobs = await client.backup.jobs().catch(() => [] as Array<Record<string, unknown>>);
+  const existing = (Array.isArray(jobs) ? jobs : []).find((row) => String(row.id) === input.id);
+  const hasLegacyClock = Boolean(String(existing?.starttime ?? "").trim());
+  if (hasLegacyClock) {
+    await client.backup.deleteJob(input.id);
+    await client.backup.createJob({ ...payload, id: input.id });
+    return;
+  }
+  try {
+    await client.backup.updateJob(input.id, payload);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!isBackupJobScheduleConflict(message)) throw error;
+    await client.backup.deleteJob(input.id);
+    await client.backup.createJob({ ...payload, id: input.id });
+  }
 }
 
 export async function runBackupJob(client: ProxmoxClient, hostId: string, jobId: string, nodeHint?: string) {

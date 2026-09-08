@@ -6,6 +6,7 @@ import {
   assertGuestBackupVolids,
   guestNeedsStopForRestore,
   jobSchedulePayload,
+  isBackupJobScheduleConflict,
   normalizeBackupJob,
   parseBackupSchedule,
   formatBackupSchedule,
@@ -46,14 +47,20 @@ describe("backup job helpers", () => {
   it("builds prune and clock schedule payloads", () => {
     expect(pruneKeepLast(3)).toBe("keep-last=3");
     expect(parseKeepLast("keep-last=7,keep-daily=2")).toBe(7);
-    expect(jobSchedulePayload("21:30")).toEqual({ starttime: "21:30" });
-    expect(jobSchedulePayload("03:00")).toEqual({ starttime: "03:00" });
+    expect(jobSchedulePayload("21:30")).toEqual({ schedule: "21:30" });
+    expect(jobSchedulePayload("03:00")).toEqual({ schedule: "03:00" });
     expect(jobSchedulePayload("mon,tue 02:00")).toEqual({ schedule: "mon,tue 02:00" });
-    expect(jobSchedulePayload("mon,fri 03:00", { update: true })).toEqual({
-      schedule: "mon,fri 03:00",
-      delete: "starttime,dow",
-    });
-    expect(jobSchedulePayload("02:00", { update: true })).toEqual({ starttime: "02:00", delete: "schedule" });
+    expect(jobSchedulePayload("sun 02:00")).toEqual({ schedule: "sun 02:00" });
+  });
+
+  it("detects leftover starttime conflicts", () => {
+    expect(
+      isBackupJobScheduleConflict("Parameter verification failed. (starttime: 'starttime' and 'schedule' cannot both be set)"),
+    ).toBe(true);
+    expect(
+      isBackupJobScheduleConflict("400 Parameter verification failed. delete: unknown option 'starttime'"),
+    ).toBe(true);
+    expect(isBackupJobScheduleConflict("vmid: property is missing")).toBe(false);
   });
 
   it("parses Proxmox-style backup schedules", () => {

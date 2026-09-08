@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.0.3] – 2026-09-08
+
+### Fixed
+
+- Saving a backup job with selected weekdays no longer sends `delete=starttime` (Proxmox rejects that). Jobs use only `schedule`; leftover `starttime` from 2.0.1/2.0.2 is replaced.
+
 ## [2.0.2] – 2026-09-08
 
 ### Changed

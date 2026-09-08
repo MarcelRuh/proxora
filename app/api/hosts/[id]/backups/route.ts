@@ -8,7 +8,7 @@ import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { compactProxmoxBody } from "@/lib/lxc-net";
 import { newBackupJobId, parseBackupVolid } from "@/lib/backup";
-import { jobBody, listHostBackups, restoreBackup, runBackupJob } from "@/server/services/backup-service";
+import { listHostBackups, restoreBackup, runBackupJob, upsertBackupJob } from "@/server/services/backup-service";
 import { ValidationError } from "@/lib/errors";
 import { lookupGuestName } from "@/server/notifications/guest-name";
 import { notifyTopic } from "@/server/notifications/dispatch";
@@ -82,11 +82,11 @@ export const POST = apiRoute(
     switch (body.action) {
       case "create-job": {
         const id = body.id?.trim() || newBackupJobId();
-        await client.backup.createJob(jobBody({ ...body, id }));
+        await upsertBackupJob(client, { ...body, id, update: false });
         return { id };
       }
       case "update-job":
-        await client.backup.updateJob(body.id, jobBody({ ...body, id: undefined, update: true }));
+        await upsertBackupJob(client, { ...body, id: body.id, update: true });
         return { id: body.id };
       case "delete-job":
         await client.backup.deleteJob(body.id);

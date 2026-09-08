@@ -115,21 +115,20 @@ export function formatBackupSchedule(days: readonly string[], time: string): str
 }
 
 /**
- * Proxmox rejects jobs that set both `starttime` (legacy clock) and `schedule` (calendar).
- * Daily clock → starttime only. Weekday subset → schedule only.
+ * Current Proxmox only accepts `schedule` (calendar). `starttime`/`dow` and
+ * `delete=starttime` are rejected (`unknown option 'starttime'`).
  */
-export function jobSchedulePayload(
-  schedule: string,
-  opts?: { update?: boolean },
-): Record<string, unknown> {
+export function jobSchedulePayload(schedule: string): Record<string, unknown> {
   const { time, days } = parseBackupSchedule(schedule);
-  if (days.length === 7) {
-    return { starttime: time, ...(opts?.update ? { delete: "schedule" } : {}) };
+  return { schedule: formatBackupSchedule(days, time) };
+}
+
+export function isBackupJobScheduleConflict(message: string): boolean {
+  const m = message.toLowerCase();
+  if (m.includes("starttime") && m.includes("schedule") && (m.includes("both") || m.includes("cannot"))) {
+    return true;
   }
-  return {
-    schedule: formatBackupSchedule(days, time),
-    ...(opts?.update ? { delete: "starttime,dow" } : {}),
-  };
+  return /delete:.*unknown option ['"]?starttime/.test(m);
 }
 
 /** vzdump requires `vmid` or `all=1`. job-id alone is not enough on every PVE version. */
