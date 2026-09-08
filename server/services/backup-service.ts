@@ -7,8 +7,10 @@ import {
   normalizeBackupJob,
   parseBackupVolid,
   pruneKeepLast,
+  vzdumpGuestParams,
   waitUntilGuestStopped,
 } from "@/lib/backup";
+import { ValidationError } from "@/lib/errors";
 import { TASK_TIMEOUT, waitUpid } from "@/server/proxmox/task-wait";
 import { withHostClient } from "@/server/services/host-service";
 import type { SessionUser } from "@/server/auth/session";
@@ -130,20 +132,25 @@ export function jobBody(input: {
   vmid?: string;
   node?: string;
   keepLast?: number | null;
+  update?: boolean;
 }) {
-  const all = Boolean(input.all) || !String(input.vmid ?? "").trim();
+  const vmid = String(input.vmid ?? "").replace(/\s+/g, "");
+  const all = Boolean(input.all);
+  if (!all && !vmid) {
+    throw new ValidationError("Mindestens eine VM oder einen Container auswählen.");
+  }
   return compactProxmoxBody({
     id: input.id,
     enabled: input.enabled === false ? 0 : 1,
     storage: input.storage,
     mode: input.mode ?? "snapshot",
     compress: input.compress ?? "zstd",
-    all: all ? 1 : 0,
-    vmid: all ? undefined : String(input.vmid).replace(/\s+/g, ""),
+    all: all ? 1 : undefined,
+    vmid: all ? undefined : vmid,
     node: input.node || undefined,
     "prune-backups": pruneKeepLast(input.keepLast),
     "notes-template": "{{guestname}}",
-    ...jobSchedulePayload(input.schedule),
+    ...jobSchedulePayload(input.schedule, { update: Boolean(input.update) }),
   });
 }
 
@@ -155,7 +162,10 @@ export async function runBackupJob(client: ProxmoxClient, hostId: string, jobId:
   const names = inventoryNodeNames(await loadHostInventory(client, hostId));
   const node = nodeHint || job.node || names[0];
   if (!node) throw new Error("Kein Node für das Backup");
-  const upid = await client.backup.start(node, compactProxmoxBody({ "job-id": jobId, vmid: job.all ? undefined : job.vmid }));
+  const upid = await client.backup.start(
+    node,
+    compactProxmoxBody({ "job-id": jobId, ...vzdumpGuestParams(job) }),
+  );
   return { upid, job, node };
 }
 

@@ -7,10 +7,13 @@ import {
   guestNeedsStopForRestore,
   jobSchedulePayload,
   normalizeBackupJob,
+  parseBackupSchedule,
+  formatBackupSchedule,
   parseBackupVolid,
   parseKeepLast,
   parseProxmoxTaskProgress,
   pruneKeepLast,
+  vzdumpGuestParams,
   waitUntilGuestStopped,
 } from "@/lib/backup";
 
@@ -46,6 +49,30 @@ describe("backup job helpers", () => {
     expect(jobSchedulePayload("21:30")).toEqual({ starttime: "21:30" });
     expect(jobSchedulePayload("03:00")).toEqual({ starttime: "03:00" });
     expect(jobSchedulePayload("mon,tue 02:00")).toEqual({ schedule: "mon,tue 02:00" });
+    expect(jobSchedulePayload("mon,fri 03:00", { update: true })).toEqual({
+      schedule: "mon,fri 03:00",
+      delete: "starttime,dow",
+    });
+    expect(jobSchedulePayload("02:00", { update: true })).toEqual({ starttime: "02:00", delete: "schedule" });
+  });
+
+  it("parses Proxmox-style backup schedules", () => {
+    expect(parseBackupSchedule("03:00")).toEqual({
+      time: "03:00",
+      days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+    });
+    expect(parseBackupSchedule("mon..fri 21:05")).toEqual({
+      time: "21:05",
+      days: ["mon", "tue", "wed", "thu", "fri"],
+    });
+    expect(formatBackupSchedule(["fri", "mon"], "7:00")).toBe("mon,fri 07:00");
+    expect(formatBackupSchedule(["mon", "tue", "wed", "thu", "fri", "sat", "sun"], "03:00")).toBe("03:00");
+  });
+
+  it("starts vzdump with all=1 or vmid, never neither", () => {
+    expect(vzdumpGuestParams({ all: true, vmid: "" })).toEqual({ all: 1 });
+    expect(vzdumpGuestParams({ all: false, vmid: "100,101" })).toEqual({ vmid: "100,101" });
+    expect(vzdumpGuestParams({ all: false, vmid: "" })).toEqual({ all: 1 });
   });
 
   it("treats unix seconds as milliseconds", () => {

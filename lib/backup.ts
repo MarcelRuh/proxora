@@ -69,13 +69,74 @@ export function parseKeepLast(prune: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Proxmox rejects jobs that set both `starttime` (legacy clock) and `schedule` (calendar). */
-export function jobSchedulePayload(schedule: string): Record<string, unknown> {
-  const trimmed = schedule.trim();
-  if (/^\d{1,2}:\d{2}$/.test(trimmed)) {
-    return { starttime: trimmed };
+/** Proxmox weekday tokens, Monday-first like the PVE backup GUI. */
+export const BACKUP_DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+export type BackupDay = (typeof BACKUP_DAYS)[number];
+
+const BACKUP_DAY_SET = new Set<string>(BACKUP_DAYS);
+
+function padClock(hour: number, minute: number): string {
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function parseDayTokens(raw: string): BackupDay[] {
+  const picked = new Set<BackupDay>();
+  for (const part of raw.toLowerCase().split(/[,\s]+/).filter(Boolean)) {
+    if (part.includes("..")) {
+      const [from, to] = part.split("..");
+      const start = BACKUP_DAYS.indexOf(from as BackupDay);
+      const end = BACKUP_DAYS.indexOf(to as BackupDay);
+      if (start >= 0 && end >= 0 && start <= end) {
+        for (let i = start; i <= end; i++) picked.add(BACKUP_DAYS[i]);
+      }
+      continue;
+    }
+    if (BACKUP_DAY_SET.has(part)) picked.add(part as BackupDay);
   }
-  return { schedule: trimmed };
+  return BACKUP_DAYS.filter((day) => picked.has(day));
+}
+
+export function parseBackupSchedule(raw: string): { time: string; days: BackupDay[] } {
+  const trimmed = raw.trim().toLowerCase();
+  const timeMatch = /(\d{1,2}):(\d{2})/.exec(trimmed);
+  const hour = timeMatch ? Math.min(23, Number(timeMatch[1])) : 2;
+  const minute = timeMatch ? Math.min(59, Number(timeMatch[2])) : 0;
+  const time = padClock(Number.isFinite(hour) ? hour : 2, Number.isFinite(minute) ? minute : 0);
+  const prefix = timeMatch ? trimmed.slice(0, timeMatch.index).trim() : trimmed;
+  const days = parseDayTokens(prefix);
+  return { time, days: days.length ? days : [...BACKUP_DAYS] };
+}
+
+export function formatBackupSchedule(days: readonly string[], time: string): string {
+  const clock = parseBackupSchedule(time).time;
+  const ordered = BACKUP_DAYS.filter((day) => days.includes(day));
+  if (ordered.length === 0 || ordered.length === 7) return clock;
+  return `${ordered.join(",")} ${clock}`;
+}
+
+/**
+ * Proxmox rejects jobs that set both `starttime` (legacy clock) and `schedule` (calendar).
+ * Daily clock → starttime only. Weekday subset → schedule only.
+ */
+export function jobSchedulePayload(
+  schedule: string,
+  opts?: { update?: boolean },
+): Record<string, unknown> {
+  const { time, days } = parseBackupSchedule(schedule);
+  if (days.length === 7) {
+    return { starttime: time, ...(opts?.update ? { delete: "schedule" } : {}) };
+  }
+  return {
+    schedule: formatBackupSchedule(days, time),
+    ...(opts?.update ? { delete: "starttime,dow" } : {}),
+  };
+}
+
+/** vzdump requires `vmid` or `all=1`. job-id alone is not enough on every PVE version. */
+export function vzdumpGuestParams(job: { all: boolean; vmid: string }): Record<string, unknown> {
+  const vmid = job.vmid.replace(/\s+/g, "");
+  if (job.all || !vmid) return { all: 1 };
+  return { vmid };
 }
 
 export function normalizeBackupJob(raw: Record<string, unknown>): {

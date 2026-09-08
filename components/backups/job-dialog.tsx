@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -8,6 +8,14 @@ import { Input, Label } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { SELECT_CLASS, type BackupJob, type BackupOverview } from "@/components/backups/types";
+import {
+  BACKUP_DAYS,
+  formatBackupSchedule,
+  parseBackupSchedule,
+  type BackupDay,
+} from "@/lib/backup";
+import { cn } from "@/lib/utils";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 type Form = {
   enabled: boolean;
@@ -21,6 +29,17 @@ type Form = {
   keepLast: string;
 };
 
+const WEEKDAYS: BackupDay[] = ["mon", "tue", "wed", "thu", "fri"];
+const WEEKEND: BackupDay[] = ["sat", "sun"];
+
+function dayKey(day: BackupDay): MessageKey {
+  return `backup.day.${day}` as MessageKey;
+}
+
+function selectedIds(vmid: string): string[] {
+  return vmid.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 function fromJob(job: BackupJob | null, overview: BackupOverview): Form {
   return {
     enabled: job?.enabled ?? true,
@@ -28,7 +47,7 @@ function fromJob(job: BackupJob | null, overview: BackupOverview): Form {
     storage: job?.storage || overview.backupStorages[0] || "",
     mode: (job?.mode as Form["mode"]) || "snapshot",
     compress: job?.compress || "zstd",
-    all: job ? job.all || !job.vmid : true,
+    all: job?.all ?? false,
     vmid: job?.vmid ?? "",
     node: job?.node ?? "",
     keepLast: job?.keepLast != null ? String(job.keepLast) : "7",
@@ -53,6 +72,9 @@ export function JobDialog({
   const { t } = useI18n();
   const [form, setForm] = useState<Form>(() => fromJob(job, overview));
   const [busy, setBusy] = useState(false);
+  const parsed = useMemo(() => parseBackupSchedule(form.schedule), [form.schedule]);
+  const ids = useMemo(() => selectedIds(form.vmid), [form.vmid]);
+  const canSave = Boolean(form.storage && parsed.days.length && (form.all || ids.length));
 
   useEffect(() => {
     if (open) setForm(fromJob(job, overview));
@@ -60,7 +82,27 @@ export function JobDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, job?.id]);
 
+  function setDays(days: BackupDay[]) {
+    setForm({ ...form, schedule: formatBackupSchedule(days, parsed.time) });
+  }
+
+  function toggleDay(day: BackupDay) {
+    const next = parsed.days.includes(day) ? parsed.days.filter((item) => item !== day) : [...parsed.days, day];
+    if (next.length === 0) return;
+    setDays(next);
+  }
+
+  function toggleGuest(id: string, checked: boolean) {
+    const current = selectedIds(form.vmid);
+    const next = checked ? [...current, id] : current.filter((v) => v !== id);
+    setForm({ ...form, all: false, vmid: [...new Set(next)].join(",") });
+  }
+
   async function submit() {
+    if (!canSave) {
+      toast.error(t("backup.needGuests"));
+      return;
+    }
     setBusy(true);
     try {
       await api(`/api/hosts/${hostId}/backups`, {
@@ -69,12 +111,12 @@ export function JobDialog({
           action: job ? "update-job" : "create-job",
           id: job?.id,
           enabled: form.enabled,
-          schedule: form.schedule.trim(),
+          schedule: formatBackupSchedule(parsed.days, parsed.time),
           storage: form.storage,
           mode: form.mode,
           compress: form.compress,
           all: form.all,
-          vmid: form.all ? undefined : form.vmid.trim(),
+          vmid: form.all ? undefined : ids.join(","),
           node: form.node || undefined,
           keepLast: form.keepLast ? Number(form.keepLast) : null,
         }),
@@ -91,20 +133,57 @@ export function JobDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{job ? t("backup.editJob") : t("backup.addJob")}</DialogTitle>
-          <DialogDescription>{t("backup.description")}</DialogDescription>
+          <DialogDescription>{t("backup.jobHint")}</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3">
+        <div className="grid gap-4">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />
             {t("settings.enabled")}
           </label>
-          <div className="space-y-1">
+
+          <div className="space-y-2">
             <Label>{t("backup.schedule")}</Label>
-            <Input value={form.schedule} onChange={(e) => setForm({ ...form, schedule: e.target.value })} placeholder="02:00" />
+            <div className="flex flex-wrap gap-1">
+              {BACKUP_DAYS.map((day) => (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => toggleDay(day)}
+                  className={cn(
+                    "h-8 min-w-9 rounded-[4px] border px-2 text-xs font-semibold uppercase",
+                    parsed.days.includes(day)
+                      ? "border-primary bg-primary/15 text-foreground"
+                      : "border-border text-muted-foreground hover:border-primary/50",
+                  )}
+                >
+                  {t(dayKey(day))}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              <Button type="button" size="sm" variant="outline" onClick={() => setDays([...BACKUP_DAYS])}>
+                {t("backup.presetDaily")}
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setDays(WEEKDAYS)}>
+                {t("backup.presetWeekdays")}
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setDays(WEEKEND)}>
+                {t("backup.presetWeekend")}
+              </Button>
+            </div>
+            <div className="space-y-1">
+              <Label>{t("backup.scheduleTime")}</Label>
+              <Input
+                type="time"
+                value={parsed.time}
+                onChange={(e) => setForm({ ...form, schedule: formatBackupSchedule(parsed.days, e.target.value || parsed.time) })}
+              />
+            </div>
           </div>
+
           <label className="text-sm">
             {t("backup.storage")}
             <select className={SELECT_CLASS} value={form.storage} onChange={(e) => setForm({ ...form, storage: e.target.value })}>
@@ -138,7 +217,7 @@ export function JobDialog({
             <label className="text-sm">
               {t("backup.node")}
               <select className={SELECT_CLASS} value={form.node} onChange={(e) => setForm({ ...form, node: e.target.value })}>
-                <option value="">{t("backup.allGuests")}</option>
+                <option value="">{t("backup.allNodes")}</option>
                 {overview.nodes.map((n) => (
                   <option key={n} value={n}>
                     {n}
@@ -147,37 +226,76 @@ export function JobDialog({
               </select>
             </label>
           ) : null}
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.all} onChange={(e) => setForm({ ...form, all: e.target.checked })} />
-            {t("backup.allGuests")}
-          </label>
-          {form.all ? null : (
-            <div className="max-h-48 space-y-1 overflow-y-auto rounded-[4px] border border-border p-2">
+
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label>{t("backup.guests")}</Label>
+              <div className="flex flex-wrap gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      all: false,
+                      vmid: overview.guests.map((guest) => String(guest.vmid)).join(","),
+                    })
+                  }
+                >
+                  {t("backup.selectListed")}
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => setForm({ ...form, all: false, vmid: "" })}>
+                  {t("settings.selectNone")}
+                </Button>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.all}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    all: e.target.checked,
+                    vmid: e.target.checked ? "" : form.vmid,
+                  })
+                }
+              />
+              {t("backup.allGuests")}
+            </label>
+            <p className="text-xs text-muted-foreground">{t("backup.guestsHint")}</p>
+            <div className="max-h-56 space-y-1 overflow-y-auto rounded-[4px] border border-border p-2">
               {overview.guests.length === 0 ? (
-                <Input value={form.vmid} onChange={(e) => setForm({ ...form, vmid: e.target.value })} placeholder="100,101" />
+                <Input
+                  value={form.vmid}
+                  disabled={form.all}
+                  onChange={(e) => setForm({ ...form, all: false, vmid: e.target.value })}
+                  placeholder="100,101"
+                />
               ) : (
                 overview.guests.map((guest) => {
                   const id = String(guest.vmid);
-                  const selected = form.vmid.split(",").map((s) => s.trim()).filter(Boolean).includes(id);
+                  const selected = form.all || ids.includes(id);
                   return (
                     <label key={`${guest.kind}-${guest.vmid}`} className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
                         checked={selected}
-                        onChange={(e) => {
-                          const current = form.vmid.split(",").map((s) => s.trim()).filter(Boolean);
-                          const next = e.target.checked ? [...current, id] : current.filter((v) => v !== id);
-                          setForm({ ...form, vmid: [...new Set(next)].join(",") });
-                        }}
+                        disabled={form.all}
+                        onChange={(e) => toggleGuest(id, e.target.checked)}
                       />
-                      {guest.vmid} {guest.name}
+                      <span className="min-w-0 flex-1 truncate">
+                        {guest.vmid} {guest.name}
+                      </span>
                       <span className="text-[10px] uppercase text-muted-foreground">{guest.kind}</span>
                     </label>
                   );
                 })
               )}
             </div>
-          )}
+          </div>
+
           <div className="space-y-1">
             <Label>{t("backup.keepLast")}</Label>
             <Input value={form.keepLast} onChange={(e) => setForm({ ...form, keepLast: e.target.value })} />
@@ -186,7 +304,7 @@ export function JobDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
               {t("common.cancel")}
             </Button>
-            <Button onClick={() => void submit()} disabled={busy || !form.storage || !form.schedule.trim() || (!form.all && !form.vmid.trim())}>
+            <Button onClick={() => void submit()} disabled={busy || !canSave}>
               {t("common.save")}
             </Button>
           </div>

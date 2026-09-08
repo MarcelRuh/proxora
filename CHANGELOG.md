@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.0.2] – 2026-09-08
+
+### Changed
+
+- Backup jobs use a Proxmox-style schedule (weekdays + time) and a guest picker. Saving requires at least one VM/CT unless “all guests” is set.
+
+### Fixed
+
+- Running a backup job no longer fails with `vmid: property is missing` (vzdump now gets `vmid` or `all=1`).
+
 ## [2.0.1] – 2026-09-08
 
 ### Fixed

@@ -86,7 +86,7 @@ export const POST = apiRoute(
         return { id };
       }
       case "update-job":
-        await client.backup.updateJob(body.id, jobBody({ ...body, id: undefined }));
+        await client.backup.updateJob(body.id, jobBody({ ...body, id: undefined, update: true }));
         return { id: body.id };
       case "delete-job":
         await client.backup.deleteJob(body.id);
