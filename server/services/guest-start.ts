@@ -1,5 +1,62 @@
-import { TASK_TIMEOUT, waitUpid } from "@/server/proxmox/task-wait";
+import { TASK_TIMEOUT, isUpid, waitUpid } from "@/server/proxmox/task-wait";
 import type { ProxmoxClient } from "@/server/proxmox/client";
+import { writeAuditLog } from "@/server/services/audit-service";
+import { notifyTopic } from "@/server/notifications/dispatch";
+import { durationLabel } from "@/lib/duration";
+
+export function followGuestCreateTask(input: {
+  client: ProxmoxClient;
+  kind: "vm" | "lxc";
+  node: string;
+  vmid: number;
+  name: string;
+  hostId: string;
+  hostName: string;
+  upid: unknown;
+  userId: string;
+  ip: string | null | undefined;
+  auditAction: string;
+}) {
+  const t0 = Date.now();
+  const topic = input.kind === "lxc" ? "lxc.created" : "vm.created";
+  const label = input.kind === "lxc" ? "Container" : "VM";
+  const upid = isUpid(input.upid) ? input.upid : null;
+  void (async () => {
+    try {
+      await waitUpid(input.client, input.node, input.upid, TASK_TIMEOUT.create);
+      await writeAuditLog({
+        userId: input.userId,
+        ip: input.ip,
+        action: input.auditAction,
+        target: `${input.vmid} ${input.name}`,
+        hostId: input.hostId,
+        result: "SUCCESS",
+        metadata: { upid, pending: false },
+      });
+      notifyTopic(topic, {
+        level: "success",
+        title: `${label} erstellt`,
+        message: `${input.kind === "lxc" ? "LXC" : "VM"} ${input.vmid} (${input.name}) — fertig in ${durationLabel(Date.now() - t0)}`,
+        hostId: input.hostId,
+        name: input.name,
+        id: String(input.vmid),
+        host: input.hostName,
+        node: input.node,
+      });
+    } catch (error) {
+      notifyTopic(topic, {
+        level: "error",
+        title: `${label} fehlgeschlagen`,
+        message: `${input.kind === "lxc" ? "LXC" : "VM"} ${input.vmid} (${input.name}) — fehlgeschlagen: ${error instanceof Error ? error.message : "unbekannt"}`,
+        hostId: input.hostId,
+        name: input.name,
+        id: String(input.vmid),
+        host: input.hostName,
+        node: input.node,
+      });
+    }
+  })();
+}
 
 export async function completeGuestCreate(
   client: ProxmoxClient,

@@ -2,14 +2,12 @@ import { z } from "zod";
 import { apiRoute } from "@/server/http/api-route";
 import { json } from "@/server/http/respond";
 import { clientIp } from "@/server/auth/session";
-import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { filterGuestsForUser } from "@/server/auth/session-core";
 import { buildLxcNet0, compactProxmoxBody, normalizeLxcCidr } from "@/lib/lxc-net";
-import { completeGuestCreate } from "@/server/services/guest-start";
+import { followGuestCreateTask } from "@/server/services/guest-start";
 import { notifyTopic } from "@/server/notifications/dispatch";
-import { durationLabel } from "@/lib/duration";
 import { ipv4Host } from "@/lib/create-ip";
 import { assertGuestIdentityFree } from "@/server/services/guest-ips";
 import type { LxcCreateParams } from "@/server/proxmox/lxc";
@@ -62,10 +60,8 @@ export const POST = apiRoute("lxc.create", async (req, session, params) => {
   const features = [body.nesting === false ? null : "nesting=1"].filter(Boolean).join(",");
   const staticIp = ipMode === "static" ? ipv4Host(body.ipv4 ?? "") : null;
 
-  const t0 = Date.now();
+  const ip = await clientIp();
   let hostName = "";
-  let started = false;
-  let startError: string | undefined;
   let upid: unknown;
   try {
     const result = await withHostClient(params.id, session.user, async (client, host) => {
@@ -90,12 +86,22 @@ export const POST = apiRoute("lxc.create", async (req, session, params) => {
           description: body.description,
         }) as LxcCreateParams,
       );
-      const done = await completeGuestCreate(client, "lxc", body.node, body.vmid, createUpid, Boolean(body.startAfter));
-      return { createUpid, ...done };
+      followGuestCreateTask({
+        client,
+        kind: "lxc",
+        node: body.node,
+        vmid: body.vmid,
+        name: body.hostname,
+        hostId: params.id,
+        hostName: host.name,
+        upid: createUpid,
+        userId: session.user.id,
+        ip,
+        auditAction: AUDIT_ACTIONS.LXC_CREATED,
+      });
+      return { createUpid };
     });
     upid = result.createUpid;
-    started = result.started;
-    startError = result.startError;
   } catch (error) {
     notifyTopic("lxc.created", {
       level: "error",
@@ -110,27 +116,6 @@ export const POST = apiRoute("lxc.create", async (req, session, params) => {
     throw error;
   }
 
-  const ms = Date.now() - t0;
-  const suffix = startError ? ` — Start fehlgeschlagen: ${startError}` : ` — fertig in ${durationLabel(ms)}`;
-  await writeAuditLog({
-    userId: session.user.id,
-    ip: await clientIp(),
-    action: AUDIT_ACTIONS.LXC_CREATED,
-    target: `${body.vmid} ${body.hostname}`,
-    hostId: params.id,
-    result: "SUCCESS",
-    metadata: { upid: typeof upid === "string" ? upid : null, started, startError },
-  });
-  notifyTopic("lxc.created", {
-    level: startError ? "warning" : "success",
-    title: "Container erstellt",
-    message: `LXC ${body.vmid} (${body.hostname})${suffix}`,
-    hostId: params.id,
-    name: body.hostname,
-    id: String(body.vmid),
-    host: hostName,
-    node: body.node,
-  });
   invalidateInventoryCache(params.id);
-  return json({ upid, started, startError, node: body.node, vmid: body.vmid }, 201);
+  return json({ upid, node: body.node, vmid: body.vmid }, 201);
 });

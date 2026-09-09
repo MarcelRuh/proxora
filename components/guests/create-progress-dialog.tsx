@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ProxmoxTaskProgress } from "@/components/backups/task-progress";
@@ -13,6 +12,7 @@ export function CreateProgressDialog({
   error,
   title,
   detail,
+  lines,
   onClose,
 }: {
   open: boolean;
@@ -21,16 +21,10 @@ export function CreateProgressDialog({
   error: string | null;
   title: string;
   detail?: string;
+  lines?: string[];
   onClose: () => void;
 }) {
   const { t } = useI18n();
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  useEffect(() => {
-    if (!open || !finished) return;
-    onCloseRef.current();
-  }, [open, finished]);
 
   return (
     <Dialog
@@ -57,7 +51,11 @@ export function CreateProgressDialog({
           </DialogDescription>
         </DialogHeader>
         {error ? <p className="text-sm text-danger">{error}</p> : null}
-        <ProxmoxTaskProgress lines={[]} running={!finished && !error} fallbackDetail={detail ?? title} />
+        <ProxmoxTaskProgress
+          lines={lines ?? []}
+          running={!finished && !error}
+          fallbackDetail={detail ?? title}
+        />
         <div className="flex justify-end">
           <Button variant="outline" onClick={onClose} disabled={locked}>
             {finished || error ? t("common.close") : t("common.cancel")}

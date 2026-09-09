@@ -20,7 +20,7 @@ import { rememberGuestIpCache } from "@/server/services/guest-ip-cache";
 import { parseAgentNetworkIps, parseGuestConfigIps } from "@/lib/create-ip";
 import { invalidateInventoryCache, loadHostInventory } from "@/server/services/inventory-cache";
 import { guestIsRunning, inventoryNodesForMigrate, migrateTargetAllowed, qemuMigrateParams } from "@/lib/guest-migrate";
-import { shutdownThenDeleteGuest } from "@/server/services/guest-delete";
+import { shutdownThenDeleteGuest, startGuestDelete } from "@/server/services/guest-delete";
 
 export const maxDuration = 800;
 
@@ -52,6 +52,8 @@ const actionSchema = z.object({
   disk: z.string().optional(),
   size: z.string().optional(),
   backupVolids: z.array(z.string().min(1)).max(50).optional(),
+  wait: z.boolean().optional(),
+  phase: z.enum(["shutdown", "stop", "delete"]).optional(),
 });
 
 const ACTION_AUDIT: Record<string, string> = {
@@ -130,6 +132,7 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
   const t0 = Date.now();
   let upid: unknown;
   let taskUpid: unknown;
+  let deletePhase: "shutdown" | "stop" | "delete" | undefined;
   try {
     upid = await withHostClient(params.id, session.user, async (client, host) => {
     hostName = host.name;
@@ -163,13 +166,26 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
         result = await vm.resume(node, vmid);
         break;
       case "delete":
-        result = await shutdownThenDeleteGuest(client, {
-          kind: "vm",
-          node,
-          vmid,
-          backupVolids: body.backupVolids,
-          canDeleteBackups: userHasPermission(session.user, "backup.delete", params.id),
-        });
+        if (body.wait === false) {
+          const started = await startGuestDelete(client, {
+            kind: "vm",
+            node,
+            vmid,
+            backupVolids: body.backupVolids,
+            canDeleteBackups: userHasPermission(session.user, "backup.delete", params.id),
+            phase: body.phase,
+          });
+          deletePhase = started.phase;
+          result = started.upid;
+        } else {
+          result = await shutdownThenDeleteGuest(client, {
+            kind: "vm",
+            node,
+            vmid,
+            backupVolids: body.backupVolids,
+            canDeleteBackups: userHasPermission(session.user, "backup.delete", params.id),
+          });
+        }
         break;
       case "clone":
         if (body.newid) await assertGuestIdentityFree(host, body.newid);
@@ -210,7 +226,9 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
         result = null;
     }
     taskUpid = result;
-    await waitGuestAction(client, node, result, body.action);
+    if (body.wait !== false) {
+      await waitGuestAction(client, node, result, body.action);
+    }
     return result;
     });
   } catch (error) {
@@ -240,16 +258,18 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
     throw error;
   }
   invalidateInventoryCache(params.id);
-  await writeAuditLog({
-    userId: session.user.id,
-    ip: await clientIp(),
-    action: ACTION_AUDIT[body.action],
-    target: `VM ${vmid}`,
-    hostId: params.id,
-    result: "SUCCESS",
-    metadata: { upid: typeof upid === "string" ? upid : null, action: body.action },
-  });
-  if (body.action === "delete") {
+  if (!(body.action === "delete" && body.wait === false && deletePhase && deletePhase !== "delete")) {
+    await writeAuditLog({
+      userId: session.user.id,
+      ip: await clientIp(),
+      action: ACTION_AUDIT[body.action],
+      target: `VM ${vmid}`,
+      hostId: params.id,
+      result: "SUCCESS",
+      metadata: { upid: typeof upid === "string" ? upid : null, action: body.action },
+    });
+  }
+  if (body.action === "delete" && body.wait !== false) {
     notifyTopic("vm.deleted", {
       level: "warning",
       title: "VM gelöscht",
@@ -261,5 +281,5 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
       node: params.node,
     });
   }
-  return json({ upid });
+  return json({ upid, phase: deletePhase });
 });

@@ -631,12 +631,28 @@ export const GuestTable = memo(function GuestTable({
                         </Button>
                         <GuestDeleteDialog
                           hostId={hid}
+                          node={g.node}
                           kind={row}
                           vmid={g.vmid}
                           name={g.name}
                           kindLabel={kindLabel}
                           disabled={!perms.delete || !share.delete}
-                          onConfirm={(backupVolids) => guestAction(hid, g.node, g.vmid, "delete", row, { backupVolids })}
+                          onConfirm={(backupVolids, phase) =>
+                            api<{ upid?: unknown; phase?: "shutdown" | "stop" | "delete" }>(
+                              `/api/hosts/${hid}/${row === "vm" ? "vms" : "lxc"}/${g.node}/${g.vmid}`,
+                              {
+                                method: "POST",
+                                body: JSON.stringify({
+                                  action: "delete",
+                                  confirm: true,
+                                  wait: false,
+                                  backupVolids,
+                                  phase,
+                                }),
+                              },
+                            )
+                          }
+                          onFinished={() => void invalidateDashboardQueries(qc)}
                         >
                           <Button
                             size="icon"

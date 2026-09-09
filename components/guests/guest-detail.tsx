@@ -321,6 +321,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
         <CloneDialog
           kind={kind}
           hostId={params.hostId}
+          node={params.node}
           vmid={Number(params.vmid)}
           name={name}
           path={path}
@@ -420,12 +421,22 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
         )}
         <GuestDeleteDialog
           hostId={params.hostId}
+          node={params.node}
           kind={kind}
           vmid={Number(params.vmid)}
           name={name}
           kindLabel={kindLabel}
           disabled={Boolean(deny(can.delete, share.delete))}
-          onConfirm={(backupVolids) => action("delete", { confirm: true, backupVolids })}
+          onConfirm={(backupVolids, phase) =>
+            api<{ upid?: unknown; phase?: "shutdown" | "stop" | "delete" }>(path, {
+              method: "POST",
+              body: JSON.stringify({ action: "delete", confirm: true, wait: false, backupVolids, phase }),
+            })
+          }
+          onFinished={() => {
+            void invalidateDashboardQueries(qc);
+            router.push(listPath);
+          }}
         >
           <Button
             variant="destructive"

@@ -1,5 +1,8 @@
 import { ProxmoxApiError } from "@/lib/errors";
 import type { ProxmoxClient } from "@/server/proxmox/client";
+import { isUpid } from "@/lib/guest-task";
+
+export { isUpid } from "@/lib/guest-task";
 
 export const TASK_TIMEOUT = {
   start: 120_000,
@@ -14,10 +17,6 @@ export const TASK_TIMEOUT = {
   config: 60_000,
   resize: 180_000,
 } as const;
-
-export function isUpid(value: unknown): value is string {
-  return typeof value === "string" && value.includes("UPID:");
-}
 
 export function timeoutForGuestAction(action: string): number {
   switch (action) {

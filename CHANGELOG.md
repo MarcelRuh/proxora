@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.0.6] – 2026-09-09
+
+### Added
+
+- Create, delete, clone, and migrate dialogs stream the live Proxmox task log (same as backup/ISO). Create returns the UPID immediately; start-after is a second polled task. Delete shows shutdown, optional force-stop, then delete.
+
+### Fixed
+
+- Switching from the create task to start (or shutdown to delete) no longer treats the previous UPID as finished.
+- The create submit button stays disabled while Proxmox is still running.
+
 ## [2.0.5] – 2026-09-09
 
 ### Fixed

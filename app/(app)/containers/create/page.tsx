@@ -18,6 +18,8 @@ import { CreateProgressDialog } from "@/components/guests/create-progress-dialog
 import { invalidateDashboardQueries } from "@/components/dashboard/use-dashboard";
 import { DEFAULT_GUEST_NETWORK, shouldSyncGuestIp } from "@/lib/create-ip";
 import { visitGuestDetail } from "@/lib/guest-href";
+import { isUpid } from "@/lib/guest-task";
+import { useCreateTaskFollow } from "@/components/guests/use-create-task";
 import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
 
@@ -51,6 +53,7 @@ export default function CreateLxcPage() {
   });
   const [progress, setProgress] = useState<"idle" | "running" | "done" | "error">("idle");
   const [progressError, setProgressError] = useState<string | null>(null);
+  const [createUpid, setCreateUpid] = useState<string | null>(null);
   const createdRef = useRef<{ hostId: string; node: string; vmid: number } | null>(null);
 
   const { data: options } = useCreateOptions(form.hostId, form.ipMode);
@@ -108,7 +111,7 @@ export default function CreateLxcPage() {
     mutationFn: () => {
       const node = form.node || options?.nodes[0]?.node || "";
       const vmid = form.vmid || options?.nextid || 0;
-      return api<{ node?: string; vmid?: number; startError?: string }>(`/api/hosts/${form.hostId}/lxc`, {
+      return api<{ node?: string; vmid?: number; upid?: unknown }>(`/api/hosts/${form.hostId}/lxc`, {
         method: "POST",
         body: JSON.stringify({
           node,
@@ -131,16 +134,21 @@ export default function CreateLxcPage() {
     },
     onMutate: () => {
       setProgressError(null);
+      setCreateUpid(null);
       setProgress("running");
     },
     onSuccess: (res) => {
       const node = res.node || form.node || options?.nodes[0]?.node || "";
       const vmid = res.vmid || form.vmid || options?.nextid || 0;
       createdRef.current = { hostId: form.hostId, node, vmid };
-      if (res.startError) toast.error(t("create.startFailed", { error: res.startError }));
-      else toast.success(t("lxc.created"));
+      const upid = isUpid(res.upid) ? res.upid : null;
+      if (!upid) {
+        setProgressError(t("common.failed"));
+        setProgress("error");
+        return;
+      }
       void invalidateDashboardQueries(qc);
-      setProgress("done");
+      setCreateUpid(upid);
     },
     onError: (e: Error) => {
       setProgressError(e.message);
@@ -156,12 +164,39 @@ export default function CreateLxcPage() {
     const target = progressRef.current === "done" ? createdRef.current : null;
     setProgress("idle");
     setProgressError(null);
+    setCreateUpid(null);
     if (target) {
       window.setTimeout(() => {
         visitGuestDetail("lxc", target.hostId, target.node, target.vmid);
       }, 0);
     }
   }, []);
+
+  const created = createdRef.current;
+  const follow = useCreateTaskFollow({
+    kind: "lxc",
+    hostId: created?.hostId || form.hostId,
+    node: created?.node || form.node,
+    vmid: created?.vmid || form.vmid,
+    createUpid,
+    startAfter: form.startAfter,
+    open: progress === "running" && Boolean(createUpid),
+    failedFallback: t("common.failed"),
+    onAllDone: () => {
+      toast.success(t("lxc.created"));
+      setProgress("done");
+    },
+    onFailed: (message) => {
+      setProgressError(message);
+      setProgress("error");
+    },
+  });
+
+  useEffect(() => {
+    if (progress !== "done") return;
+    const timer = window.setTimeout(() => closeProgress(), 800);
+    return () => window.clearTimeout(timer);
+  }, [progress, closeProgress]);
 
   const canSubmit =
     Boolean(form.hostId) &&
@@ -303,7 +338,7 @@ export default function CreateLxcPage() {
             {t("create.startAfter")}
           </label>
           <div className="md:col-span-2">
-            <Button onClick={() => create.mutate()} disabled={create.isPending || !canSubmit}>
+            <Button onClick={() => create.mutate()} disabled={create.isPending || progress === "running" || !canSubmit}>
               {create.isPending ? t("create.creating") : t("create.submitLxc")}
             </Button>
           </div>
@@ -314,8 +349,9 @@ export default function CreateLxcPage() {
         locked={progress === "running"}
         finished={progress === "done"}
         error={progressError}
-        title={t("create.progressLxc")}
+        title={follow.phase === "start" ? t("create.progressStartLxc") : t("create.progressLxc")}
         detail={form.hostname.trim() || t("create.progressLxc")}
+        lines={follow.logLines}
         onClose={closeProgress}
       />
     </div>

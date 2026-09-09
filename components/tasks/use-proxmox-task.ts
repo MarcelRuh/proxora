@@ -5,12 +5,12 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { isFailedTaskExit } from "@/lib/backup-tasks";
 
-export type BackupTaskPayload = {
+export type ProxmoxTaskPayload = {
   status: { status?: string; exitstatus?: string };
   log: Array<{ n: number; t: string }>;
 };
 
-export function useBackupTask({
+export function useProxmoxTask({
   hostId,
   node,
   upid,
@@ -34,11 +34,11 @@ export function useBackupTask({
   const tracking = Boolean(upid) && !finished && !errorMsg;
 
   const { data: task } = useQuery({
-    queryKey: ["backup-task", hostId, node, upid],
+    queryKey: ["proxmox-task", hostId, node, upid],
     enabled: Boolean(open && upid),
     queryFn: () =>
-      api<BackupTaskPayload>(
-        `/api/hosts/${hostId}/backups/task?node=${encodeURIComponent(node)}&upid=${encodeURIComponent(upid!)}`,
+      api<ProxmoxTaskPayload>(
+        `/api/hosts/${hostId}/task?node=${encodeURIComponent(node)}&upid=${encodeURIComponent(upid!)}&limit=2000`,
       ),
     refetchInterval: tracking ? 1200 : false,
   });

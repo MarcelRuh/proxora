@@ -2,13 +2,11 @@ import { z } from "zod";
 import { apiRoute } from "@/server/http/api-route";
 import { json } from "@/server/http/respond";
 import { clientIp } from "@/server/auth/session";
-import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { filterGuestsForUser } from "@/server/auth/session-core";
-import { completeGuestCreate } from "@/server/services/guest-start";
+import { followGuestCreateTask } from "@/server/services/guest-start";
 import { notifyTopic } from "@/server/notifications/dispatch";
-import { durationLabel } from "@/lib/duration";
 import { assertGuestIdentityFree } from "@/server/services/guest-ips";
 import { applyQemuCloudInit, buildQemuIpconfig, qemuCreateIpMode, qemuCreateStaticIp } from "@/lib/cloud-init";
 import { ostypeFromIso, vmCdromDisks, windowsVmFirmware } from "@/lib/iso-images";
@@ -132,22 +130,30 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
   }
   const staticIp = qemuCreateStaticIp(body.ipv4);
 
-  const t0 = Date.now();
+  const ip = await clientIp();
   let hostName = "";
-  let started = false;
-  let startError: string | undefined;
   let upid: unknown;
   try {
     const result = await withHostClient(params.id, session.user, async (client, host) => {
       hostName = host.name;
       await assertGuestIdentityFree(host, body.vmid, staticIp);
       const createUpid = await client.vms.create(body.node, payload as VmCreateParams);
-      const done = await completeGuestCreate(client, "vm", body.node, body.vmid, createUpid, Boolean(body.startAfter));
-      return { createUpid, ...done };
+      followGuestCreateTask({
+        client,
+        kind: "vm",
+        node: body.node,
+        vmid: body.vmid,
+        name: body.name,
+        hostId: params.id,
+        hostName: host.name,
+        upid: createUpid,
+        userId: session.user.id,
+        ip,
+        auditAction: AUDIT_ACTIONS.VM_CREATED,
+      });
+      return { createUpid };
     });
     upid = result.createUpid;
-    started = result.started;
-    startError = result.startError;
   } catch (error) {
     notifyTopic("vm.created", {
       level: "error",
@@ -162,27 +168,6 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     throw error;
   }
 
-  const ms = Date.now() - t0;
-  const suffix = startError ? ` — Start fehlgeschlagen: ${startError}` : ` — fertig in ${durationLabel(ms)}`;
-  await writeAuditLog({
-    userId: session.user.id,
-    ip: await clientIp(),
-    action: AUDIT_ACTIONS.VM_CREATED,
-    target: `${body.vmid} ${body.name}`,
-    hostId: params.id,
-    result: "SUCCESS",
-    metadata: { upid: typeof upid === "string" ? upid : null, started, startError },
-  });
-  notifyTopic("vm.created", {
-    level: startError ? "warning" : "success",
-    title: "VM erstellt",
-    message: `VM ${body.vmid} (${body.name})${suffix}`,
-    hostId: params.id,
-    name: body.name,
-    id: String(body.vmid),
-    host: hostName,
-    node: body.node,
-  });
   invalidateInventoryCache(params.id);
-  return json({ upid, started, startError, node: body.node, vmid: body.vmid }, 201);
+  return json({ upid, node: body.node, vmid: body.vmid }, 201);
 });
