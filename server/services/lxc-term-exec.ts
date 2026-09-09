@@ -22,8 +22,7 @@ export async function execLxcScript(
   const headers = await client.http.authHeaders();
   const begin = `__PXR_B_${randomBytes(4).toString("hex")}__`;
   const end = `__PXR_E_${randomBytes(4).toString("hex")}__`;
-  const b64 = Buffer.from(input.script, "utf8").toString("base64");
-  const payload = wrapLxcTermScript(b64, begin, end);
+  const payload = wrapLxcTermScript(input.script, begin, end);
 
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl, ["binary"], {

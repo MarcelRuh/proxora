@@ -22,7 +22,11 @@ describe("LXC root SSH", () => {
   it("parses sshd status JSON from noisy console output", () => {
     const parsed = parseLxcSshRootStatus('junk\n{"running":1,"permitRootLogin":"yes"}\n');
     expect(parsed).toEqual({ running: true, permitRootLogin: "yes", enabled: true });
-    expect(parseLxcSshRootStatus('{"running":0,"permitRootLogin":"no"}').enabled).toBe(false);
+    expect(parseLxcSshRootStatus('{"running":1,"permitRootLogin":"prohibit-password"}')).toEqual({
+      running: true,
+      permitRootLogin: "prohibit-password",
+      enabled: true,
+    });
   });
 
   it("extracts stdout between termproxy markers", () => {
@@ -47,13 +51,11 @@ describe("LXC root SSH", () => {
     });
   });
 
-  it("keeps termproxy payload lines short enough not to wrap", () => {
-    const b64 = "A".repeat(200);
-    const wrapped = wrapLxcTermScript(b64, "__PXR_B_ab__", "__PXR_E_ab__");
-    for (const line of wrapped.split("\n")) {
-      expect(line.length).toBeLessThanOrEqual(80);
-    }
-    expect(wrapped).toContain("printf '%s' \"$B64\" | base64 -d | sh");
+  it("keeps a heredoc wrapper around the guest script", () => {
+    const wrapped = wrapLxcTermScript("echo hi\n", "__PXR_B_ab__", "__PXR_E_ab__");
+    expect(wrapped).toContain("sh <<'PXR_SH'");
+    expect(wrapped).toContain("echo hi");
+    expect(wrapped).not.toContain("base64");
   });
 
   it("writes PermitRootLogin and restarts sshd on both enable and disable", () => {
@@ -65,7 +67,9 @@ describe("LXC root SSH", () => {
     expect(off).toContain("PermitRootLogin no");
     expect(off).toContain("systemctl restart ssh");
     expect(off).not.toContain("PermitRootLogin yes");
-    expect(lxcSshRootStatusScript()).toContain("99-proxora-root.conf");
+    expect(lxcSshRootStatusScript()).toContain("sshd_config.d/*.conf");
+    expect(lxcSshRootStatusScript()).toContain("sshd -T");
+    expect(lxcSshRootStatusScript()).toContain("permit=prohibit-password");
   });
 
   it("does not treat console validation errors as a dead host", () => {

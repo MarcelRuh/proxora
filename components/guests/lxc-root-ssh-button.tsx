@@ -33,13 +33,13 @@ export function LxcRootSshButton({
   const qc = useQueryClient();
   const path = `/api/hosts/${hostId}/lxc/${encodeURIComponent(node)}/${vmid}/ssh-root`;
   const locked = Boolean(disabled);
-  const { data } = useQuery({
+  const { data, error } = useQuery({
     queryKey: ["lxc-ssh-root", hostId, node, vmid],
     queryFn: () => api<SshRootPayload>(path),
     enabled: guestRunning && !locked,
-    staleTime: 60_000,
+    staleTime: 15_000,
     refetchOnWindowFocus: false,
-    retry: false,
+    retry: 1,
   });
   const toggle = useMutation({
     mutationFn: (enabled: boolean) => api<SshRootPayload>(path, { method: "POST", body: JSON.stringify({ enabled }) }),
@@ -49,12 +49,22 @@ export function LxcRootSshButton({
     },
   });
 
-  const on = Boolean(data?.enabled);
+  const on = data?.enabled === true;
   const next = !on;
   const needRunning = !guestRunning;
   const blocked = locked || needRunning || toggle.isPending;
-  const title = locked ? disabledReason : needRunning ? t("guest.sshRootNeedRunning") : undefined;
-  const label = on ? t("guest.sshRootDisable") : t("guest.sshRootEnable");
+  const title = locked
+    ? disabledReason
+    : needRunning
+      ? t("guest.sshRootNeedRunning")
+      : error instanceof Error
+        ? error.message
+        : undefined;
+  const label = data
+    ? on
+      ? t("guest.sshRootDisable")
+      : t("guest.sshRootEnable")
+    : t("guest.sshRoot");
   const button = (
     <Button variant={on ? "destructive" : "outline"} disabled={blocked} title={title}>
       {toggle.isPending ? t("common.loading") : label}

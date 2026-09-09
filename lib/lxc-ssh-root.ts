@@ -24,22 +24,17 @@ export function stripTermNoise(raw: string): string {
     .replace(/\u0008/g, "");
 }
 
-export function chunkBase64(b64: string, size = 48): string[] {
-  if (!b64) return [""];
-  const chunks: string[] = [];
-  for (let i = 0; i < b64.length; i += size) chunks.push(b64.slice(i, i + size));
-  return chunks;
-}
-
-/** Short lines so a 80-col PTY does not wrap and corrupt the payload. */
-export function wrapLxcTermScript(b64: string, begin: string, end: string): string {
-  const chunks = chunkBase64(b64);
-  const assigns = chunks.map((chunk, i) => (i === 0 ? `B64='${chunk}'` : `B64="$B64${chunk}"`));
+/** Run the guest script in a heredoc so the container does not need base64. */
+export function wrapLxcTermScript(script: string, begin: string, end: string): string {
+  if (script.includes("PXR_SH")) {
+    throw new Error("Script must not contain PXR_SH");
+  }
   return [
     "stty -echo cols 512 2>/dev/null || true",
-    ...assigns,
     `echo ${begin}`,
-    "printf '%s' \"$B64\" | base64 -d | sh",
+    "sh <<'PXR_SH'",
+    script.replace(/\n$/, ""),
+    "PXR_SH",
     `echo ${end}:$?`,
     "",
   ].join("\n");
@@ -67,12 +62,21 @@ export function lxcSshRootStatusScript(): string {
   return [
     PATH_PREFIX,
     "running=0",
-    "if pgrep -x sshd >/dev/null 2>&1; then running=1; fi",
-    "permit=unknown",
-    "if [ -f /etc/ssh/sshd_config.d/99-proxora-root.conf ]; then",
-    "  permit=$(awk 'tolower($1)==\"permitrootlogin\"{v=tolower($2)} END{print v}' /etc/ssh/sshd_config.d/99-proxora-root.conf)",
-    "elif [ -f /etc/ssh/sshd_config ]; then",
-    "  permit=$(awk 'BEGIN{v=\"unknown\"} $1 ~ /^#/{next} tolower($1)==\"permitrootlogin\"{v=tolower($2)} END{print v}' /etc/ssh/sshd_config)",
+    "pgrep -x sshd >/dev/null 2>&1 && running=1",
+    "permit=",
+    "if command -v timeout >/dev/null 2>&1 && command -v sshd >/dev/null 2>&1; then",
+    "  permit=$(timeout 2 sshd -T 2>/dev/null | awk 'tolower($1)==\"permitrootlogin\"{print tolower($2);exit}')",
+    "fi",
+    'if [ -z "$permit" ]; then',
+    "  awk_cmd='$1~/^#/{next} tolower($1)==\"permitrootlogin\"{print tolower($2);exit}'",
+    "  for f in /etc/ssh/sshd_config.d/*.conf /etc/ssh/sshd_config; do",
+    '    [ -f "$f" ] || continue',
+    '    [ -n "$permit" ] && break',
+    '    permit=$(awk "$awk_cmd" "$f")',
+    "  done",
+    "fi",
+    'if [ -z "$permit" ] && { [ -f /etc/ssh/sshd_config ] || command -v sshd >/dev/null 2>&1; }; then',
+    "  permit=prohibit-password",
     "fi",
     '[ -n "$permit" ] || permit=unknown',
     'printf \'{"running":%s,"permitRootLogin":"%s"}\\n\' "$running" "$permit"',

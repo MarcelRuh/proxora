@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.0.11] – 2026-09-09
+
+### Fixed
+
+- LXC root-SSH status now uses `sshd -T`, all `sshd_config.d` drop-ins, and the OpenSSH default (`prohibit-password`). Containers that already allow root SSH no longer show **Root-SSH on**.
+
 ## [2.0.10] – 2026-09-09
 
 ### Changed
