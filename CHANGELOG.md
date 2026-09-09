@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.0.12] – 2026-09-09
+
+### Changed
+
+- LXC SSH toggle reads and writes `/etc/ssh/sshd_config`: uncommented `PermitRootLogin yes` shows **SSH ausschalten**, otherwise **SSH einschalten**.
+
 ## [2.0.11] – 2026-09-09
 
 ### Fixed

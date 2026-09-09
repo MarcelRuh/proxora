@@ -60,11 +60,7 @@ export function LxcRootSshButton({
       : error instanceof Error
         ? error.message
         : undefined;
-  const label = data
-    ? on
-      ? t("guest.sshRootDisable")
-      : t("guest.sshRootEnable")
-    : t("guest.sshRoot");
+  const label = on ? t("guest.sshRootDisable") : t("guest.sshRootEnable");
   const button = (
     <Button variant={on ? "destructive" : "outline"} disabled={blocked} title={title}>
       {toggle.isPending ? t("common.loading") : label}
