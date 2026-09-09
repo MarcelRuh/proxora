@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.0.7] – 2026-09-09
+
+### Fixed
+
+- Task progress no longer shows Proxmox’s empty-log placeholder `no content` while the log file is still empty.
+
 ## [2.0.6] – 2026-09-09
 
 ### Added

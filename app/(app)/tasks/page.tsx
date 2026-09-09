@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { QueryGate } from "@/components/layout/query-gate";
 import { EmptyState } from "@/components/ui/misc";
 import { api } from "@/lib/api";
+import { normalizeProxmoxTaskLog } from "@/lib/backup";
 import type { PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
@@ -111,7 +112,7 @@ export default function TasksPage() {
 
   const live = detail?.status ?? open;
   const running = live ? taskRunState(live) === "running" : false;
-  const logLines = (detail?.log ?? []).map((line) => line.t);
+  const logLines = normalizeProxmoxTaskLog(detail?.log).map((line) => line.t);
   const openLabel = open ? taskTypeLabel(open.type, locale) : "";
   const openGuest = open ? taskGuestLabel(open) : "";
 

@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input, Label } from "@/components/ui/input";
 import { ProxmoxTaskProgress } from "@/components/backups/task-progress";
 import { api } from "@/lib/api";
-import { guestNeedsStopForRestore } from "@/lib/backup";
+import { guestNeedsStopForRestore, normalizeProxmoxTaskLog } from "@/lib/backup";
 import { isFailedTaskExit } from "@/lib/backup-tasks";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { SELECT_CLASS, type BackupFile, type BackupOverview } from "@/components/backups/types";
@@ -80,7 +80,7 @@ export function RestoreDialog({
     refetchInterval: tracking ? 1200 : false,
   });
 
-  const logLines = (task?.log ?? []).map((l) => l.t).filter(Boolean);
+  const logLines = normalizeProxmoxTaskLog(task?.log).map((l) => l.t);
   const showProgress = busy || Boolean(upid);
 
   useEffect(() => {

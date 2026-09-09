@@ -208,6 +208,22 @@ describe("ProxmoxClient", () => {
     await expect(client.tasks.wait("pve", "UPID:1", 5_000, 1)).rejects.toThrow(/command failed/);
   });
 
+  it("treats an empty Proxmox task log as no lines", async () => {
+    vi.mocked(undiciFetch).mockResolvedValueOnce({
+      ok: true,
+      status: 204,
+      text: async () => "",
+    } as never);
+    await expect(client.tasks.log("pve", "UPID:1")).resolves.toEqual([]);
+
+    vi.mocked(undiciFetch).mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: async () => JSON.stringify({ message: "no content" }),
+    } as never);
+    await expect(client.tasks.log("pve", "UPID:1")).resolves.toEqual([]);
+  });
+
   it("lists storage", async () => {
     vi.mocked(undiciFetch).mockResolvedValueOnce(
       jsonResponse([{ storage: "local", type: "dir", total: 100, used: 40, avail: 60 }]) as never,

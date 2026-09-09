@@ -11,6 +11,7 @@ import { ConfirmAction } from "@/components/confirm-action";
 import { ProxmoxTaskProgress } from "@/components/backups/task-progress";
 import { api } from "@/lib/api";
 import { isFailedTaskExit } from "@/lib/backup-tasks";
+import { normalizeProxmoxTaskLog } from "@/lib/backup";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
 import { groupTemplatePackages, vztmplVolid, type CatalogTemplate, type TemplatePackageRow } from "@/lib/lxc-templates";
@@ -127,7 +128,7 @@ export function LxcTemplatePanel({ hostId }: { hostId: string }) {
     refetchInterval: tracking ? 1200 : false,
   });
 
-  const logLines = (task?.log ?? []).map((l) => l.t).filter(Boolean);
+  const logLines = normalizeProxmoxTaskLog(task?.log).map((l) => l.t);
   const showProgress = Boolean(job) || busy;
 
   useEffect(() => {

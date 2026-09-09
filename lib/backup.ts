@@ -189,13 +189,43 @@ export function logLineText(line: ProxmoxLogLine): string {
   return (typeof line === "string" ? line : String(line.t ?? "")).replace(/\r$/, "");
 }
 
+/** Proxmox task logs are often empty at first (`204` / `no content`). */
+export function isNoiseProxmoxLogLine(text: string): boolean {
+  const t = text.trim();
+  return !t || /^no content$/i.test(t);
+}
+
+export function isEmptyProxmoxTaskLogError(error: unknown): boolean {
+  const status =
+    typeof error === "object" && error && "status" in error ? Number((error as { status?: unknown }).status) : 0;
+  if (status === 204 || status === 404) return true;
+  const msg = error instanceof Error ? error.message : String(error ?? "");
+  return /^\s*no content\s*$/i.test(msg);
+}
+
+export function normalizeProxmoxTaskLog(log: unknown): Array<{ n: number; t: string }> {
+  if (typeof log === "string") {
+    return isNoiseProxmoxLogLine(log) ? [] : [{ n: 1, t: log }];
+  }
+  if (!Array.isArray(log)) return [];
+  const lines: Array<{ n: number; t: string }> = [];
+  for (let i = 0; i < log.length; i++) {
+    const raw = log[i];
+    const text = logLineText(raw as ProxmoxLogLine);
+    if (isNoiseProxmoxLogLine(text)) continue;
+    const n = raw && typeof raw === "object" && "n" in raw ? Number(raw.n) : i + 1;
+    lines.push({ n: Number.isFinite(n) && n > 0 ? n : i + 1, t: text });
+  }
+  return lines;
+}
+
 /** Best-effort percent from Proxmox vzdump/qmrestore/vzrestore log lines. */
 export function parseProxmoxTaskProgress(lines: ProxmoxLogLine[]): { percent: number | null; detail: string } {
   let percent: number | null = null;
   let detail = "";
   for (const line of lines) {
     const text = logLineText(line).trim();
-    if (!text) continue;
+    if (isNoiseProxmoxLogLine(text)) continue;
     detail = text;
     const tagged = /\bprogress\s+(\d+(?:\.\d+)?)\s*%/i.exec(text);
     const percents = [...text.matchAll(/(\d{1,3}(?:\.\d+)?)\s*%/g)].map((m) => Number(m[1]));

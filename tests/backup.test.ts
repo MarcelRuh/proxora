@@ -8,6 +8,8 @@ import {
   jobSchedulePayload,
   isBackupJobScheduleConflict,
   normalizeBackupJob,
+  normalizeProxmoxTaskLog,
+  isEmptyProxmoxTaskLogError,
   parseBackupSchedule,
   formatBackupSchedule,
   parseBackupVolid,
@@ -184,5 +186,35 @@ describe("proxmox restore log progress", () => {
     ]);
     expect(parsed.percent).toBe(10);
     expect(parsed.detail).toContain("Total bytes");
+  });
+
+  it("ignores Proxmox empty-log placeholders", () => {
+    const parsed = parseProxmoxTaskProgress(["no content", { n: 2, t: "TASK OK" }]);
+    expect(parsed.percent).toBe(100);
+    expect(parsed.detail).toBe("TASK OK");
+  });
+});
+
+describe("normalizeProxmoxTaskLog", () => {
+  it("drops empty and no-content lines", () => {
+    expect(normalizeProxmoxTaskLog("no content")).toEqual([]);
+    expect(
+      normalizeProxmoxTaskLog([
+        { n: 1, t: "no content" },
+        { n: 2, t: "TASK OK" },
+        { n: 3, t: "  " },
+      ]),
+    ).toEqual([{ n: 2, t: "TASK OK" }]);
+  });
+
+  it("treats missing logs as empty", () => {
+    expect(normalizeProxmoxTaskLog(null)).toEqual([]);
+    expect(normalizeProxmoxTaskLog(undefined)).toEqual([]);
+  });
+
+  it("recognizes empty-log API errors", () => {
+    expect(isEmptyProxmoxTaskLogError(new Error("no content"))).toBe(true);
+    expect(isEmptyProxmoxTaskLogError({ status: 204, message: "x" })).toBe(true);
+    expect(isEmptyProxmoxTaskLogError(new Error("command failed"))).toBe(false);
   });
 });

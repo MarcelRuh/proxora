@@ -14,6 +14,10 @@ function normalizeBaseUrl(url: string): string {
   return trimmed;
 }
 
+function isPlainNoContent(text: string): boolean {
+  return /^\s*no content\s*$/i.test(text);
+}
+
 function toSearch(query?: Query): string {
   if (!query) return "";
   const params = new URLSearchParams();
@@ -190,6 +194,9 @@ export class ProxmoxHttpClient {
     const response = await this.rawFetch(url, { method, headers, body }, options.timeoutMs);
     const text = await response.text();
     let parsed: { data?: T; errors?: unknown; message?: string } = {};
+    if (response.status === 204 || isPlainNoContent(text)) {
+      return undefined as T;
+    }
     if (text) {
       try {
         parsed = JSON.parse(text) as typeof parsed;
@@ -202,6 +209,7 @@ export class ProxmoxHttpClient {
 
     if (!response.ok) {
       const message = proxmoxErrorMessage(parsed, response.status);
+      if (isPlainNoContent(message)) return undefined as T;
       logger.warn(
         { path, method, status: response.status, message },
         "Proxmox API request failed",
@@ -240,6 +248,9 @@ export class ProxmoxHttpClient {
     );
     const text = await response.text();
     let parsed: { data?: T; error?: string; code?: string } = {};
+    if (response.status === 204 || isPlainNoContent(text)) {
+      return undefined as T;
+    }
     if (text) {
       try {
         parsed = JSON.parse(text) as typeof parsed;
@@ -250,6 +261,7 @@ export class ProxmoxHttpClient {
       }
     }
     if (!response.ok) {
+      if (isPlainNoContent(parsed.error ?? "")) return undefined as T;
       logger.warn(
         { url, status: response.status, error: parsed.error, code: parsed.code, pvePath: path },
         "Federation PVE proxy failed",

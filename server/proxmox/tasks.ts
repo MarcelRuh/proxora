@@ -1,4 +1,5 @@
 import { ProxmoxApiError } from "@/lib/errors";
+import { isEmptyProxmoxTaskLogError, normalizeProxmoxTaskLog } from "@/lib/backup";
 import type { ProxmoxHttpClient } from "@/server/proxmox/http";
 import type { ProxmoxAptUpdate, ProxmoxTask } from "@/server/proxmox/types";
 
@@ -19,11 +20,17 @@ export class TaskApi {
     );
   }
 
-  log(node: string, upid: string, start = 0, limit = 500) {
-    return this.http.get<Array<{ n: number; t: string }>>(
-      `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/log`,
-      { start, limit },
-    );
+  async log(node: string, upid: string, start = 0, limit = 500) {
+    try {
+      const data = await this.http.get<unknown>(
+        `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/log`,
+        { start, limit },
+      );
+      return normalizeProxmoxTaskLog(data);
+    } catch (error) {
+      if (isEmptyProxmoxTaskLogError(error)) return [];
+      throw error;
+    }
   }
 
   stop(node: string, upid: string) {

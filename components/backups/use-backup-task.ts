@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { isFailedTaskExit } from "@/lib/backup-tasks";
+import { normalizeProxmoxTaskLog } from "@/lib/backup";
 
 export type BackupTaskPayload = {
   status: { status?: string; exitstatus?: string };
@@ -41,6 +42,9 @@ export function useBackupTask({
         `/api/hosts/${hostId}/backups/task?node=${encodeURIComponent(node)}&upid=${encodeURIComponent(upid!)}`,
       ),
     refetchInterval: tracking ? 1200 : false,
+    retry: 3,
+    retryDelay: 400,
+    placeholderData: (previous) => previous,
   });
 
   useEffect(() => {
@@ -56,7 +60,7 @@ export function useBackupTask({
   }, [task, upid, failedFallback, settled]);
 
   return {
-    logLines: (task?.log ?? []).map((l) => l.t).filter(Boolean),
+    logLines: normalizeProxmoxTaskLog(task?.log).map((l) => l.t),
     finished,
     errorMsg,
     tracking,
