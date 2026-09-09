@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.0.8] – 2026-09-09
+
+### Added
+
+- LXC detail pages can enable or disable SSH login for root (`PermitRootLogin`) through the container console, even when guest SSH is already off.
+
 ## [2.0.7] – 2026-09-09
 
 ### Fixed
