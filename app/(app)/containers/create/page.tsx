@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -18,6 +17,7 @@ import { HostSelect, hostAllowsCreate } from "@/components/guests/host-select";
 import { CreateProgressDialog } from "@/components/guests/create-progress-dialog";
 import { invalidateDashboardQueries } from "@/components/dashboard/use-dashboard";
 import { DEFAULT_GUEST_NETWORK, shouldSyncGuestIp } from "@/lib/create-ip";
+import { visitGuestDetail } from "@/lib/guest-href";
 import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
 
@@ -26,7 +26,6 @@ const selectClass =
 
 export default function CreateLxcPage() {
   const { t } = useI18n();
-  const router = useRouter();
   const qc = useQueryClient();
   const { data: hosts } = useQuery({
     queryKey: ["hosts"],
@@ -140,9 +139,8 @@ export default function CreateLxcPage() {
       createdRef.current = { hostId: form.hostId, node, vmid };
       if (res.startError) toast.error(t("create.startFailed", { error: res.startError }));
       else toast.success(t("lxc.created"));
-      setProgress("done");
       void invalidateDashboardQueries(qc);
-      router.replace(`/containers/${form.hostId}/${encodeURIComponent(node)}/${vmid}`);
+      setProgress("done");
     },
     onError: (e: Error) => {
       setProgressError(e.message);
@@ -150,24 +148,20 @@ export default function CreateLxcPage() {
     },
   });
 
-  const goToCreated = useCallback(() => {
-    const target = createdRef.current;
-    if (!target) return;
-    router.replace(`/containers/${target.hostId}/${encodeURIComponent(target.node)}/${target.vmid}`);
-  }, [router]);
-
   const progressRef = useRef(progress);
   progressRef.current = progress;
 
   const closeProgress = useCallback(() => {
     if (progressRef.current === "running") return;
-    if (progressRef.current === "done") {
-      goToCreated();
-      return;
-    }
+    const target = progressRef.current === "done" ? createdRef.current : null;
     setProgress("idle");
     setProgressError(null);
-  }, [goToCreated]);
+    if (target) {
+      window.setTimeout(() => {
+        visitGuestDetail("lxc", target.hostId, target.node, target.vmid);
+      }, 0);
+    }
+  }, []);
 
   const canSubmit =
     Boolean(form.hostId) &&

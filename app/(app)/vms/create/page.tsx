@@ -3,7 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +20,7 @@ import { useCreateOptions } from "@/components/guests/use-create-options";
 import { MemoryField } from "@/components/guests/memory-field";
 import { HostSelect, hostAllowsCreate } from "@/components/guests/host-select";
 import { DEFAULT_GUEST_NETWORK, shouldSyncGuestIp } from "@/lib/create-ip";
+import { visitGuestDetail } from "@/lib/guest-href";
 import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { StorageContentItem } from "@/lib/storage-content";
@@ -31,7 +31,6 @@ const selectClass =
 
 export default function CreateVmPage() {
   const { t } = useI18n();
-  const router = useRouter();
   const qc = useQueryClient();
   const { data: hosts } = useQuery({
     queryKey: ["hosts"],
@@ -165,9 +164,8 @@ export default function CreateVmPage() {
       createdRef.current = { hostId: form.hostId, node, vmid };
       if (res.startError) toast.error(t("create.startFailed", { error: res.startError }));
       else toast.success(t("vms.created"));
-      setProgress("done");
       void invalidateDashboardQueries(qc);
-      router.replace(`/vms/${form.hostId}/${encodeURIComponent(node)}/${vmid}`);
+      setProgress("done");
     },
     onError: (e: Error) => {
       setProgressError(e.message);
@@ -175,24 +173,20 @@ export default function CreateVmPage() {
     },
   });
 
-  const goToCreated = useCallback(() => {
-    const target = createdRef.current;
-    if (!target) return;
-    router.replace(`/vms/${target.hostId}/${encodeURIComponent(target.node)}/${target.vmid}`);
-  }, [router]);
-
   const progressRef = useRef(progress);
   progressRef.current = progress;
 
   const closeProgress = useCallback(() => {
     if (progressRef.current === "running") return;
-    if (progressRef.current === "done") {
-      goToCreated();
-      return;
-    }
+    const target = progressRef.current === "done" ? createdRef.current : null;
     setProgress("idle");
     setProgressError(null);
-  }, [goToCreated]);
+    if (target) {
+      window.setTimeout(() => {
+        visitGuestDetail("vm", target.hostId, target.node, target.vmid);
+      }, 0);
+    }
+  }, []);
 
   const canSubmit =
     Boolean(form.hostId) &&

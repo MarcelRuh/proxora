@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.0.5] – 2026-09-09
+
+### Fixed
+
+- After creating a container or VM the progress dialog actually closes and the app opens the new guest page (2.0.4 left the “Done” dialog open).
+
 ## [2.0.4] – 2026-09-09
 
 ### Changed
