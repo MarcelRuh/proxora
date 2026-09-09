@@ -35,6 +35,7 @@ import { isWindowsOstype } from "@/lib/iso-images";
 import type { Permission } from "@/lib/permissions";
 import { GuestHaCard } from "@/components/guests/guest-ha-card";
 import { GuestFirewallCard } from "@/components/guests/guest-firewall-card";
+import { LxcRootSshButton } from "@/components/guests/lxc-root-ssh-button";
 
 type GuestPayload = {
   status: Record<string, unknown>;
@@ -79,6 +80,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
       guest,
     ),
     config: useCan(kind === "vm" ? "vm.config" : "lxc.config", hostId, guest),
+    sshRoot: useCanAny(["lxc.files.write", "lxc.config"], hostId, guest),
     backup: useCan("backup.run", hostId),
     restore: useCan("backup.restore", hostId),
     hostsView: useCan("hosts.view"),
@@ -212,6 +214,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
       kind === "vm" ? ["vm.files.read", "vm.files.write"] : ["lxc.files.read", "lxc.files.write"],
     ),
     config: peerHostAllowsPermission(shareHost, gp("config")),
+    sshRoot: peerHostAllowsPermission(shareHost, ["lxc.files.write", "lxc.config"]),
     backup: peerHostAllowsPermission(shareHost, "backup.run"),
     restore: peerHostAllowsPermission(shareHost, "backup.restore"),
     snapshotCreate: peerHostAllowsPermission(shareHost, gp("snapshot.create")),
@@ -419,6 +422,16 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             {t("files.show")}
           </Button>
         )}
+        {kind === "lxc" ? (
+          <LxcRootSshButton
+            hostId={params.hostId}
+            node={params.node}
+            vmid={Number(params.vmid)}
+            guestRunning={running}
+            disabled={Boolean(deny(can.sshRoot, share.sshRoot))}
+            disabledReason={deny(can.sshRoot, share.sshRoot)}
+          />
+        ) : null}
         <GuestDeleteDialog
           hostId={params.hostId}
           node={params.node}
