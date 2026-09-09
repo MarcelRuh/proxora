@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { Play, Square, RotateCcw, Terminal, FolderOpen, Camera, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -20,12 +20,14 @@ import { bulkActionFits, guestRowKey, type BulkGuestAction } from "@/lib/guest-b
 import { uniqueGuestIps } from "@/lib/guest-ip-display";
 import { formatUptime } from "@/lib/utils";
 import { GUEST_ROW_ESTIMATE_PX, GUEST_TABLE_VIRTUALIZE_AFTER, windowRows } from "@/lib/table-window";
-import type { Guest } from "@/lib/types";
+import type { Guest, PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useSessionUser } from "@/components/auth/session-user";
 import { userHasAnyPermission, userHasPermission, guestFilePermission, type Permission } from "@/lib/permissions";
 import { invalidateDashboardQueries, applyGuestIpsToCache } from "@/components/dashboard/use-dashboard";
 import { openGuestToolWindow } from "@/lib/guest-tool-window";
+import { peerHostAllowsPermission } from "@/lib/federation-access";
+import { actionDeniedTitle } from "@/lib/action-lock";
 
 export const GuestTable = memo(function GuestTable({
   kind,
@@ -42,6 +44,16 @@ export const GuestTable = memo(function GuestTable({
   const mixed = kind === "all";
   const user = useSessionUser();
   const qc = useQueryClient();
+  const { data: hostData } = useQuery({
+    queryKey: ["hosts"],
+    queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
+    staleTime: 30_000,
+  });
+  const hostById = useMemo(() => {
+    const map = new Map<string, PublicHost>();
+    for (const host of hostData?.hosts ?? []) map.set(host.id, host);
+    return map;
+  }, [hostData]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [q, setQ] = useState("");
@@ -191,16 +203,24 @@ export const GuestTable = memo(function GuestTable({
     }
   }
 
+  function shareAllows(hid: string, needed: Permission | Permission[]): boolean {
+    return peerHostAllowsPermission(hostById.get(hid) ?? { origin: "LOCAL" }, needed);
+  }
+
   function canBulk(g: Guest, action: BulkGuestAction): boolean {
     const hid = g.hostId ?? hostId ?? "";
     const row = rowKind(g);
     const prefix = row === "vm" ? "vm" : "lxc";
     const guest = { hostId: hid, kind: row, vmid: g.vmid };
-    if (action === "start") return userHasPermission(user, `${prefix}.start` as Permission, hid, guest);
-    if (action === "shutdown") return userHasPermission(user, `${prefix}.shutdown` as Permission, hid, guest);
-    if (action === "reboot") return userHasPermission(user, `${prefix}.reboot` as Permission, hid, guest);
-    if (action === "stop") return userHasPermission(user, `${prefix}.force-stop` as Permission, hid, guest);
-    return false;
+    const perm =
+      action === "start"
+        ? (`${prefix}.start` as Permission)
+        : action === "shutdown"
+          ? (`${prefix}.shutdown` as Permission)
+          : action === "reboot"
+            ? (`${prefix}.reboot` as Permission)
+            : (`${prefix}.force-stop` as Permission);
+    return userHasPermission(user, perm, hid, guest) && shareAllows(hid, perm);
   }
 
   async function runBulk(action: BulkGuestAction) {
@@ -240,6 +260,16 @@ export const GuestTable = memo(function GuestTable({
 
   const colCount = (mixed ? 12 : 11) - (showHost ? 0 : 1);
   const bulkBusy = busyId === "bulk";
+  const selectedGuests = filtered.filter((g) => selected.has(rowKey(g)));
+  const shareBlocked = t("peers.shareBlocked");
+  const noPerm = t("common.noPermission");
+  function lockTitle(rbac: boolean, shareOk: boolean, okTitle: string) {
+    return actionDeniedTitle(rbac, shareOk, shareBlocked, noPerm) ?? okTitle;
+  }
+  const bulkCanStart = selectedGuests.some((g) => canBulk(g, "start"));
+  const bulkCanShutdown = selectedGuests.some((g) => canBulk(g, "shutdown"));
+  const bulkCanReboot = selectedGuests.some((g) => canBulk(g, "reboot"));
+  const bulkCanStop = selectedGuests.some((g) => canBulk(g, "stop"));
 
   return (
     <div className="space-y-3">
@@ -288,20 +318,32 @@ export const GuestTable = memo(function GuestTable({
       {selectedVisible.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2 rounded-[4px] border border-border bg-muted/30 px-3 py-2 text-sm">
           <span className="text-muted-foreground">{t("table.selected", { n: selectedVisible.length })}</span>
-          <Button size="sm" disabled={bulkBusy} onClick={() => void runBulk("start")}>
+          <Button
+            size="sm"
+            disabled={bulkBusy || !bulkCanStart}
+            title={bulkCanStart ? undefined : shareBlocked}
+            onClick={() => void runBulk("start")}
+          >
             {t("guest.start")}
           </Button>
           <ConfirmAction
             title={t("table.bulkShutdownTitle")}
             description={t("table.bulkShutdownBody", { n: selectedVisible.length })}
             actionLabel={t("guest.shutdown")}
+            disabled={!bulkCanShutdown}
             onConfirm={() => runBulk("shutdown")}
           >
-            <Button size="sm" variant="outline" disabled={bulkBusy}>
+            <Button size="sm" variant="outline" disabled={bulkBusy || !bulkCanShutdown} title={bulkCanShutdown ? undefined : shareBlocked}>
               {t("guest.shutdown")}
             </Button>
           </ConfirmAction>
-          <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => void runBulk("reboot")}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={bulkBusy || !bulkCanReboot}
+            title={bulkCanReboot ? undefined : shareBlocked}
+            onClick={() => void runBulk("reboot")}
+          >
             {t("guest.reboot")}
           </Button>
           <ConfirmAction
@@ -309,9 +351,10 @@ export const GuestTable = memo(function GuestTable({
             description={t("table.bulkStopBody", { n: selectedVisible.length })}
             actionLabel={t("guest.stop")}
             destructive
+            disabled={!bulkCanStop}
             onConfirm={() => runBulk("stop")}
           >
-            <Button size="sm" variant="destructive" disabled={bulkBusy}>
+            <Button size="sm" variant="destructive" disabled={bulkBusy || !bulkCanStop} title={bulkCanStop ? undefined : shareBlocked}>
               {t("guest.stop")}
             </Button>
           </ConfirmAction>
@@ -408,6 +451,16 @@ export const GuestTable = memo(function GuestTable({
                   snapshot: userHasPermission(user, `${prefix}.snapshot.create` as Permission, hid, guest),
                   delete: userHasPermission(user, `${prefix}.delete` as Permission, hid, guest),
                 };
+                const share = {
+                  start: shareAllows(hid, `${prefix}.start` as Permission),
+                  shutdown: shareAllows(hid, `${prefix}.shutdown` as Permission),
+                  reboot: shareAllows(hid, `${prefix}.reboot` as Permission),
+                  console: shareAllows(hid, `${prefix}.console` as Permission),
+                  files: shareAllows(hid, [guestFilePermission(row, "read"), guestFilePermission(row, "write")]),
+                  snapshot: shareAllows(hid, `${prefix}.snapshot.create` as Permission),
+                  delete: shareAllows(hid, `${prefix}.delete` as Permission),
+                };
+                const shareBlocked = t("peers.shareBlocked");
                 const kindLabel = row === "vm" ? "VM" : "LXC";
                 const detailBase = row === "vm" ? "vms" : "containers";
                 const rowTags = parseGuestTags(g.tags);
@@ -501,94 +554,101 @@ export const GuestTable = memo(function GuestTable({
                     <td className="px-3 py-2">{formatUptime(g.uptime)}</td>
                     <td className="px-3 py-2">
                       <div className="flex gap-1">
-                        {perms.start ? (
-                          <Button size="icon" variant="ghost" title={t("guest.start")} disabled={!stopped || rowBusy} onClick={() => void guestAction(hid, g.node, g.vmid, "start", row)}>
-                            <Play className="h-4 w-4" />
-                          </Button>
-                        ) : null}
-                        {perms.shutdown ? (
-                          <Button size="icon" variant="ghost" title={t("guest.shutdown")} disabled={!running || rowBusy} onClick={() => void guestAction(hid, g.node, g.vmid, "shutdown", row)}>
-                            <Square className="h-4 w-4" />
-                          </Button>
-                        ) : null}
-                        {perms.reboot ? (
-                          <Button size="icon" variant="ghost" title={t("guest.reboot")} disabled={!running || rowBusy} onClick={() => void guestAction(hid, g.node, g.vmid, "reboot", row)}>
-                            <RotateCcw className="h-4 w-4" />
-                          </Button>
-                        ) : null}
-                        {perms.snapshot ? (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title={t("guest.createSnapshot")}
-                            aria-label={t("guest.createSnapshot")}
-                            disabled={rowBusy}
-                            onClick={() =>
-                              void guestAction(hid, g.node, g.vmid, "snapshot", row, { snapname: `snap-${Date.now()}` })
-                            }
-                          >
-                            <Camera className="h-4 w-4" />
-                          </Button>
-                        ) : null}
-                        {perms.console ? (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title={t("guest.console")}
-                            aria-label={t("guest.console")}
-                            onClick={() =>
-                              openGuestToolWindow({
-                                kind: row,
-                                hostId: hid,
-                                node: g.node,
-                                vmid: g.vmid,
-                                tool: "console",
-                              })
-                            }
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title={lockTitle(perms.start, share.start, t("guest.start"))}
+                          disabled={!stopped || rowBusy || !perms.start || !share.start}
+                          onClick={() => void guestAction(hid, g.node, g.vmid, "start", row)}
+                        >
+                          <Play className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title={lockTitle(perms.shutdown, share.shutdown, t("guest.shutdown"))}
+                          disabled={!running || rowBusy || !perms.shutdown || !share.shutdown}
+                          onClick={() => void guestAction(hid, g.node, g.vmid, "shutdown", row)}
+                        >
+                          <Square className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title={lockTitle(perms.reboot, share.reboot, t("guest.reboot"))}
+                          disabled={!running || rowBusy || !perms.reboot || !share.reboot}
+                          onClick={() => void guestAction(hid, g.node, g.vmid, "reboot", row)}
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title={lockTitle(perms.snapshot, share.snapshot, t("guest.createSnapshot"))}
+                          aria-label={lockTitle(perms.snapshot, share.snapshot, t("guest.createSnapshot"))}
+                          disabled={rowBusy || !perms.snapshot || !share.snapshot}
+                          onClick={() =>
+                            void guestAction(hid, g.node, g.vmid, "snapshot", row, { snapname: `snap-${Date.now()}` })
+                          }
+                        >
+                          <Camera className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title={lockTitle(perms.console, share.console, t("guest.console"))}
+                          aria-label={lockTitle(perms.console, share.console, t("guest.console"))}
+                          disabled={!perms.console || !share.console}
+                          onClick={() =>
+                            openGuestToolWindow({
+                              kind: row,
+                              hostId: hid,
+                              node: g.node,
+                              vmid: g.vmid,
+                              tool: "console",
+                            })
+                          }
                           >
                             <Terminal className="h-4 w-4" />
                           </Button>
-                        ) : null}
-                        {perms.files ? (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title={lockTitle(perms.files, share.files, t("files.show"))}
+                          aria-label={lockTitle(perms.files, share.files, t("files.show"))}
+                          disabled={!perms.files || !share.files}
+                          onClick={() =>
+                            openGuestToolWindow({
+                              kind: row,
+                              hostId: hid,
+                              node: g.node,
+                              vmid: g.vmid,
+                              tool: "files",
+                            })
+                          }
+                        >
+                          <FolderOpen className="h-4 w-4" />
+                        </Button>
+                        <GuestDeleteDialog
+                          hostId={hid}
+                          kind={row}
+                          vmid={g.vmid}
+                          name={g.name}
+                          kindLabel={kindLabel}
+                          disabled={!perms.delete || !share.delete}
+                          onConfirm={(backupVolids) => guestAction(hid, g.node, g.vmid, "delete", row, { backupVolids })}
+                        >
                           <Button
                             size="icon"
                             variant="ghost"
-                            title={t("files.show")}
-                            aria-label={t("files.show")}
-                            onClick={() =>
-                              openGuestToolWindow({
-                                kind: row,
-                                hostId: hid,
-                                node: g.node,
-                                vmid: g.vmid,
-                                tool: "files",
-                              })
-                            }
+                            disabled={rowBusy || !perms.delete || !share.delete}
+                            title={lockTitle(perms.delete, share.delete, t("guest.delete"))}
+                            aria-label={lockTitle(perms.delete, share.delete, t("guest.delete"))}
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                           >
-                            <FolderOpen className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4" />
                           </Button>
-                        ) : null}
-                        {perms.delete ? (
-                          <GuestDeleteDialog
-                            hostId={hid}
-                            kind={row}
-                            vmid={g.vmid}
-                            name={g.name}
-                            kindLabel={kindLabel}
-                            onConfirm={(backupVolids) => guestAction(hid, g.node, g.vmid, "delete", row, { backupVolids })}
-                          >
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              disabled={rowBusy}
-                              title={t("guest.delete")}
-                              aria-label={t("guest.delete")}
-                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </GuestDeleteDialog>
-                        ) : null}
+                        </GuestDeleteDialog>
                       </div>
                     </td>
                   </tr>
@@ -633,6 +693,10 @@ export const GuestTable = memo(function GuestTable({
               hid,
               guest,
             );
+            const shareStart = shareAllows(hid, `${prefix}.start` as Permission);
+            const shareShutdown = shareAllows(hid, `${prefix}.shutdown` as Permission);
+            const shareConsole = shareAllows(hid, `${prefix}.console` as Permission);
+            const shareFiles = shareAllows(hid, [guestFilePermission(row, "read"), guestFilePermission(row, "write")]);
             return (
               <article key={key} className="rounded-[4px] border border-border bg-card/40 p-3">
                 <div className="flex items-start gap-2">
@@ -669,40 +733,46 @@ export const GuestTable = memo(function GuestTable({
                       <GuestDiskBar guest={g} />
                     </div>
                     <div className="mt-2 flex flex-wrap gap-1">
-                      {canStart ? (
-                        <Button size="icon" variant="ghost" title={t("guest.start")} disabled={!stopped || rowBusy} onClick={() => void guestAction(hid, g.node, g.vmid, "start", row)}>
-                          <Play className="h-4 w-4" />
-                        </Button>
-                      ) : null}
-                      {canShutdown ? (
-                        <Button size="icon" variant="ghost" title={t("guest.shutdown")} disabled={!running || rowBusy} onClick={() => void guestAction(hid, g.node, g.vmid, "shutdown", row)}>
-                          <Square className="h-4 w-4" />
-                        </Button>
-                      ) : null}
-                      {canConsole ? (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          title={t("guest.console")}
-                          onClick={() =>
-                            openGuestToolWindow({ kind: row, hostId: hid, node: g.node, vmid: g.vmid, tool: "console" })
-                          }
-                        >
-                          <Terminal className="h-4 w-4" />
-                        </Button>
-                      ) : null}
-                      {canFiles ? (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          title={t("files.show")}
-                          onClick={() =>
-                            openGuestToolWindow({ kind: row, hostId: hid, node: g.node, vmid: g.vmid, tool: "files" })
-                          }
-                        >
-                          <FolderOpen className="h-4 w-4" />
-                        </Button>
-                      ) : null}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        title={lockTitle(canStart, shareStart, t("guest.start"))}
+                        disabled={!stopped || rowBusy || !canStart || !shareStart}
+                        onClick={() => void guestAction(hid, g.node, g.vmid, "start", row)}
+                      >
+                        <Play className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        title={lockTitle(canShutdown, shareShutdown, t("guest.shutdown"))}
+                        disabled={!running || rowBusy || !canShutdown || !shareShutdown}
+                        onClick={() => void guestAction(hid, g.node, g.vmid, "shutdown", row)}
+                      >
+                        <Square className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        title={lockTitle(canConsole, shareConsole, t("guest.console"))}
+                        disabled={!canConsole || !shareConsole}
+                        onClick={() =>
+                          openGuestToolWindow({ kind: row, hostId: hid, node: g.node, vmid: g.vmid, tool: "console" })
+                        }
+                      >
+                        <Terminal className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        title={lockTitle(canFiles, shareFiles, t("files.show"))}
+                        disabled={!canFiles || !shareFiles}
+                        onClick={() =>
+                          openGuestToolWindow({ kind: row, hostId: hid, node: g.node, vmid: g.vmid, tool: "files" })
+                        }
+                      >
+                        <FolderOpen className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 </div>

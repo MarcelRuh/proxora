@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useState } from "react";
 import { useCan, useCanAny } from "@/components/auth/session-user";
 import { peerHostAllowsPermission } from "@/lib/federation-access";
+import { actionDeniedTitle } from "@/lib/action-lock";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { PublicHost } from "@/lib/types";
 import { HostEditorDialog } from "@/components/hosts/host-editor";
@@ -69,7 +70,14 @@ export default function HostDetailPage() {
 
   const remote = meta?.host.origin === "PEER";
   const canHostAdmin = !remote;
+  const shareBlocked = t("peers.shareBlocked");
+  const noPerm = t("common.noPermission");
   const canPeerConsole = peerHostAllowsPermission(meta?.host ?? { origin: "LOCAL" }, "hosts.console");
+  const editDenied = actionDeniedTitle(canEdit, canHostAdmin, shareBlocked, noPerm);
+  const maintenanceDenied = actionDeniedTitle(canEdit, canHostAdmin, shareBlocked, noPerm);
+  const consoleDenied = actionDeniedTitle(canConsole, canPeerConsole, shareBlocked, noPerm);
+  const rebootDenied = actionDeniedTitle(canReboot, canHostAdmin, shareBlocked, noPerm);
+  const shutdownDenied = actionDeniedTitle(canShutdown, canHostAdmin, shareBlocked, noPerm);
   const nodes = data?.nodes ?? [];
 
   async function power(action: "reboot" | "shutdown", node: string) {
@@ -93,16 +101,29 @@ export default function HostDetailPage() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {meta ? <HostStateBadge state={meta.host.connectionState} /> : null}
-            {canEdit && meta && canHostAdmin ? (
-              <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            {meta ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={Boolean(editDenied)}
+                title={editDenied}
+                onClick={() => setEditOpen(true)}
+              >
                 {t("hosts.edit")}
               </Button>
             ) : null}
-            {meta && canHostAdmin ? <HostMaintenanceButton host={meta.host} onDone={() => {
-              void qc.invalidateQueries({ queryKey: ["hosts"] });
-              void qc.invalidateQueries({ queryKey: ["host-meta", params.id] });
-              void qc.invalidateQueries({ queryKey: ["host", params.id] });
-            }} /> : null}
+            {meta ? (
+              <HostMaintenanceButton
+                host={meta.host}
+                disabled={Boolean(maintenanceDenied)}
+                disabledReason={maintenanceDenied}
+                onDone={() => {
+                  void qc.invalidateQueries({ queryKey: ["hosts"] });
+                  void qc.invalidateQueries({ queryKey: ["host-meta", params.id] });
+                  void qc.invalidateQueries({ queryKey: ["host", params.id] });
+                }}
+              />
+            ) : null}
           </div>
         }
       />
@@ -120,20 +141,28 @@ export default function HostDetailPage() {
                 <span className="ml-2 text-sm font-normal text-muted-foreground">{item.online}</span>
               </CardTitle>
               <div className="flex flex-wrap gap-2">
-                {canConsole && canPeerConsole ? (
+                {consoleDenied ? (
+                  <Button size="sm" disabled title={consoleDenied}>
+                    {t("hosts.terminal")}
+                  </Button>
+                ) : (
                   <Button size="sm" asChild>
                     <Link href={`/hosts/${params.id}/console?node=${encodeURIComponent(item.node)}`}>
                       {t("hosts.terminal")}
                     </Link>
                   </Button>
-                ) : null}
+                )}
                 <Button size="sm" variant="outline" asChild>
                   <Link href={`/updates?host=${params.id}`}>{t("nav.updates")}</Link>
                 </Button>
                 <Button size="sm" variant="outline" asChild>
                   <Link href="/backups">{t("nav.backups")}</Link>
                 </Button>
-                {canReboot && canHostAdmin ? (
+                {rebootDenied ? (
+                  <Button size="sm" variant="destructive" disabled title={rebootDenied}>
+                    {t("guest.reboot")}
+                  </Button>
+                ) : (
                   <ConfirmAction
                     title={t("hosts.rebootTitle", { node: item.node })}
                     description={t("hosts.rebootBody")}
@@ -145,8 +174,12 @@ export default function HostDetailPage() {
                       {t("guest.reboot")}
                     </Button>
                   </ConfirmAction>
-                ) : null}
-                {canShutdown && canHostAdmin ? (
+                )}
+                {shutdownDenied ? (
+                  <Button size="sm" variant="destructive" disabled title={shutdownDenied}>
+                    {t("guest.shutdown")}
+                  </Button>
+                ) : (
                   <ConfirmAction
                     title={t("hosts.shutdownTitle", { node: item.node })}
                     description={t("hosts.shutdownBody")}
@@ -158,7 +191,7 @@ export default function HostDetailPage() {
                       {t("guest.shutdown")}
                     </Button>
                   </ConfirmAction>
-                ) : null}
+                )}
               </div>
             </CardHeader>
             {st ? (

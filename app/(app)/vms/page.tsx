@@ -25,7 +25,11 @@ export default function VmsPage() {
             <Button asChild>
               <Link href="/vms/create">{t("vms.create")}</Link>
             </Button>
-          ) : undefined
+          ) : (
+            <Button disabled title={t("common.noPermission")}>
+              {t("vms.create")}
+            </Button>
+          )
         }
       />
       <QueryGate isLoading={false} error={error} onRetry={() => void refetch()}>

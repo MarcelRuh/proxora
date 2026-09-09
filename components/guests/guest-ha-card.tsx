@@ -61,38 +61,45 @@ export function GuestHaCard({
       <CardContent className="space-y-3 text-sm">
         <p className="text-muted-foreground">{t("ha.body")}</p>
         <p>{active ? t("ha.enabled") : t("ha.disabled")}</p>
-        {canEdit ? (
-          <>
-            <div className="space-y-1">
-              <Label>{t("ha.group")}</Label>
-              <select
-                className="flex h-9 w-full max-w-md rounded-[4px] border border-input bg-white/[0.03] px-3 text-sm"
-                value={group || currentGroup}
-                onChange={(e) => setGroup(e.target.value)}
-              >
-                <option value="">{t("ha.noGroup")}</option>
-                {data.groups.map((g) => {
-                  const name = String(g.group ?? g.name ?? "");
-                  return (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" onClick={() => save.mutate(true)} disabled={save.isPending}>
-                {t("ha.enable")}
-              </Button>
-              {active ? (
-                <Button size="sm" variant="outline" onClick={() => save.mutate(false)} disabled={save.isPending}>
-                  {t("ha.disable")}
-                </Button>
-              ) : null}
-            </div>
-          </>
-        ) : null}
+        <fieldset disabled={!canEdit} className="space-y-3 border-0 p-0 disabled:opacity-50">
+          <div className="space-y-1">
+            <Label>{t("ha.group")}</Label>
+            <select
+              className="flex h-9 w-full max-w-md rounded-[4px] border border-input bg-white/[0.03] px-3 text-sm"
+              value={group || currentGroup}
+              onChange={(e) => setGroup(e.target.value)}
+            >
+              <option value="">{t("ha.noGroup")}</option>
+              {data.groups.map((g) => {
+                const name = String(g.group ?? g.name ?? "");
+                return (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              onClick={() => save.mutate(true)}
+              disabled={save.isPending || !canEdit}
+              title={canEdit ? undefined : t("common.noPermission")}
+            >
+              {t("ha.enable")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => save.mutate(false)}
+              disabled={save.isPending || !canEdit || !active}
+              title={canEdit ? undefined : t("common.noPermission")}
+            >
+              {t("ha.disable")}
+            </Button>
+          </div>
+        </fieldset>
       </CardContent>
     </Card>
   );

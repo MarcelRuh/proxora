@@ -11,14 +11,18 @@ import type { PublicHost } from "@/lib/types";
 export function HostMaintenanceButton({
   host,
   onDone,
+  disabled,
+  disabledReason,
 }: {
   host: PublicHost;
   onDone: () => void;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
   const { t } = useI18n();
   const canEdit = useCan("hosts.update", host.id);
-  if (!canEdit) return null;
-
+  const blocked = Boolean(disabled) || !canEdit;
+  const title = disabledReason ?? (!canEdit ? t("common.noPermission") : undefined);
   const inMaintenance = host.connectionState === "MAINTENANCE";
 
   async function apply(state: "MAINTENANCE" | "ONLINE") {
@@ -32,6 +36,14 @@ export function HostMaintenanceButton({
       toast.success(state === "MAINTENANCE" ? t("hosts.maintenanceSet") : t("hosts.maintenanceCleared"));
     }
     onDone();
+  }
+
+  if (blocked) {
+    return (
+      <Button size="sm" variant="outline" disabled title={title}>
+        {inMaintenance ? t("hosts.maintenanceOff") : t("hosts.maintenanceOn")}
+      </Button>
+    );
   }
 
   if (inMaintenance) {

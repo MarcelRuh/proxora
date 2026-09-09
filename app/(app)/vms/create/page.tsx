@@ -1,7 +1,7 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -12,6 +12,7 @@ import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { CreateProgressDialog } from "@/components/guests/create-progress-dialog";
+import { invalidateDashboardQueries } from "@/components/dashboard/use-dashboard";
 import { bytesToSize } from "@/lib/utils";
 import { isWindowsIso, suggestVirtioIso } from "@/lib/iso-images";
 import { storageIsIscsi, vmDiskStorages, VM_DISK_BUSES, VM_SCSI_CONTROLLERS } from "@/lib/vm-storage";
@@ -31,6 +32,7 @@ const selectClass =
 export default function CreateVmPage() {
   const { t } = useI18n();
   const router = useRouter();
+  const qc = useQueryClient();
   const { data: hosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
@@ -164,6 +166,8 @@ export default function CreateVmPage() {
       if (res.startError) toast.error(t("create.startFailed", { error: res.startError }));
       else toast.success(t("vms.created"));
       setProgress("done");
+      void invalidateDashboardQueries(qc);
+      router.replace(`/vms/${form.hostId}/${encodeURIComponent(node)}/${vmid}`);
     },
     onError: (e: Error) => {
       setProgressError(e.message);
@@ -171,14 +175,24 @@ export default function CreateVmPage() {
     },
   });
 
-  useEffect(() => {
-    if (progress !== "done" || !createdRef.current) return;
+  const goToCreated = useCallback(() => {
     const target = createdRef.current;
-    const timer = window.setTimeout(() => {
-      router.push(`/vms/${target.hostId}/${target.node}/${target.vmid}`);
-    }, 800);
-    return () => window.clearTimeout(timer);
-  }, [progress, router]);
+    if (!target) return;
+    router.replace(`/vms/${target.hostId}/${encodeURIComponent(target.node)}/${target.vmid}`);
+  }, [router]);
+
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
+  const closeProgress = useCallback(() => {
+    if (progressRef.current === "running") return;
+    if (progressRef.current === "done") {
+      goToCreated();
+      return;
+    }
+    setProgress("idle");
+    setProgressError(null);
+  }, [goToCreated]);
 
   const canSubmit =
     Boolean(form.hostId) &&
@@ -440,11 +454,7 @@ export default function CreateVmPage() {
         error={progressError}
         title={t("create.progressVm")}
         detail={form.name.trim() || t("create.progressVm")}
-        onClose={() => {
-          if (progress === "running") return;
-          setProgress("idle");
-          setProgressError(null);
-        }}
+        onClose={closeProgress}
       />
     </div>
   );

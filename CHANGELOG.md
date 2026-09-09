@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.0.4] – 2026-09-09
+
+### Changed
+
+- Actions blocked by a share level (e.g. view-only) or a missing role permission stay visible but disabled, with a tooltip explaining why.
+
+### Fixed
+
+- Creating a container or VM closes the progress dialog when the task finishes and opens the new guest page.
+
 ## [2.0.3] – 2026-09-08
 
 ### Fixed

@@ -227,7 +227,7 @@ export function GuestConfigForm({
   const metaKeys = primary.filter((k) => META_KEYS.includes(k));
 
   return (
-    <fieldset disabled={readOnly} className="space-y-4 border-0 p-0">
+    <fieldset disabled={readOnly} className="space-y-4 border-0 p-0 disabled:opacity-60">
       <Section title={t("config.cpuRam")} description={t("config.cpuRamBody")}>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {cpuKeys.map((key) =>
@@ -527,7 +527,16 @@ export function GuestConfigForm({
         </div>
       </Section>
 
-      {readOnly ? null : (
+      {readOnly ? (
+      <div className="sticky bottom-4 flex justify-end gap-2 rounded-xl border border-border bg-card/95 p-3 shadow-sm backdrop-blur">
+        <Button type="button" variant="outline" disabled title={t("common.noPermission")}>
+          {t("config.reset")}
+        </Button>
+        <Button type="button" disabled title={t("common.noPermission")}>
+          {t("config.save")}
+        </Button>
+      </div>
+      ) : (
       <div className="sticky bottom-4 flex justify-end gap-2 rounded-xl border border-border bg-card/95 p-3 shadow-sm backdrop-blur">
         <Button type="button" variant="outline" onClick={() => setForm(original)} disabled={busy}>
           {t("config.reset")}

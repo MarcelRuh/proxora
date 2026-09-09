@@ -1,9 +1,9 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +16,7 @@ import { useCreateOptions } from "@/components/guests/use-create-options";
 import { MemoryField } from "@/components/guests/memory-field";
 import { HostSelect, hostAllowsCreate } from "@/components/guests/host-select";
 import { CreateProgressDialog } from "@/components/guests/create-progress-dialog";
+import { invalidateDashboardQueries } from "@/components/dashboard/use-dashboard";
 import { DEFAULT_GUEST_NETWORK, shouldSyncGuestIp } from "@/lib/create-ip";
 import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
@@ -26,6 +27,7 @@ const selectClass =
 export default function CreateLxcPage() {
   const { t } = useI18n();
   const router = useRouter();
+  const qc = useQueryClient();
   const { data: hosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
@@ -139,6 +141,8 @@ export default function CreateLxcPage() {
       if (res.startError) toast.error(t("create.startFailed", { error: res.startError }));
       else toast.success(t("lxc.created"));
       setProgress("done");
+      void invalidateDashboardQueries(qc);
+      router.replace(`/containers/${form.hostId}/${encodeURIComponent(node)}/${vmid}`);
     },
     onError: (e: Error) => {
       setProgressError(e.message);
@@ -146,14 +150,24 @@ export default function CreateLxcPage() {
     },
   });
 
-  useEffect(() => {
-    if (progress !== "done" || !createdRef.current) return;
+  const goToCreated = useCallback(() => {
     const target = createdRef.current;
-    const timer = window.setTimeout(() => {
-      router.push(`/containers/${target.hostId}/${target.node}/${target.vmid}`);
-    }, 800);
-    return () => window.clearTimeout(timer);
-  }, [progress, router]);
+    if (!target) return;
+    router.replace(`/containers/${target.hostId}/${encodeURIComponent(target.node)}/${target.vmid}`);
+  }, [router]);
+
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
+  const closeProgress = useCallback(() => {
+    if (progressRef.current === "running") return;
+    if (progressRef.current === "done") {
+      goToCreated();
+      return;
+    }
+    setProgress("idle");
+    setProgressError(null);
+  }, [goToCreated]);
 
   const canSubmit =
     Boolean(form.hostId) &&
@@ -308,11 +322,7 @@ export default function CreateLxcPage() {
         error={progressError}
         title={t("create.progressLxc")}
         detail={form.hostname.trim() || t("create.progressLxc")}
-        onClose={() => {
-          if (progress === "running") return;
-          setProgress("idle");
-          setProgressError(null);
-        }}
+        onClose={closeProgress}
       />
     </div>
   );

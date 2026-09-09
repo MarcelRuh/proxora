@@ -18,6 +18,7 @@ export function GuestDeleteDialog({
   vmid,
   name,
   kindLabel,
+  disabled,
   onConfirm,
   children,
 }: {
@@ -26,6 +27,7 @@ export function GuestDeleteDialog({
   vmid: number;
   name: string;
   kindLabel: string;
+  disabled?: boolean;
   onConfirm: (backupVolids: string[]) => Promise<void>;
   children: React.ReactNode;
 }) {
@@ -61,7 +63,7 @@ export function GuestDeleteDialog({
     <>
       <span
         onClick={() => {
-          if (!busy) {
+          if (!busy && !disabled) {
             setSelected(new Set());
             setOpen(true);
           }

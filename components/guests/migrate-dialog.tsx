@@ -23,6 +23,8 @@ export function MigrateDialog({
   vmid,
   path,
   running,
+  disabled,
+  disabledReason,
   onDone,
 }: {
   kind: "vm" | "lxc";
@@ -31,6 +33,8 @@ export function MigrateDialog({
   vmid: number;
   path: string;
   running: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
   onDone: (target: string) => void;
 }) {
   const { t } = useI18n();
@@ -63,7 +67,7 @@ export function MigrateDialog({
 
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
+      <Button variant="outline" disabled={disabled} title={disabled ? disabledReason : undefined} onClick={() => setOpen(true)}>
         {t("guest.migrate")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>

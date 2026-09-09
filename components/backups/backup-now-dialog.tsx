@@ -16,12 +16,16 @@ export function BackupNowDialog({
   node,
   vmid,
   kind,
+  disabled,
+  disabledReason,
   onDone,
 }: {
   hostId: string;
   node: string;
   vmid: number;
   kind: "vm" | "lxc";
+  disabled?: boolean;
+  disabledReason?: string;
   onDone?: () => void;
 }) {
   const { t } = useI18n();
@@ -102,7 +106,7 @@ export function BackupNowDialog({
 
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
+      <Button variant="outline" disabled={disabled} title={disabled ? disabledReason : undefined} onClick={() => setOpen(true)}>
         {t("backup.now")}
       </Button>
       <Dialog

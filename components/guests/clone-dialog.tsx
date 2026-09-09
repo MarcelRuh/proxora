@@ -15,6 +15,8 @@ export function CloneDialog({
   vmid,
   name,
   path,
+  disabled,
+  disabledReason,
   onDone,
 }: {
   kind: "vm" | "lxc";
@@ -22,6 +24,8 @@ export function CloneDialog({
   vmid: number;
   name: string;
   path: string;
+  disabled?: boolean;
+  disabledReason?: string;
   onDone: () => void;
 }) {
   const { t } = useI18n();
@@ -71,7 +75,7 @@ export function CloneDialog({
 
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
+      <Button variant="outline" disabled={disabled} title={disabled ? disabledReason : undefined} onClick={() => setOpen(true)}>
         {t("guest.clone")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>

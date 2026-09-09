@@ -16,6 +16,7 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan, useSessionUser } from "@/components/auth/session-user";
 import { userHasPermission } from "@/lib/permissions";
 import { peerHostAllowsPermission } from "@/lib/federation-access";
+import { actionDeniedTitle } from "@/lib/action-lock";
 import { HostEditorDialog } from "@/components/hosts/host-editor";
 import { HostMaintenanceButton } from "@/components/hosts/host-maintenance";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
@@ -44,7 +45,15 @@ export default function HostsPage() {
         kicker={t("hosts.kicker")}
         title={t("hosts.title")}
         description={t("hosts.description")}
-        actions={canCreate ? <Button onClick={() => setCreateOpen(true)}>{t("hosts.add")}</Button> : undefined}
+        actions={
+          canCreate ? (
+            <Button onClick={() => setCreateOpen(true)}>{t("hosts.add")}</Button>
+          ) : (
+            <Button disabled title={t("common.noPermission")}>
+              {t("hosts.add")}
+            </Button>
+          )
+        }
       />
       <QueryGate isLoading={false} error={error} onRetry={() => void refetch()}>
         {isLoading ? (
@@ -76,7 +85,15 @@ export default function HostsPage() {
           <EmptyState
             title={t("hosts.empty")}
             description={t("hosts.emptyBody")}
-            action={canCreate ? <Button onClick={() => setCreateOpen(true)}>{t("hosts.add")}</Button> : undefined}
+            action={
+              canCreate ? (
+                <Button onClick={() => setCreateOpen(true)}>{t("hosts.add")}</Button>
+              ) : (
+                <Button disabled title={t("common.noPermission")}>
+                  {t("hosts.add")}
+                </Button>
+              )
+            }
           />
         )}
       </QueryGate>
@@ -126,11 +143,22 @@ function HostSection({
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{title}</h2>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {hosts.map((host) => {
-          const canConsole =
-            userHasPermission(user, "hosts.console", host.id) && peerHostAllowsPermission(host, "hosts.console");
-          const canEdit = !remote && userHasPermission(user, "hosts.update", host.id);
-          const canCreds = !remote && userHasPermission(user, "hosts.credentials", host.id);
-          const canDelete = !remote && userHasPermission(user, "hosts.delete", host.id);
+          const noPerm = t("common.noPermission");
+          const shareBlocked = t("peers.shareBlocked");
+          const canConsoleRbac = userHasPermission(user, "hosts.console", host.id);
+          const canConsoleShare = peerHostAllowsPermission(host, "hosts.console");
+          const consoleDenied = actionDeniedTitle(canConsoleRbac, canConsoleShare, shareBlocked, noPerm);
+          const canEditRbac =
+            userHasPermission(user, "hosts.update", host.id) || userHasPermission(user, "hosts.credentials", host.id);
+          const editDenied = actionDeniedTitle(canEditRbac, !remote, shareBlocked, noPerm);
+          const canDeleteRbac = userHasPermission(user, "hosts.delete", host.id);
+          const deleteDenied = actionDeniedTitle(canDeleteRbac, !remote, shareBlocked, noPerm);
+          const maintenanceDenied = actionDeniedTitle(
+            userHasPermission(user, "hosts.update", host.id),
+            !remote,
+            shareBlocked,
+            noPerm,
+          );
           return (
           <Card key={host.id}>
             <CardHeader className="flex flex-row items-start justify-between">
@@ -154,16 +182,24 @@ function HostSection({
                 <Button size="sm" asChild>
                   <Link href={`/hosts/${host.id}`}>{t("hosts.open")}</Link>
                 </Button>
-                {canConsole ? (
+                {consoleDenied ? (
+                  <Button size="sm" variant="outline" disabled title={consoleDenied}>
+                    {t("hosts.terminal")}
+                  </Button>
+                ) : (
                   <Button size="sm" variant="outline" asChild>
                     <Link href={`/hosts/${host.id}/console`}>{t("hosts.terminal")}</Link>
                   </Button>
-                ) : null}
-                {canEdit || canCreds ? (
-                  <Button size="sm" variant="outline" onClick={() => onEdit(host)}>
-                    {t("hosts.edit")}
-                  </Button>
-                ) : null}
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={Boolean(editDenied)}
+                  title={editDenied}
+                  onClick={() => onEdit(host)}
+                >
+                  {t("hosts.edit")}
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
@@ -179,8 +215,17 @@ function HostSection({
                 >
                   {t("hosts.test")}
                 </Button>
-                {remote ? null : <HostMaintenanceButton host={host} onDone={onRefresh} />}
-                {canDelete ? (
+                <HostMaintenanceButton
+                  host={host}
+                  onDone={onRefresh}
+                  disabled={Boolean(maintenanceDenied)}
+                  disabledReason={maintenanceDenied}
+                />
+                {deleteDenied ? (
+                  <Button size="sm" variant="destructive" disabled title={deleteDenied}>
+                    {t("hosts.remove")}
+                  </Button>
+                ) : (
                   <ConfirmAction
                     title={t("hosts.removeTitle", { name: host.name })}
                     description={t("hosts.removeBody")}
@@ -196,7 +241,7 @@ function HostSection({
                       {t("hosts.remove")}
                     </Button>
                   </ConfirmAction>
-                ) : null}
+                )}
               </div>
             </CardContent>
           </Card>

@@ -25,7 +25,11 @@ export default function ContainersPage() {
             <Button asChild>
               <Link href="/containers/create">{t("lxc.create")}</Link>
             </Button>
-          ) : undefined
+          ) : (
+            <Button disabled title={t("common.noPermission")}>
+              {t("lxc.create")}
+            </Button>
+          )
         }
       />
       <QueryGate isLoading={false} error={error} onRetry={() => void refetch()}>

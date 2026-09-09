@@ -11,6 +11,7 @@ export function ConfirmAction({
   description,
   actionLabel,
   destructive,
+  disabled,
   onConfirm,
   children,
 }: {
@@ -18,6 +19,7 @@ export function ConfirmAction({
   description: string;
   actionLabel: string;
   destructive?: boolean;
+  disabled?: boolean;
   onConfirm: () => Promise<void>;
   children: React.ReactNode;
 }) {
@@ -29,7 +31,7 @@ export function ConfirmAction({
     <>
       <span
         onClick={() => {
-          if (!busy) setOpen(true);
+          if (!busy && !disabled) setOpen(true);
         }}
       >
         {children}

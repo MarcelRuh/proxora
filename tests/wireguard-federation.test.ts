@@ -200,6 +200,11 @@ describe("federation share levels", () => {
     expect(shareHasPermission("control", null, "updates.upgrade")).toBe(false);
     expect(shareHasPermission("create", null, "hosts.console")).toBe(false);
     expect(shareHasPermission("view", null, "updates.view")).toBe(true);
+    expect(shareHasPermission("view", null, "vm.start")).toBe(false);
+    expect(shareHasPermission("view", null, "lxc.console")).toBe(false);
+    expect(shareHasPermission("view", null, "vm.delete")).toBe(false);
+    expect(peerHostAllowsPermission({ origin: "PEER", shareLevel: "view", sharePermissions: null }, "lxc.start")).toBe(false);
+    expect(peerHostAllowsPermission({ origin: "PEER", shareLevel: "view", sharePermissions: null }, "lxc.view")).toBe(true);
     expect(shareHasPermission("control", ["hosts.view", "updates.view", "updates.check", "updates.upgrade"], "updates.upgrade")).toBe(true);
     expect(shareHasPermission("control", ["hosts.view", "updates.upgrade"], ["hosts.console", "updates.upgrade"])).toBe(true);
     expect(

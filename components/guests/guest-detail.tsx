@@ -28,9 +28,11 @@ import { QueryGate } from "@/components/layout/query-gate";
 import { parseGuestConfigIps } from "@/lib/create-ip";
 import { invalidateDashboardQueries } from "@/components/dashboard/use-dashboard";
 import { peerHostAllowsPermission } from "@/lib/federation-access";
+import { actionDeniedTitle } from "@/lib/action-lock";
 import { hostAllowsMigrate } from "@/lib/guest-migrate";
 import { openGuestToolWindow } from "@/lib/guest-tool-window";
 import { isWindowsOstype } from "@/lib/iso-images";
+import type { Permission } from "@/lib/permissions";
 import { GuestHaCard } from "@/components/guests/guest-ha-card";
 import { GuestFirewallCard } from "@/components/guests/guest-firewall-card";
 
@@ -108,7 +110,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const { data: hostStatus } = useQuery({
     queryKey: ["host", params.hostId],
     queryFn: () => api<{ nodes: Array<{ node: string; online: string }> }>(`/api/hosts/${params.hostId}/status`),
-    enabled: Boolean(can.migrate && isCluster),
+    enabled: Boolean(isCluster),
     staleTime: 20_000,
   });
   const [restoreFile, setRestoreFile] = useState<BackupFile | null>(null);
@@ -187,14 +189,36 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const ips = data?.ips?.length ? data.ips : parseGuestConfigIps(config);
   const hostMeta = hosts?.hosts.find((h) => h.id === params.hostId);
   const windows = kind === "vm" && isWindowsOstype(String(config.ostype ?? ""));
-  const canFiles =
-    !windows &&
-    can.files &&
-    peerHostAllowsPermission(
-      hostMeta ?? { origin: "LOCAL" },
+  const shareHost = hostMeta ?? { origin: "LOCAL" as const };
+  const prefix = kind === "vm" ? "vm" : "lxc";
+  const shareBlocked = t("peers.shareBlocked");
+  const noPerm = t("common.noPermission");
+  const deny = (rbac: boolean, shareOk: boolean) => actionDeniedTitle(rbac, shareOk, shareBlocked, noPerm);
+  const gp = (action: string) => `${prefix}.${action}` as Permission;
+  const share = {
+    start: peerHostAllowsPermission(shareHost, gp("start")),
+    shutdown: peerHostAllowsPermission(shareHost, gp("shutdown")),
+    stop: peerHostAllowsPermission(shareHost, gp("force-stop")),
+    reboot: peerHostAllowsPermission(shareHost, gp("reboot")),
+    pause: peerHostAllowsPermission(shareHost, "vm.pause"),
+    resume: peerHostAllowsPermission(shareHost, "vm.resume"),
+    reset: peerHostAllowsPermission(shareHost, "vm.reset"),
+    clone: peerHostAllowsPermission(shareHost, gp("clone")),
+    migrate: peerHostAllowsPermission(shareHost, gp("migrate")),
+    delete: peerHostAllowsPermission(shareHost, gp("delete")),
+    console: peerHostAllowsPermission(shareHost, gp("console")),
+    files: peerHostAllowsPermission(
+      shareHost,
       kind === "vm" ? ["vm.files.read", "vm.files.write"] : ["lxc.files.read", "lxc.files.write"],
-    );
-  const showMigrate = can.migrate && hostAllowsMigrate(isCluster, hostStatus?.nodes, params.node);
+    ),
+    config: peerHostAllowsPermission(shareHost, gp("config")),
+    backup: peerHostAllowsPermission(shareHost, "backup.run"),
+    restore: peerHostAllowsPermission(shareHost, "backup.restore"),
+    snapshotCreate: peerHostAllowsPermission(shareHost, gp("snapshot.create")),
+    snapshotDelete: peerHostAllowsPermission(shareHost, gp("snapshot.delete")),
+    snapshotRollback: peerHostAllowsPermission(shareHost, gp("snapshot.rollback")),
+  };
+  const showMigrate = Boolean(isCluster);
 
   if (isLoading) return <PageSkeleton />;
   if (error) {
@@ -228,67 +252,82 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {can.start ? (
-          <Button disabled={!stopped} onClick={() => void action("start")}>
-            {t("guest.start")}
-          </Button>
-        ) : null}
-        {can.shutdown ? (
-          <Button variant="outline" disabled={!running} onClick={() => void action("shutdown")}>
-            {t("guest.shutdown")}
-          </Button>
-        ) : null}
-        {can.stop ? (
-          <Button variant="outline" disabled={stopped} onClick={() => void action("stop")}>
-            {t("guest.stop")}
-          </Button>
-        ) : null}
-        {can.reboot ? (
-          <Button variant="outline" disabled={!running} onClick={() => void action("reboot")}>
-            {t("guest.reboot")}
-          </Button>
-        ) : null}
+        <Button
+          disabled={Boolean(deny(can.start, share.start)) || !stopped}
+          title={deny(can.start, share.start)}
+          onClick={() => void action("start")}
+        >
+          {t("guest.start")}
+        </Button>
+        <Button
+          variant="outline"
+          disabled={Boolean(deny(can.shutdown, share.shutdown)) || !running}
+          title={deny(can.shutdown, share.shutdown)}
+          onClick={() => void action("shutdown")}
+        >
+          {t("guest.shutdown")}
+        </Button>
+        <Button
+          variant="outline"
+          disabled={Boolean(deny(can.stop, share.stop)) || stopped}
+          title={deny(can.stop, share.stop)}
+          onClick={() => void action("stop")}
+        >
+          {t("guest.stop")}
+        </Button>
+        <Button
+          variant="outline"
+          disabled={Boolean(deny(can.reboot, share.reboot)) || !running}
+          title={deny(can.reboot, share.reboot)}
+          onClick={() => void action("reboot")}
+        >
+          {t("guest.reboot")}
+        </Button>
         {kind === "vm" ? (
           <>
-            {can.pause ? (
-              <Button variant="outline" disabled={!running} onClick={() => void action("pause")}>
-                {t("guest.pause")}
+            <Button
+              variant="outline"
+              disabled={Boolean(deny(can.pause, share.pause)) || !running}
+              title={deny(can.pause, share.pause)}
+              onClick={() => void action("pause")}
+            >
+              {t("guest.pause")}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={Boolean(deny(can.resume, share.resume)) || !paused}
+              title={deny(can.resume, share.resume)}
+              onClick={() => void action("resume")}
+            >
+              {t("guest.resume")}
+            </Button>
+            {deny(can.reset, share.reset) || stopped ? (
+              <Button variant="destructive" disabled title={deny(can.reset, share.reset)}>
+                {t("guest.reset")}
               </Button>
-            ) : null}
-            {can.resume ? (
-              <Button variant="outline" disabled={!paused} onClick={() => void action("resume")}>
-                {t("guest.resume")}
-              </Button>
-            ) : null}
-            {can.reset ? (
-              stopped ? (
-                <Button variant="destructive" disabled>
-                  {t("guest.reset")}
-                </Button>
-              ) : (
-                <ConfirmAction
-                  title={t("guest.resetTitle")}
-                  description={t("guest.resetBody")}
-                  actionLabel={t("guest.reset")}
-                  destructive
-                  onConfirm={() => action("reset", { confirm: true })}
-                >
-                  <Button variant="destructive">{t("guest.reset")}</Button>
-                </ConfirmAction>
-              )
-            ) : null}
+            ) : (
+              <ConfirmAction
+                title={t("guest.resetTitle")}
+                description={t("guest.resetBody")}
+                actionLabel={t("guest.reset")}
+                destructive
+                onConfirm={() => action("reset", { confirm: true })}
+              >
+                <Button variant="destructive">{t("guest.reset")}</Button>
+              </ConfirmAction>
+            )}
           </>
         ) : null}
-        {can.clone ? (
-          <CloneDialog
-            kind={kind}
-            hostId={params.hostId}
-            vmid={Number(params.vmid)}
-            name={name}
-            path={path}
-            onDone={() => void refetch()}
-          />
-        ) : null}
+        <CloneDialog
+          kind={kind}
+          hostId={params.hostId}
+          vmid={Number(params.vmid)}
+          name={name}
+          path={path}
+          disabled={Boolean(deny(can.clone, share.clone))}
+          disabledReason={deny(can.clone, share.clone)}
+          onDone={() => void refetch()}
+        />
         {showMigrate ? (
           <MigrateDialog
             kind={kind}
@@ -297,68 +336,75 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             vmid={Number(params.vmid)}
             path={path}
             running={running || paused}
+            disabled={
+              Boolean(deny(can.migrate, share.migrate)) ||
+              !hostAllowsMigrate(isCluster, hostStatus?.nodes, params.node)
+            }
+            disabledReason={deny(can.migrate, share.migrate)}
             onDone={(target) => {
               router.push(`/${kind === "lxc" ? "containers" : "vms"}/${params.hostId}/${encodeURIComponent(target)}/${params.vmid}`);
             }}
           />
         ) : null}
-        {can.backup ? (
-          <BackupNowDialog
-            hostId={params.hostId}
-            node={params.node}
-            vmid={Number(params.vmid)}
-            kind={kind}
-            onDone={() => void qc.invalidateQueries({ queryKey: ["backups"] })}
-          />
-        ) : null}
-        {can.restore ? (
-          <Button
-            variant="outline"
-            onClick={() => {
-              const latest = (backups?.files ?? []).find((f) => f.vmid === Number(params.vmid));
-              if (latest) {
-                setRestoreFile(latest);
-                return;
-              }
-              void qc
-                .fetchQuery({
-                  queryKey: ["backup-files", params.hostId],
-                  queryFn: () => api<{ files: BackupFile[] }>(`/api/hosts/${params.hostId}/backups/files`),
-                  staleTime: 60_000,
-                })
-                .then((overview) => {
-                  const file = (overview.files ?? []).find((f) => f.vmid === Number(params.vmid));
-                  if (!file) {
-                    toast.error(t("backup.noFiles"));
-                    return;
-                  }
-                  setRestoreFile(file);
-                })
-                .catch((err: unknown) => toast.error(err instanceof Error ? err.message : t("common.failed")));
-            }}
-          >
-            {t("backup.restore")}
-          </Button>
-        ) : null}
-        {can.console ? (
-          <Button
-            variant="outline"
-            onClick={() =>
-              openGuestToolWindow({
-                kind,
-                hostId: params.hostId,
-                node: params.node,
-                vmid: params.vmid,
-                tool: "console",
-              })
+        <BackupNowDialog
+          hostId={params.hostId}
+          node={params.node}
+          vmid={Number(params.vmid)}
+          kind={kind}
+          disabled={Boolean(deny(can.backup, share.backup))}
+          disabledReason={deny(can.backup, share.backup)}
+          onDone={() => void qc.invalidateQueries({ queryKey: ["backups"] })}
+        />
+        <Button
+          variant="outline"
+          disabled={Boolean(deny(can.restore, share.restore))}
+          title={deny(can.restore, share.restore)}
+          onClick={() => {
+            const latest = (backups?.files ?? []).find((f) => f.vmid === Number(params.vmid));
+            if (latest) {
+              setRestoreFile(latest);
+              return;
             }
-          >
-            {t("guest.console")}
-          </Button>
-        ) : null}
-        {canFiles ? (
+            void qc
+              .fetchQuery({
+                queryKey: ["backup-files", params.hostId],
+                queryFn: () => api<{ files: BackupFile[] }>(`/api/hosts/${params.hostId}/backups/files`),
+                staleTime: 60_000,
+              })
+              .then((overview) => {
+                const file = (overview.files ?? []).find((f) => f.vmid === Number(params.vmid));
+                if (!file) {
+                  toast.error(t("backup.noFiles"));
+                  return;
+                }
+                setRestoreFile(file);
+              })
+              .catch((err: unknown) => toast.error(err instanceof Error ? err.message : t("common.failed")));
+          }}
+        >
+          {t("backup.restore")}
+        </Button>
+        <Button
+          variant="outline"
+          disabled={Boolean(deny(can.console, share.console))}
+          title={deny(can.console, share.console)}
+          onClick={() =>
+            openGuestToolWindow({
+              kind,
+              hostId: params.hostId,
+              node: params.node,
+              vmid: params.vmid,
+              tool: "console",
+            })
+          }
+        >
+          {t("guest.console")}
+        </Button>
+        {windows ? null : (
           <Button
             variant="outline"
+            disabled={Boolean(deny(can.files, share.files))}
+            title={deny(can.files, share.files)}
             onClick={() =>
               openGuestToolWindow({
                 kind,
@@ -371,19 +417,24 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           >
             {t("files.show")}
           </Button>
-        ) : null}
-        {can.delete ? (
-          <GuestDeleteDialog
-            hostId={params.hostId}
-            kind={kind}
-            vmid={Number(params.vmid)}
-            name={name}
-            kindLabel={kindLabel}
-            onConfirm={(backupVolids) => action("delete", { confirm: true, backupVolids })}
+        )}
+        <GuestDeleteDialog
+          hostId={params.hostId}
+          kind={kind}
+          vmid={Number(params.vmid)}
+          name={name}
+          kindLabel={kindLabel}
+          disabled={Boolean(deny(can.delete, share.delete))}
+          onConfirm={(backupVolids) => action("delete", { confirm: true, backupVolids })}
+        >
+          <Button
+            variant="destructive"
+            disabled={Boolean(deny(can.delete, share.delete))}
+            title={deny(can.delete, share.delete)}
           >
-            <Button variant="destructive">{t("guest.delete")}</Button>
-          </GuestDeleteDialog>
-        ) : null}
+            {t("guest.delete")}
+          </Button>
+        </GuestDeleteDialog>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -422,7 +473,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           vmid={Number(params.vmid)}
           config={data.config}
           busy={saving}
-          readOnly={!can.config}
+          readOnly={!can.config || !share.config}
           onSave={async (payload) => {
             setSaving(true);
             try {
@@ -454,7 +505,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           kind={kind}
           node={params.node}
           vmid={Number(params.vmid)}
-          canEdit={can.config}
+          canEdit={can.config && share.config}
         />
       ) : null}
 
@@ -463,7 +514,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
         kind={kind}
         node={params.node}
         vmid={Number(params.vmid)}
-        canEdit={can.config}
+        canEdit={can.config && share.config}
       />
 
       <Card>
@@ -471,29 +522,44 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           <CardTitle>{t("guest.snapshots")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {can.snapshotCreate ? (
-            <div className="flex gap-2">
-              <Input placeholder={t("guest.snapshotName")} value={snap} onChange={(e) => setSnap(e.target.value)} />
-              <Button onClick={() => void action("snapshot", { snapname: snap || `snap-${Date.now()}` })}>
-                {t("guest.createSnapshot")}
-              </Button>
-            </div>
-          ) : null}
+          <div className="flex gap-2">
+            <Input
+              placeholder={t("guest.snapshotName")}
+              value={snap}
+              onChange={(e) => setSnap(e.target.value)}
+              disabled={Boolean(deny(can.snapshotCreate, share.snapshotCreate))}
+            />
+            <Button
+              disabled={Boolean(deny(can.snapshotCreate, share.snapshotCreate))}
+              title={deny(can.snapshotCreate, share.snapshotCreate)}
+              onClick={() => void action("snapshot", { snapname: snap || `snap-${Date.now()}` })}
+            >
+              {t("guest.createSnapshot")}
+            </Button>
+          </div>
           {(data?.snapshots ?? []).map((s) => (
             <div key={String(s.name)} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
               <span>{String(s.name)}</span>
               {String(s.name) === "current" ? null : (
                 <div className="flex gap-2">
-                  {can.snapshotRollback ? (
-                    <Button size="sm" variant="outline" onClick={() => void action("snapshot-rollback", { snapname: s.name })}>
-                      {t("guest.restore")}
-                    </Button>
-                  ) : null}
-                  {can.snapshotDelete ? (
-                    <Button size="sm" variant="destructive" onClick={() => void action("snapshot-delete", { snapname: s.name })}>
-                      {t("guest.delete")}
-                    </Button>
-                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={Boolean(deny(can.snapshotRollback, share.snapshotRollback))}
+                    title={deny(can.snapshotRollback, share.snapshotRollback)}
+                    onClick={() => void action("snapshot-rollback", { snapname: s.name })}
+                  >
+                    {t("guest.restore")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={Boolean(deny(can.snapshotDelete, share.snapshotDelete))}
+                    title={deny(can.snapshotDelete, share.snapshotDelete)}
+                    onClick={() => void action("snapshot-delete", { snapname: s.name })}
+                  >
+                    {t("guest.delete")}
+                  </Button>
                 </div>
               )}
             </div>

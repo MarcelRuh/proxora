@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ProxmoxTaskProgress } from "@/components/backups/task-progress";
@@ -23,6 +24,14 @@ export function CreateProgressDialog({
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (!open || !finished) return;
+    onCloseRef.current();
+  }, [open, finished]);
+
   return (
     <Dialog
       open={open}
@@ -31,7 +40,16 @@ export function CreateProgressDialog({
         if (!next) onClose();
       }}
     >
-      <DialogContent className="max-w-2xl">
+      <DialogContent
+        className="max-w-2xl"
+        hideClose={locked}
+        onPointerDownOutside={(event) => {
+          if (locked) event.preventDefault();
+        }}
+        onEscapeKeyDown={(event) => {
+          if (locked) event.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
