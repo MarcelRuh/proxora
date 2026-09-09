@@ -1,55 +1,84 @@
 import { describe, expect, it } from "vitest";
 import { isHostTransportFailure, ProxmoxApiError, ValidationError } from "@/lib/errors";
 import {
-  isLxcRootSshEnabled,
-  isSshdConfigRootLoginYes,
+  isSshdConfigRootLoginEnabled,
   lxcSshRootSetScript,
   lxcSshRootStatusScript,
   parseLxcExecPayload,
   parseLxcSshRootStatus,
+  parseSshdPermitRootLoginLine,
   wrapLxcTermScript,
 } from "@/lib/lxc-ssh-root";
 
-const DEBIAN_SSHD_CONFIG = `
-# This is the sshd server system-wide configuration file.  See
+const DEBIAN_SSHD_CONFIG = `# This is the sshd server system-wide configuration file.  See
 # sshd_config(5) for more information.
+
+# This sshd was compiled with PATH=/usr/local/bin:/usr/bin:/bin:/usr/games
 
 Include /etc/ssh/sshd_config.d/*.conf
 
 Port 22
+#AddressFamily any
+#ListenAddress 0.0.0.0
+#ListenAddress ::
+
+# Authentication:
+
 #LoginGraceTime 2m
 PermitRootLogin yes
 #StrictModes yes
+#MaxAuthTries 6
+#MaxSessions 10
+
+#PubkeyAuthentication yes
 #PasswordAuthentication yes
+#PermitEmptyPasswords no
+
 KbdInteractiveAuthentication no
 UsePAM yes
+X11Forwarding yes
+PrintMotd no
+AcceptEnv LANG LC_* COLORTERM NO_COLOR
+Subsystem       sftp    /usr/lib/openssh/sftp-server
 `;
 
 describe("LXC root SSH", () => {
-  it("treats only uncommented PermitRootLogin yes as enabled", () => {
-    expect(isLxcRootSshEnabled("yes")).toBe(true);
-    expect(isLxcRootSshEnabled("Without-Password")).toBe(false);
-    expect(isLxcRootSshEnabled("prohibit-password")).toBe(false);
-    expect(isLxcRootSshEnabled("no")).toBe(false);
-    expect(isSshdConfigRootLoginYes(DEBIAN_SSHD_CONFIG)).toBe(true);
-    expect(isSshdConfigRootLoginYes(DEBIAN_SSHD_CONFIG.replace("PermitRootLogin yes", "#PermitRootLogin yes"))).toBe(
+  it("detects uncommented PermitRootLogin vs #PermitRootLogin", () => {
+    expect(parseSshdPermitRootLoginLine("PermitRootLogin yes")).toEqual({ commented: false, value: "yes" });
+    expect(parseSshdPermitRootLoginLine("  PermitRootLogin yes")).toEqual({ commented: false, value: "yes" });
+    expect(parseSshdPermitRootLoginLine("PermitRootLogin\tyes")).toEqual({ commented: false, value: "yes" });
+    expect(parseSshdPermitRootLoginLine("#PermitRootLogin prohibit-password")).toEqual({
+      commented: true,
+      value: "prohibit-password",
+    });
+    expect(parseSshdPermitRootLoginLine("# PermitRootLogin yes")).toEqual({ commented: true, value: "yes" });
+    expect(parseSshdPermitRootLoginLine("#MaxAuthTries 6")).toBeNull();
+    expect(isSshdConfigRootLoginEnabled(DEBIAN_SSHD_CONFIG)).toBe(true);
+    expect(isSshdConfigRootLoginEnabled(DEBIAN_SSHD_CONFIG.replace("PermitRootLogin yes", "#PermitRootLogin yes"))).toBe(
       false,
     );
-    expect(isSshdConfigRootLoginYes(DEBIAN_SSHD_CONFIG.replace("PermitRootLogin yes", "PermitRootLogin no"))).toBe(
+    expect(isSshdConfigRootLoginEnabled(DEBIAN_SSHD_CONFIG.replace("PermitRootLogin yes", "PermitRootLogin no"))).toBe(
       false,
     );
+    expect(
+      isSshdConfigRootLoginEnabled("#PermitRootLogin prohibit-password\n#LoginGraceTime 2m\n"),
+    ).toBe(false);
+    expect(isSshdConfigRootLoginEnabled("#PermitRootLogin prohibit-password\nPermitRootLogin yes\n")).toBe(true);
   });
 
-  it("parses sshd status JSON from noisy console output", () => {
-    const parsed = parseLxcSshRootStatus('junk\n{"running":1,"permitRootLogin":"yes"}\n');
-    expect(parsed).toEqual({ running: true, permitRootLogin: "yes", enabled: true });
-    expect(parseLxcSshRootStatus('{"running":1,"permitRootLogin":"no"}').enabled).toBe(false);
+  it("parses sshd_config dumped from the container as status", () => {
+    expect(parseLxcSshRootStatus(DEBIAN_SSHD_CONFIG)).toEqual({
+      running: true,
+      permitRootLogin: "yes",
+      enabled: true,
+    });
+    expect(parseLxcSshRootStatus("#PermitRootLogin yes\nPort 22\n").enabled).toBe(false);
   });
 
   it("extracts stdout between termproxy markers", () => {
-    const raw = "\u001b[0mOK\r\necho start\n__PXR_B_ab__\n{\"running\":1,\"permitRootLogin\":\"no\"}\n__PXR_E_ab__:0\n";
+    const raw = "\u001b[0mOK\r\necho start\n__PXR_B_ab__\nPermitRootLogin yes\n__PXR_E_ab__:0\n";
     expect(parseLxcExecPayload(raw, "__PXR_B_ab__", "__PXR_E_ab__")).toEqual({
-      stdout: '{"running":1,"permitRootLogin":"no"}',
+      stdout: "PermitRootLogin yes",
       exitCode: 0,
     });
   });
@@ -74,19 +103,16 @@ describe("LXC root SSH", () => {
     expect(wrapped).toContain("echo hi");
   });
 
-  it("reads and writes /etc/ssh/sshd_config PermitRootLogin", () => {
+  it("reads sshd_config and comments or uncomments PermitRootLogin", () => {
     const on = lxcSshRootSetScript(true);
     const off = lxcSshRootSetScript(false);
     const status = lxcSshRootStatusScript();
-    expect(status).toContain("/etc/ssh/sshd_config");
-    expect(status).toContain("PermitRootLogin[[:space:]]+yes");
+    expect(status).toContain("cat /etc/ssh/sshd_config");
     expect(on).toContain("PermitRootLogin yes");
-    expect(on).toContain("sed -i");
+    expect(on).toContain("#[[:space:]]*PermitRootLogin");
     expect(on).toContain("/etc/ssh/sshd_config");
-    expect(on).toContain("99-proxora-root.conf");
-    expect(off).toContain("PermitRootLogin no");
+    expect(off).toContain("#PermitRootLogin");
     expect(off).toContain("systemctl restart ssh");
-    expect(off).not.toContain("PermitRootLogin yes");
   });
 
   it("does not treat console validation errors as a dead host", () => {

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.0.13] – 2026-09-09
+
+### Fixed
+
+- LXC SSH toggle parses each `/etc/ssh/sshd_config` line: uncommented `PermitRootLogin` shows **SSH ausschalten**, `#PermitRootLogin` shows **SSH einschalten**.
+
 ## [2.0.12] – 2026-09-09
 
 ### Changed

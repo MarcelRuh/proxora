@@ -4,12 +4,30 @@ export function isLxcRootSshEnabled(permitRootLogin: string | null | undefined):
     .toLowerCase() === "yes";
 }
 
-/** Uncommented `PermitRootLogin yes` in /etc/ssh/sshd_config. */
-export function isSshdConfigRootLoginYes(config: string): boolean {
-  for (const raw of config.split(/\n/)) {
-    const line = raw.trim();
-    if (!line || line.startsWith("#")) continue;
-    if (/^PermitRootLogin\s+yes(\s|#|$)/i.test(line)) return true;
+export type SshdPermitRootLine = { commented: boolean; value: string };
+
+/** One sshd_config line: `PermitRootLogin …` or `#PermitRootLogin …`. */
+export function parseSshdPermitRootLoginLine(raw: string): SshdPermitRootLine | null {
+  const line = raw.replace(/\r$/, "").replace(/^\s+/, "");
+  if (!line) return null;
+  const commented = line.startsWith("#");
+  const rest = (commented ? line.replace(/^#\s*/, "") : line).replace(/^\s+/, "");
+  const match = /^PermitRootLogin(?:\s+(\S+))?(?:\s|#|$)/i.exec(rest);
+  if (!match) return null;
+  const value = (match[1] ?? "").replace(/,.*/, "").toLowerCase();
+  return { commented, value };
+}
+
+/**
+ * Uncommented `PermitRootLogin` → on.
+ * Only `#PermitRootLogin` (or no line) → off.
+ * First uncommented line wins.
+ */
+export function isSshdConfigRootLoginEnabled(config: string): boolean {
+  for (const raw of config.split("\n")) {
+    const parsed = parseSshdPermitRootLoginLine(raw);
+    if (!parsed || parsed.commented) continue;
+    return parsed.value !== "no" && parsed.value !== "forced-commands-only";
   }
   return false;
 }
@@ -50,19 +68,8 @@ export function wrapLxcTermScript(script: string, begin: string, end: string): s
 }
 
 export function parseLxcSshRootStatus(stdout: string): { running: boolean; permitRootLogin: string; enabled: boolean } {
-  const jsonMatch = /\{[\s\S]*\}/.exec(stdout);
-  let running = false;
-  let permitRootLogin = "no";
-  if (jsonMatch) {
-    try {
-      const parsed = JSON.parse(jsonMatch[0]) as { running?: unknown; permitRootLogin?: unknown };
-      running = parsed.running === true || parsed.running === 1 || parsed.running === "1";
-      permitRootLogin = String(parsed.permitRootLogin ?? "no").trim().toLowerCase() || "no";
-    } catch {
-      /* fall through */
-    }
-  }
-  return { running, permitRootLogin, enabled: isLxcRootSshEnabled(permitRootLogin) };
+  const enabled = isSshdConfigRootLoginEnabled(stdout);
+  return { running: true, permitRootLogin: enabled ? "yes" : "no", enabled };
 }
 
 const PATH_PREFIX = 'export PATH="/usr/sbin:/sbin:/usr/bin:/bin${PATH:+:$PATH}"';
@@ -70,11 +77,11 @@ const PATH_PREFIX = 'export PATH="/usr/sbin:/sbin:/usr/bin:/bin${PATH:+:$PATH}"'
 export function lxcSshRootStatusScript(): string {
   return [
     PATH_PREFIX,
-    "permit=no",
-    "if [ -f /etc/ssh/sshd_config ] && grep -Eq '^[[:space:]]*PermitRootLogin[[:space:]]+yes([#[:space:]]|$)' /etc/ssh/sshd_config; then",
-    "  permit=yes",
+    "if [ ! -f /etc/ssh/sshd_config ]; then",
+    "  echo NO_SSHD_CONFIG",
+    "  exit 2",
     "fi",
-    'printf \'{"running":1,"permitRootLogin":"%s"}\\n\' "$permit"',
+    "cat /etc/ssh/sshd_config",
   ].join("\n");
 }
 
@@ -91,7 +98,18 @@ const RESTART_SSHD = [
 ];
 
 export function lxcSshRootSetScript(enabled: boolean): string {
-  const value = enabled ? "yes" : "no";
+  const write = enabled
+    ? [
+        "if grep -qiE '^[[:space:]]*#?[[:space:]]*PermitRootLogin' /etc/ssh/sshd_config; then",
+        "  sed -i 's/^[[:space:]]*#[[:space:]]*PermitRootLogin[[:space:]].*/PermitRootLogin yes/' /etc/ssh/sshd_config",
+        "  sed -i 's/^[[:space:]]*PermitRootLogin[[:space:]].*/PermitRootLogin yes/' /etc/ssh/sshd_config",
+        "else",
+        "  printf '\\nPermitRootLogin yes\\n' >> /etc/ssh/sshd_config",
+        "fi",
+      ]
+    : [
+        "sed -i 's/^\\([[:space:]]*\\)PermitRootLogin\\([[:space:]].*\\)$/\\1#PermitRootLogin\\2/' /etc/ssh/sshd_config",
+      ];
   return [
     PATH_PREFIX,
     "if [ ! -f /etc/ssh/sshd_config ]; then",
@@ -99,12 +117,8 @@ export function lxcSshRootSetScript(enabled: boolean): string {
     "  exit 2",
     "fi",
     "rm -f /etc/ssh/sshd_config.d/99-proxora-root.conf",
-    "if grep -qE '^[[:space:]]*PermitRootLogin[[:space:]]+' /etc/ssh/sshd_config; then",
-    `  sed -i 's/^[[:space:]]*PermitRootLogin[[:space:]].*/PermitRootLogin ${value}/' /etc/ssh/sshd_config`,
-    "else",
-    `  printf '\\nPermitRootLogin ${value}\\n' >> /etc/ssh/sshd_config`,
-    "fi",
+    ...write,
     ...RESTART_SSHD,
-    lxcSshRootStatusScript(),
+    "cat /etc/ssh/sshd_config",
   ].join("\n");
 }
