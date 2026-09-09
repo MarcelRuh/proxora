@@ -193,11 +193,7 @@ describe("federation share levels", () => {
     expect(federationPermission("POST", "/nodes/pve/termproxy")).toBe("hosts.console");
     expect(federationPermission("GET", "/nodes/pve/vncwebsocket")).toEqual(["hosts.console", "updates.upgrade"]);
     expect(federationPermission("POST", "/nodes/pve/qemu/100/termproxy")).toBe("vm.console");
-    expect(federationPermission("POST", "/nodes/pve/lxc/101/termproxy")).toEqual([
-      "lxc.console",
-      "lxc.files.write",
-      "lxc.config",
-    ]);
+    expect(federationPermission("POST", "/nodes/pve/lxc/101/termproxy")).toBe("lxc.console");
     expect(shareHasPermission("control", ["hosts.view", "hosts.console"], "hosts.console")).toBe(true);
     expect(peerHostAllowsPermission({ origin: "PEER", shareLevel: "control", sharePermissions: ["hosts.view", "hosts.console"] }, "hosts.console")).toBe(true);
     expect(federationPermission("POST", "/nodes/pve/termproxy", { body: { cmd: "upgrade" } })).toBe("updates.upgrade");

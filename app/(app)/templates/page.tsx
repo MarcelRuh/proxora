@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
+import { PageSkeleton } from "@/components/layout/page-skeleton";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
 import { LxcTemplatePanel } from "@/components/templates/lxc-template-panel";
@@ -14,6 +16,14 @@ import { IsoImagePanel } from "@/components/templates/iso-image-panel";
 import { cn } from "@/lib/utils";
 
 export default function TemplatesPage() {
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <TemplatesContent />
+    </Suspense>
+  );
+}
+
+function TemplatesContent() {
   const { t } = useI18n();
   const router = useRouter();
   const search = useSearchParams();

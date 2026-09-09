@@ -4,7 +4,21 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-## [2.0.13] – 2026-09-09
+## [2.0.14] – 2026-09-09
+
+### Removed
+
+- LXC detail pages no longer toggle root SSH (`PermitRootLogin`). Guest-file SSH/SFTP is unchanged.
+
+### Fixed
+
+- Choosing a host on create no longer freezes client navigation (Templates and other sidebar links open without a reload).
+- Switching hosts on create no longer keeps the previous host’s storage, templates, or next ID.
+- Static-IP create now uses the IP-aware next VMID instead of blocking on a colliding autofill address.
+- Cluster create loads storage, bridges, and templates for the selected node.
+- Peer hosts with only LXC or only VM create rights no longer appear on the wrong create page.
+- Guest start/stop/reboot failures show an error toast.
+- Snapshot restore and delete ask for confirmation first.
 
 ### Fixed
 

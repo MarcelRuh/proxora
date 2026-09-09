@@ -35,7 +35,6 @@ import { isWindowsOstype } from "@/lib/iso-images";
 import type { Permission } from "@/lib/permissions";
 import { GuestHaCard } from "@/components/guests/guest-ha-card";
 import { GuestFirewallCard } from "@/components/guests/guest-firewall-card";
-import { LxcRootSshButton } from "@/components/guests/lxc-root-ssh-button";
 
 type GuestPayload = {
   status: Record<string, unknown>;
@@ -80,7 +79,6 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
       guest,
     ),
     config: useCan(kind === "vm" ? "vm.config" : "lxc.config", hostId, guest),
-    sshRoot: useCanAny(["lxc.files.write", "lxc.config"], hostId, guest),
     backup: useCan("backup.run", hostId),
     restore: useCan("backup.restore", hostId),
     hostsView: useCan("hosts.view"),
@@ -171,6 +169,12 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     invalidateDashboardQueries(qc);
   }
 
+  function runAction(name: string, extra: Record<string, unknown> = {}) {
+    void action(name, extra).catch((err: unknown) => {
+      toast.error(err instanceof Error ? err.message : t("common.failed"));
+    });
+  }
+
   const status = live?.status ?? data?.status ?? {};
   const config = data?.config ?? {};
   const runState = String(status.status ?? "unknown");
@@ -214,7 +218,6 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
       kind === "vm" ? ["vm.files.read", "vm.files.write"] : ["lxc.files.read", "lxc.files.write"],
     ),
     config: peerHostAllowsPermission(shareHost, gp("config")),
-    sshRoot: peerHostAllowsPermission(shareHost, ["lxc.files.write", "lxc.config"]),
     backup: peerHostAllowsPermission(shareHost, "backup.run"),
     restore: peerHostAllowsPermission(shareHost, "backup.restore"),
     snapshotCreate: peerHostAllowsPermission(shareHost, gp("snapshot.create")),
@@ -258,7 +261,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
         <Button
           disabled={Boolean(deny(can.start, share.start)) || !stopped}
           title={deny(can.start, share.start)}
-          onClick={() => void action("start")}
+          onClick={() => runAction("start")}
         >
           {t("guest.start")}
         </Button>
@@ -266,7 +269,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           variant="outline"
           disabled={Boolean(deny(can.shutdown, share.shutdown)) || !running}
           title={deny(can.shutdown, share.shutdown)}
-          onClick={() => void action("shutdown")}
+          onClick={() => runAction("shutdown")}
         >
           {t("guest.shutdown")}
         </Button>
@@ -274,7 +277,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           variant="outline"
           disabled={Boolean(deny(can.stop, share.stop)) || stopped}
           title={deny(can.stop, share.stop)}
-          onClick={() => void action("stop")}
+          onClick={() => runAction("stop")}
         >
           {t("guest.stop")}
         </Button>
@@ -282,7 +285,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           variant="outline"
           disabled={Boolean(deny(can.reboot, share.reboot)) || !running}
           title={deny(can.reboot, share.reboot)}
-          onClick={() => void action("reboot")}
+          onClick={() => runAction("reboot")}
         >
           {t("guest.reboot")}
         </Button>
@@ -292,7 +295,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
               variant="outline"
               disabled={Boolean(deny(can.pause, share.pause)) || !running}
               title={deny(can.pause, share.pause)}
-              onClick={() => void action("pause")}
+              onClick={() => runAction("pause")}
             >
               {t("guest.pause")}
             </Button>
@@ -300,7 +303,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
               variant="outline"
               disabled={Boolean(deny(can.resume, share.resume)) || !paused}
               title={deny(can.resume, share.resume)}
-              onClick={() => void action("resume")}
+              onClick={() => runAction("resume")}
             >
               {t("guest.resume")}
             </Button>
@@ -422,16 +425,6 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             {t("files.show")}
           </Button>
         )}
-        {kind === "lxc" ? (
-          <LxcRootSshButton
-            hostId={params.hostId}
-            node={params.node}
-            vmid={Number(params.vmid)}
-            guestRunning={running}
-            disabled={Boolean(deny(can.sshRoot, share.sshRoot))}
-            disabledReason={deny(can.sshRoot, share.sshRoot)}
-          />
-        ) : null}
         <GuestDeleteDialog
           hostId={params.hostId}
           node={params.node}
@@ -556,7 +549,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             <Button
               disabled={Boolean(deny(can.snapshotCreate, share.snapshotCreate))}
               title={deny(can.snapshotCreate, share.snapshotCreate)}
-              onClick={() => void action("snapshot", { snapname: snap || `snap-${Date.now()}` })}
+              onClick={() => runAction("snapshot", { snapname: snap || `snap-${Date.now()}` })}
             >
               {t("guest.createSnapshot")}
             </Button>
@@ -566,24 +559,39 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
               <span>{String(s.name)}</span>
               {String(s.name) === "current" ? null : (
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
+                  <ConfirmAction
+                    title={t("guest.snapshotRestoreTitle")}
+                    description={t("guest.snapshotRestoreBody", { name: String(s.name) })}
+                    actionLabel={t("guest.restore")}
                     disabled={Boolean(deny(can.snapshotRollback, share.snapshotRollback))}
-                    title={deny(can.snapshotRollback, share.snapshotRollback)}
-                    onClick={() => void action("snapshot-rollback", { snapname: s.name })}
+                    onConfirm={() => action("snapshot-rollback", { snapname: s.name })}
                   >
-                    {t("guest.restore")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={Boolean(deny(can.snapshotRollback, share.snapshotRollback))}
+                      title={deny(can.snapshotRollback, share.snapshotRollback)}
+                    >
+                      {t("guest.restore")}
+                    </Button>
+                  </ConfirmAction>
+                  <ConfirmAction
+                    title={t("guest.snapshotDeleteTitle")}
+                    description={t("guest.snapshotDeleteBody", { name: String(s.name) })}
+                    actionLabel={t("guest.delete")}
+                    destructive
                     disabled={Boolean(deny(can.snapshotDelete, share.snapshotDelete))}
-                    title={deny(can.snapshotDelete, share.snapshotDelete)}
-                    onClick={() => void action("snapshot-delete", { snapname: s.name })}
+                    onConfirm={() => action("snapshot-delete", { snapname: s.name })}
                   >
-                    {t("guest.delete")}
-                  </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={Boolean(deny(can.snapshotDelete, share.snapshotDelete))}
+                      title={deny(can.snapshotDelete, share.snapshotDelete)}
+                    >
+                      {t("guest.delete")}
+                    </Button>
+                  </ConfirmAction>
                 </div>
               )}
             </div>

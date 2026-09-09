@@ -20,6 +20,7 @@ import { useCreateOptions } from "@/components/guests/use-create-options";
 import { MemoryField } from "@/components/guests/memory-field";
 import { HostSelect, hostAllowsCreate } from "@/components/guests/host-select";
 import { DEFAULT_GUEST_NETWORK, shouldSyncGuestIp } from "@/lib/create-ip";
+import { nextAutoVmid } from "@/lib/guest-create-options";
 import { visitGuestDetail } from "@/lib/guest-href";
 import { isUpid } from "@/lib/guest-task";
 import { useCreateTaskFollow } from "@/components/guests/use-create-task";
@@ -65,10 +66,11 @@ export default function CreateVmPage() {
   const [progressError, setProgressError] = useState<string | null>(null);
   const [createUpid, setCreateUpid] = useState<string | null>(null);
   const createdRef = useRef<{ hostId: string; node: string; vmid: number } | null>(null);
-  const { data: options } = useCreateOptions(form.hostId, form.ipMode);
+  const autoVmidRef = useRef(0);
+  const { data: options } = useCreateOptions(form.hostId, form.ipMode, form.node);
 
   useEffect(() => {
-    const creatable = (hosts?.hosts ?? []).filter(hostAllowsCreate);
+    const creatable = (hosts?.hosts ?? []).filter((host) => hostAllowsCreate(host, "vm"));
     if (!form.hostId && creatable.length === 1 && creatable[0]) {
       setForm((f) => ({ ...f, hostId: creatable[0]!.id }));
     }
@@ -112,7 +114,7 @@ export default function CreateVmPage() {
           : (storageList[0]?.storage ?? "local-lvm");
       const bridgeList = (options.bridges ?? []).map((b) => String(b.iface ?? "")).filter(Boolean);
       const bridge = f.bridge && bridgeList.includes(f.bridge) ? f.bridge : (bridgeList[0] ?? "vmbr0");
-      const vmid = f.vmid > 0 ? f.vmid : (options.nextid ?? 0);
+      const vmid = nextAutoVmid(f.vmid, options.nextid ?? 0, autoVmidRef.current);
       const isoList = (options.isos ?? []).map((i) => String(i.volid ?? "")).filter(Boolean);
       const iso = f.iso && isoList.includes(f.iso) ? f.iso : "";
       const iso2 = f.iso2 && isoList.includes(f.iso2) && f.iso2 !== iso ? f.iso2 : "";
@@ -123,8 +125,20 @@ export default function CreateVmPage() {
         f.ipMode === "static" && shouldSyncGuestIp(f.cidr, network, vmid, netList)
           ? ipFieldsFromVmid(network, vmid, netList)
           : {};
-      return { ...f, node, diskStorage, bridge, vmid, iso, iso2, network, ...ip };
+      const next = { ...f, node, diskStorage, bridge, vmid, iso, iso2, network, ...ip };
+      return next.node === f.node &&
+        next.diskStorage === f.diskStorage &&
+        next.bridge === f.bridge &&
+        next.vmid === f.vmid &&
+        next.iso === f.iso &&
+        next.iso2 === f.iso2 &&
+        next.network === f.network &&
+        next.cidr === f.cidr &&
+        next.gateway === f.gateway
+        ? f
+        : next;
     });
+    autoVmidRef.current = options.nextid ?? 0;
   }, [options]);
 
   const create = useMutation({
@@ -245,7 +259,9 @@ export default function CreateVmPage() {
               hosts={hosts?.hosts ?? []}
               value={form.hostId}
               createOnly
-              onChange={(hostId) =>
+              kind="vm"
+              onChange={(hostId) => {
+                autoVmidRef.current = 0;
                 setForm({
                   ...form,
                   hostId,
@@ -258,8 +274,8 @@ export default function CreateVmPage() {
                   vmid: 0,
                   cidr: "",
                   gateway: "",
-                })
-              }
+                });
+              }}
             />
             {hosts?.hosts.find((h) => h.id === form.hostId)?.origin === "PEER" ? (
               <p className="mt-1 text-xs text-warning">
@@ -321,7 +337,7 @@ export default function CreateVmPage() {
             {form.hostId && !isos.length ? (
               <p className="mt-1 text-sm text-muted-foreground">
                 {t("create.noIsoHint")}{" "}
-                <Link className="text-primary underline-offset-4 hover:underline" href={`/templates?host=${form.hostId}&tab=iso`}>
+                <Link className="text-primary underline-offset-4 hover:underline" href={`/templates?host=${encodeURIComponent(form.hostId)}&tab=iso`}>
                   {t("create.openIsos")}
                 </Link>
               </p>

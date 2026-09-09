@@ -22,7 +22,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, Suspense, type ComponentType, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
@@ -43,6 +43,7 @@ import { LocaleSwitch } from "@/components/i18n/locale-switch";
 import { AndroidUpdateBanner } from "@/components/layout/android-update-banner";
 import { AndroidSessionTtl } from "@/components/layout/android-session-ttl";
 import { UiThemeSelect } from "@/components/theme/ui-theme-select";
+import { PageSkeleton } from "@/components/layout/page-skeleton";
 import type { MessageKey } from "@/lib/i18n/messages";
 
 const NAV: Array<{
@@ -174,7 +175,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
         <main className="flex-1 p-3 md:p-6">
           <AndroidUpdateBanner />
           <AndroidSessionTtl />
-          {children}
+          <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
         </main>
       </div>
       <CommandSearch open={searchOpen} onOpenChange={setSearchOpen} />

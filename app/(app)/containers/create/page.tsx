@@ -17,6 +17,7 @@ import { HostSelect, hostAllowsCreate } from "@/components/guests/host-select";
 import { CreateProgressDialog } from "@/components/guests/create-progress-dialog";
 import { invalidateDashboardQueries } from "@/components/dashboard/use-dashboard";
 import { DEFAULT_GUEST_NETWORK, shouldSyncGuestIp } from "@/lib/create-ip";
+import { nextAutoVmid } from "@/lib/guest-create-options";
 import { visitGuestDetail } from "@/lib/guest-href";
 import { isUpid } from "@/lib/guest-task";
 import { useCreateTaskFollow } from "@/components/guests/use-create-task";
@@ -56,10 +57,11 @@ export default function CreateLxcPage() {
   const [createUpid, setCreateUpid] = useState<string | null>(null);
   const createdRef = useRef<{ hostId: string; node: string; vmid: number } | null>(null);
 
-  const { data: options } = useCreateOptions(form.hostId, form.ipMode);
+  const autoVmidRef = useRef(0);
+  const { data: options } = useCreateOptions(form.hostId, form.ipMode, form.node);
 
   useEffect(() => {
-    const creatable = (hosts?.hosts ?? []).filter(hostAllowsCreate);
+    const creatable = (hosts?.hosts ?? []).filter((host) => hostAllowsCreate(host, "lxc"));
     if (!form.hostId && creatable.length === 1 && creatable[0]) {
       setForm((f) => ({ ...f, hostId: creatable[0]!.id }));
     }
@@ -95,7 +97,7 @@ export default function CreateLxcPage() {
       const bridge = f.bridge && bridgeList.includes(f.bridge) ? f.bridge : (bridgeList[0] ?? "vmbr0");
       const vols = (options.templates ?? []).map((t) => String(t.volid ?? "")).filter(Boolean);
       const ostemplate = f.ostemplate && vols.includes(f.ostemplate) ? f.ostemplate : "";
-      const vmid = f.vmid > 0 ? f.vmid : (options.nextid ?? 0);
+      const vmid = nextAutoVmid(f.vmid, options.nextid ?? 0, autoVmidRef.current);
       const netList = options.networks?.length ? options.networks : undefined;
       const network =
         f.network && netList?.some((n) => n.id === f.network) ? f.network : (netList?.[0]?.id ?? f.network ?? DEFAULT_GUEST_NETWORK);
@@ -103,8 +105,19 @@ export default function CreateLxcPage() {
         f.ipMode === "static" && shouldSyncGuestIp(f.cidr, network, vmid, netList)
           ? ipFieldsFromVmid(network, vmid, netList)
           : {};
-      return { ...f, node, storage, bridge, ostemplate, vmid, network, ...ip };
+      const next = { ...f, node, storage, bridge, ostemplate, vmid, network, ...ip };
+      return next.node === f.node &&
+        next.storage === f.storage &&
+        next.bridge === f.bridge &&
+        next.ostemplate === f.ostemplate &&
+        next.vmid === f.vmid &&
+        next.network === f.network &&
+        next.cidr === f.cidr &&
+        next.gateway === f.gateway
+        ? f
+        : next;
     });
+    autoVmidRef.current = options.nextid ?? 0;
   }, [options]);
 
   const create = useMutation({
@@ -221,7 +234,9 @@ export default function CreateLxcPage() {
               hosts={hosts?.hosts ?? []}
               value={form.hostId}
               createOnly
-              onChange={(hostId) =>
+              kind="lxc"
+              onChange={(hostId) => {
+                autoVmidRef.current = 0;
                 setForm({
                   ...form,
                   hostId,
@@ -232,8 +247,8 @@ export default function CreateLxcPage() {
                   vmid: 0,
                   cidr: "",
                   gateway: "",
-                })
-              }
+                });
+              }}
             />
             {hosts?.hosts.find((h) => h.id === form.hostId)?.origin === "PEER" ? (
               <p className="mt-1 text-xs text-warning">
@@ -283,7 +298,7 @@ export default function CreateLxcPage() {
             {form.hostId && !templates.length ? (
               <p className="mt-1 text-sm text-muted-foreground">
                 {t("create.noTemplateHint")}{" "}
-                <Link className="text-primary underline-offset-4 hover:underline" href={`/templates?host=${form.hostId}&tab=lxc`}>
+                <Link className="text-primary underline-offset-4 hover:underline" href={`/templates?host=${encodeURIComponent(form.hostId)}&tab=lxc`}>
                   {t("create.openTemplates")}
                 </Link>
               </p>

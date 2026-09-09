@@ -1,53 +1,46 @@
 "use client";
 
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { GuestIpNetwork } from "@/lib/create-ip";
+import { createOptionsPath, mergeCreateOptions, sameHostPlaceholder, type CreateOptions } from "@/lib/guest-create-options";
 import type { LxcIpMode } from "@/lib/lxc-net";
-import type { StorageOverviewItem } from "@/lib/storage-overview";
 
-export type CreateOptions = {
-  nodes: Array<{ node: string }>;
-  nextid: number | null;
-  storage: StorageOverviewItem[];
-  isos: Array<{ volid?: string }>;
-  templates: Array<{ volid?: string }>;
-  bridges: Array<{ iface?: string; type?: string }>;
-  networks?: GuestIpNetwork[];
-  usedIps?: string[];
-  usedVmids?: number[];
-};
+export type { CreateOptions };
 
-export function useCreateOptions(hostId: string, ipMode: LxcIpMode) {
+export function useCreateOptions(hostId: string, ipMode: LxcIpMode, node = "") {
+  const nodeParam = node.trim();
   const options = useQuery({
-    queryKey: ["options", hostId],
+    queryKey: ["options", hostId, nodeParam],
     enabled: Boolean(hostId),
-    queryFn: () => api<CreateOptions>(`/api/hosts/${hostId}/options`),
+    queryFn: () => api<CreateOptions>(createOptionsPath(hostId, { node: nodeParam || undefined })),
     staleTime: 15_000,
-    placeholderData: (previous) => previous,
+    placeholderData: (previous, previousQuery) => sameHostPlaceholder(hostId, previous, previousQuery),
   });
   const media = useQuery({
-    queryKey: ["options-media", hostId],
+    queryKey: ["options-media", hostId, nodeParam],
     enabled: Boolean(hostId),
-    queryFn: () => api<CreateOptions>(`/api/hosts/${hostId}/options?media=1`),
+    queryFn: () => api<CreateOptions>(createOptionsPath(hostId, { node: nodeParam || undefined, media: true })),
     staleTime: 20_000,
-    placeholderData: (previous) => previous,
+    placeholderData: (previous, previousQuery) => sameHostPlaceholder(hostId, previous, previousQuery),
   });
   const ips = useQuery({
     queryKey: ["options-ips", hostId],
     enabled: Boolean(hostId) && ipMode === "static",
-    queryFn: () => api<Pick<CreateOptions, "usedIps" | "usedVmids" | "nextid">>(`/api/hosts/${hostId}/options?ips=1`),
+    queryFn: () =>
+      api<Pick<CreateOptions, "usedIps" | "usedVmids" | "nextid">>(createOptionsPath(hostId, { ips: true })),
     staleTime: 30_000,
   });
 
-  const data = options.data
-    ? {
-        ...options.data,
-        isos: media.data?.isos ?? options.data.isos,
-        templates: media.data?.templates ?? options.data.templates,
-        usedIps: ips.data?.usedIps ?? options.data.usedIps ?? [],
-      }
-    : undefined;
+  const data = useMemo(
+    () =>
+      mergeCreateOptions(
+        options.data,
+        media.data,
+        ipMode === "static" ? ips.data : undefined,
+      ),
+    [options.data, media.data, ips.data, ipMode],
+  );
 
   return { data, isLoading: options.isLoading, error: options.error };
 }

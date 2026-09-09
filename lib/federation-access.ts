@@ -91,7 +91,7 @@ function guestPrefix(kind: "vm" | "lxc"): "vm" | "lxc" {
   return kind;
 }
 
-function guestActionPermission(kind: "vm" | "lxc", method: string, lower: string): Permission | Permission[] {
+function guestActionPermission(kind: "vm" | "lxc", method: string, lower: string): Permission {
   const prefix = guestPrefix(kind);
   if (/\/status\/start$/i.test(lower)) return `${prefix}.start` as Permission;
   if (/\/status\/stop$/i.test(lower)) return `${prefix}.force-stop` as Permission;
@@ -102,10 +102,7 @@ function guestActionPermission(kind: "vm" | "lxc", method: string, lower: string
   if (/\/status\/resume$/i.test(lower)) return "vm.resume";
   if (/\/clone$/i.test(lower)) return `${prefix}.clone` as Permission;
   if (/\/migrate$/i.test(lower)) return `${prefix}.migrate` as Permission;
-  if (/\/(termproxy|vncproxy|vncwebsocket)$/i.test(lower)) {
-    if (prefix === "lxc") return ["lxc.console", "lxc.files.write", "lxc.config"];
-    return `${prefix}.console` as Permission;
-  }
+  if (/\/(termproxy|vncproxy|vncwebsocket)$/i.test(lower)) return `${prefix}.console` as Permission;
   if (/\/snapshot\/[^/]+\/rollback$/i.test(lower)) return `${prefix}.snapshot.rollback` as Permission;
   if (/\/snapshot(\/|$)/i.test(lower)) {
     if (method === "DELETE") return `${prefix}.snapshot.delete` as Permission;
