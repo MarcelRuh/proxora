@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { WebSocket } from "ws";
 import { ValidationError } from "@/lib/errors";
-import { parseLxcExecPayload } from "@/lib/lxc-ssh-root";
+import { parseLxcExecPayload, wrapLxcTermScript } from "@/lib/lxc-ssh-root";
+import { wsPayloadToBuffer } from "@/lib/vnc-handshake";
 import type { ProxmoxClient } from "@/server/proxmox/client";
 
 function sendStdin(ws: WebSocket, text: string) {
@@ -22,7 +23,7 @@ export async function execLxcScript(
   const begin = `__PXR_B_${randomBytes(4).toString("hex")}__`;
   const end = `__PXR_E_${randomBytes(4).toString("hex")}__`;
   const b64 = Buffer.from(input.script, "utf8").toString("base64");
-  const payload = `stty -echo 2>/dev/null; echo ${begin}; echo ${b64} | base64 -d | sh; echo ${end}:$?\n`;
+  const payload = wrapLxcTermScript(b64, begin, end);
 
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl, ["binary"], {
@@ -53,11 +54,21 @@ export async function execLxcScript(
       else reject(new ValidationError("Keine Antwort aus dem Container"));
     };
 
+    const sendPayload = () => {
+      if (sent || settled || ws.readyState !== WebSocket.OPEN) return;
+      sent = true;
+      ws.send("1:512:24:");
+      sendStdin(ws, "\x03");
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN) sendStdin(ws, payload);
+      }, 350);
+    };
+
     ws.on("open", () => {
       ws.send(`${term.user}:${term.ticket}\n`);
     });
     ws.on("message", (data) => {
-      const chunk = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
+      const chunk = wsPayloadToBuffer(data as Buffer | ArrayBuffer | Buffer[] | string);
       if (handshake) {
         buf = Buffer.concat([buf, chunk]);
         const text = buf.toString("latin1");
@@ -69,16 +80,10 @@ export async function execLxcScript(
         handshake = false;
         const rest = text.replace(/^OK\r?\n?/, "");
         if (rest) output += rest;
-        ws.send("1:80:24:");
-        if (!sent) {
-          sent = true;
-          setTimeout(() => {
-            if (ws.readyState === WebSocket.OPEN) sendStdin(ws, payload);
-          }, 250);
-        }
+        setTimeout(sendPayload, 400);
         return;
       }
-      output += chunk.toString("utf8");
+      output += chunk.toString("latin1");
       const parsed = parseLxcExecPayload(output, begin, end);
       if (parsed) finish(undefined, parsed);
     });

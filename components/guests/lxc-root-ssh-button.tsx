@@ -33,13 +33,13 @@ export function LxcRootSshButton({
   const qc = useQueryClient();
   const path = `/api/hosts/${hostId}/lxc/${encodeURIComponent(node)}/${vmid}/ssh-root`;
   const locked = Boolean(disabled);
-  const { data, isFetching, error } = useQuery({
+  const { data } = useQuery({
     queryKey: ["lxc-ssh-root", hostId, node, vmid],
     queryFn: () => api<SshRootPayload>(path),
     enabled: guestRunning && !locked,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
-    retry: 1,
+    retry: false,
   });
   const toggle = useMutation({
     mutationFn: (enabled: boolean) => api<SshRootPayload>(path, { method: "POST", body: JSON.stringify({ enabled }) }),
@@ -50,41 +50,43 @@ export function LxcRootSshButton({
   });
 
   const needRunning = !guestRunning;
-  const title = locked
-    ? disabledReason
-    : needRunning
-      ? t("guest.sshRootNeedRunning")
-      : error instanceof Error
-        ? error.message
-        : undefined;
-  const enabled = Boolean(data?.enabled);
-  const busy = toggle.isPending || isFetching;
-  const label = enabled ? t("guest.sshRootDisable") : t("guest.sshRootEnable");
-  const cannotClick = locked || needRunning || busy || Boolean(error);
+  const blocked = locked || needRunning || toggle.isPending;
+  const title = locked ? disabledReason : needRunning ? t("guest.sshRootNeedRunning") : undefined;
+  const knownOn = data?.enabled === true;
+  const knownOff = data?.enabled === false;
 
-  const button = (
-    <Button
-      variant={enabled ? "destructive" : "outline"}
-      disabled={cannotClick}
-      title={title}
-    >
-      {busy ? t("common.loading") : label}
-    </Button>
-  );
-
-  if (cannotClick) return button;
+  function actionButton(enable: boolean) {
+    const turning = toggle.isPending && toggle.variables === enable;
+    const label = enable ? t("guest.sshRootEnable") : t("guest.sshRootDisable");
+    const button = (
+      <Button
+        variant={enable ? (knownOn ? "default" : "outline") : knownOff ? "secondary" : "destructive"}
+        disabled={blocked}
+        title={title}
+      >
+        {turning ? t("common.loading") : label}
+      </Button>
+    );
+    if (blocked) return button;
+    return (
+      <ConfirmAction
+        title={enable ? t("guest.sshRootEnableTitle") : t("guest.sshRootDisableTitle")}
+        description={enable ? t("guest.sshRootEnableBody") : t("guest.sshRootDisableBody")}
+        actionLabel={label}
+        destructive={!enable}
+        onConfirm={async () => {
+          await toggle.mutateAsync(enable);
+        }}
+      >
+        {button}
+      </ConfirmAction>
+    );
+  }
 
   return (
-    <ConfirmAction
-      title={enabled ? t("guest.sshRootDisableTitle") : t("guest.sshRootEnableTitle")}
-      description={enabled ? t("guest.sshRootDisableBody") : t("guest.sshRootEnableBody")}
-      actionLabel={label}
-      destructive={enabled}
-      onConfirm={async () => {
-        await toggle.mutateAsync(!enabled);
-      }}
-    >
-      {button}
-    </ConfirmAction>
+    <>
+      {actionButton(true)}
+      {actionButton(false)}
+    </>
   );
 }

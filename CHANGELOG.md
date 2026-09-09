@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.0.9] – 2026-09-09
+
+### Fixed
+
+- LXC root-SSH buttons no longer stay on “Loading…”. Status is read in the background; enable/disable writes `PermitRootLogin` and restarts sshd.
+
 ## [2.0.8] – 2026-09-09
 
 ### Added

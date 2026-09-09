@@ -24,6 +24,27 @@ export function stripTermNoise(raw: string): string {
     .replace(/\u0008/g, "");
 }
 
+export function chunkBase64(b64: string, size = 48): string[] {
+  if (!b64) return [""];
+  const chunks: string[] = [];
+  for (let i = 0; i < b64.length; i += size) chunks.push(b64.slice(i, i + size));
+  return chunks;
+}
+
+/** Short lines so a 80-col PTY does not wrap and corrupt the payload. */
+export function wrapLxcTermScript(b64: string, begin: string, end: string): string {
+  const chunks = chunkBase64(b64);
+  const assigns = chunks.map((chunk, i) => (i === 0 ? `B64='${chunk}'` : `B64="$B64${chunk}"`));
+  return [
+    "stty -echo cols 512 2>/dev/null || true",
+    ...assigns,
+    `echo ${begin}`,
+    "printf '%s' \"$B64\" | base64 -d | sh",
+    `echo ${end}:$?`,
+    "",
+  ].join("\n");
+}
+
 export function parseLxcSshRootStatus(stdout: string): { running: boolean; permitRootLogin: string; enabled: boolean } {
   const jsonMatch = /\{[\s\S]*\}/.exec(stdout);
   let running = false;
@@ -40,31 +61,44 @@ export function parseLxcSshRootStatus(stdout: string): { running: boolean; permi
   return { running, permitRootLogin, enabled: isLxcRootSshEnabled(permitRootLogin) };
 }
 
+const PATH_PREFIX = 'export PATH="/usr/sbin:/sbin:/usr/bin:/bin${PATH:+:$PATH}"';
+
 export function lxcSshRootStatusScript(): string {
   return [
+    PATH_PREFIX,
     "running=0",
     "if pgrep -x sshd >/dev/null 2>&1; then running=1; fi",
     "permit=unknown",
-    "if command -v sshd >/dev/null 2>&1; then",
-    "  permit=$(sshd -T 2>/dev/null | awk 'tolower($1)==\"permitrootlogin\"{print tolower($2); exit}')",
-    '  [ -n "$permit" ] || permit=unknown',
+    "if [ -f /etc/ssh/sshd_config.d/99-proxora-root.conf ]; then",
+    "  permit=$(awk 'tolower($1)==\"permitrootlogin\"{v=tolower($2)} END{print v}' /etc/ssh/sshd_config.d/99-proxora-root.conf)",
+    "elif [ -f /etc/ssh/sshd_config ]; then",
+    "  permit=$(awk 'BEGIN{v=\"unknown\"} $1 ~ /^#/{next} tolower($1)==\"permitrootlogin\"{v=tolower($2)} END{print v}' /etc/ssh/sshd_config)",
     "fi",
+    '[ -n "$permit" ] || permit=unknown',
     'printf \'{"running":%s,"permitRootLogin":"%s"}\\n\' "$running" "$permit"',
   ].join("\n");
 }
 
+const RESTART_SSHD = [
+  "if command -v systemctl >/dev/null 2>&1; then",
+  "  systemctl enable ssh >/dev/null 2>&1 || systemctl enable sshd >/dev/null 2>&1 || true",
+  "  systemctl restart ssh >/dev/null 2>&1 || systemctl restart sshd >/dev/null 2>&1 || true",
+  "elif command -v rc-service >/dev/null 2>&1; then",
+  "  rc-update add sshd default >/dev/null 2>&1 || rc-update add ssh default >/dev/null 2>&1 || true",
+  "  rc-service sshd restart >/dev/null 2>&1 || rc-service ssh restart >/dev/null 2>&1 || true",
+  "elif command -v service >/dev/null 2>&1; then",
+  "  service ssh restart >/dev/null 2>&1 || service sshd restart >/dev/null 2>&1 || true",
+  "else",
+  "  pkill -HUP -x sshd >/dev/null 2>&1 || true",
+  "  pgrep -x sshd >/dev/null 2>&1 || /usr/sbin/sshd >/dev/null 2>&1 || sshd >/dev/null 2>&1 || true",
+  "fi",
+];
+
 export function lxcSshRootSetScript(enabled: boolean): string {
   const value = enabled ? "yes" : "no";
-  const restart = enabled
-    ? [
-        "systemctl enable ssh >/dev/null 2>&1 || systemctl enable sshd >/dev/null 2>&1 || true",
-        "systemctl restart ssh >/dev/null 2>&1 || systemctl restart sshd >/dev/null 2>&1 || true",
-      ]
-    : [
-        "systemctl reload ssh >/dev/null 2>&1 || systemctl reload sshd >/dev/null 2>&1 || systemctl restart ssh >/dev/null 2>&1 || systemctl restart sshd >/dev/null 2>&1 || true",
-      ];
   return [
-    "if ! command -v sshd >/dev/null 2>&1; then",
+    PATH_PREFIX,
+    "if ! command -v sshd >/dev/null 2>&1 && [ ! -x /usr/sbin/sshd ]; then",
     "  echo NO_SSHD",
     "  exit 2",
     "fi",
@@ -81,13 +115,7 @@ export function lxcSshRootSetScript(enabled: boolean): string {
     "  echo NO_SSHD_CONFIG",
     "  exit 2",
     "fi",
-    "if command -v systemctl >/dev/null 2>&1; then",
-    ...restart.map((line) => `  ${line}`),
-    "elif command -v rc-service >/dev/null 2>&1; then",
-    "  rc-service sshd restart >/dev/null 2>&1 || rc-service ssh restart >/dev/null 2>&1 || true",
-    "elif command -v service >/dev/null 2>&1; then",
-    "  service ssh restart >/dev/null 2>&1 || service sshd restart >/dev/null 2>&1 || true",
-    "fi",
+    ...RESTART_SSHD,
     lxcSshRootStatusScript(),
   ].join("\n");
 }

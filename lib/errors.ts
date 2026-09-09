@@ -64,3 +64,11 @@ export class HostUnreachableError extends AppError {
     this.name = "HostUnreachableError";
   }
 }
+
+/** Console/exec failures must not mark the Proxmox host as down. */
+export function isHostTransportFailure(error: unknown): boolean {
+  if (error instanceof HostUnreachableError) return true;
+  if (error instanceof ProxmoxApiError) return error.status === 503;
+  if (error instanceof AppError) return false;
+  return true;
+}

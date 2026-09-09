@@ -37,6 +37,7 @@ async function run(
   node: string,
   vmid: number,
   script: string,
+  timeoutMs: number,
 ): Promise<LxcSshRootStatus> {
   await assertRunning(client, node, vmid);
   const result = await execLxcScript(client, {
@@ -44,6 +45,7 @@ async function run(
     vmid,
     script,
     rejectUnauthorized: tlsRejectUnauthorized(host),
+    timeoutMs,
   });
   if (result.exitCode === 2 || /\bNO_SSHD(?:_CONFIG)?\b/.test(result.stdout)) {
     throw new ValidationError("sshd ist im Container nicht installiert");
@@ -64,7 +66,7 @@ export async function readLxcSshRoot(
   if (String(live?.status ?? "") !== "running") {
     return { running: false, permitRootLogin: "unknown", enabled: false, guestRunning: false };
   }
-  return run(client, host, node, vmid, lxcSshRootStatusScript());
+  return run(client, host, node, vmid, lxcSshRootStatusScript(), 12_000);
 }
 
 export function setLxcSshRoot(
@@ -74,5 +76,5 @@ export function setLxcSshRoot(
   vmid: number,
   enabled: boolean,
 ) {
-  return run(client, host, node, vmid, lxcSshRootSetScript(enabled));
+  return run(client, host, node, vmid, lxcSshRootSetScript(enabled), 35_000);
 }

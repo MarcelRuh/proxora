@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { isHostTransportFailure, ProxmoxApiError, ValidationError } from "@/lib/errors";
 import {
   isLxcRootSshEnabled,
   lxcSshRootSetScript,
   lxcSshRootStatusScript,
   parseLxcExecPayload,
   parseLxcSshRootStatus,
+  wrapLxcTermScript,
 } from "@/lib/lxc-ssh-root";
 
 describe("LXC root SSH", () => {
@@ -45,14 +47,29 @@ describe("LXC root SSH", () => {
     });
   });
 
-  it("writes PermitRootLogin and fails without sshd", () => {
+  it("keeps termproxy payload lines short enough not to wrap", () => {
+    const b64 = "A".repeat(200);
+    const wrapped = wrapLxcTermScript(b64, "__PXR_B_ab__", "__PXR_E_ab__");
+    for (const line of wrapped.split("\n")) {
+      expect(line.length).toBeLessThanOrEqual(80);
+    }
+    expect(wrapped).toContain("printf '%s' \"$B64\" | base64 -d | sh");
+  });
+
+  it("writes PermitRootLogin and restarts sshd on both enable and disable", () => {
     const on = lxcSshRootSetScript(true);
     const off = lxcSshRootSetScript(false);
     expect(on).toContain("PermitRootLogin yes");
     expect(on).toContain("echo NO_SSHD");
-    expect(on).toContain("systemctl enable ssh");
+    expect(on).toContain("systemctl restart ssh");
     expect(off).toContain("PermitRootLogin no");
+    expect(off).toContain("systemctl restart ssh");
     expect(off).not.toContain("PermitRootLogin yes");
-    expect(lxcSshRootStatusScript()).toContain("permitrootlogin");
+    expect(lxcSshRootStatusScript()).toContain("99-proxora-root.conf");
+  });
+
+  it("does not treat console validation errors as a dead host", () => {
+    expect(isHostTransportFailure(new ValidationError("Zeitüberschreitung in der Container-Konsole"))).toBe(false);
+    expect(isHostTransportFailure(new ProxmoxApiError("Connection failed", 503))).toBe(true);
   });
 });

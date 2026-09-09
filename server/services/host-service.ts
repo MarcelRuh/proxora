@@ -2,7 +2,7 @@ import { AuthType, Host, HostConnectionState, HostOrigin } from "@prisma/client"
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
-import { ConflictError, ForbiddenError, HostUnreachableError, NotFoundError, ProxmoxApiError, ValidationError } from "@/lib/errors";
+import { ConflictError, ForbiddenError, HostUnreachableError, isHostTransportFailure, NotFoundError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import type { SessionUser } from "@/server/auth/session-core";
 import { canAccessHost } from "@/server/auth/session-core";
@@ -395,7 +395,7 @@ export async function withHostClient<T>(
     }
     return result;
   } catch (error) {
-    if (error instanceof ProxmoxApiError && error.status !== 503) {
+    if (!isHostTransportFailure(error)) {
       throw error;
     }
     const message = error instanceof Error ? error.message : "Unknown error";
