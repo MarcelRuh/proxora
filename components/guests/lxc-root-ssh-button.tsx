@@ -49,44 +49,31 @@ export function LxcRootSshButton({
     },
   });
 
+  const on = Boolean(data?.enabled);
+  const next = !on;
   const needRunning = !guestRunning;
   const blocked = locked || needRunning || toggle.isPending;
   const title = locked ? disabledReason : needRunning ? t("guest.sshRootNeedRunning") : undefined;
-  const knownOn = data?.enabled === true;
-  const knownOff = data?.enabled === false;
+  const label = on ? t("guest.sshRootDisable") : t("guest.sshRootEnable");
+  const button = (
+    <Button variant={on ? "destructive" : "outline"} disabled={blocked} title={title}>
+      {toggle.isPending ? t("common.loading") : label}
+    </Button>
+  );
 
-  function actionButton(enable: boolean) {
-    const turning = toggle.isPending && toggle.variables === enable;
-    const label = enable ? t("guest.sshRootEnable") : t("guest.sshRootDisable");
-    const button = (
-      <Button
-        variant={enable ? (knownOn ? "default" : "outline") : knownOff ? "secondary" : "destructive"}
-        disabled={blocked}
-        title={title}
-      >
-        {turning ? t("common.loading") : label}
-      </Button>
-    );
-    if (blocked) return button;
-    return (
-      <ConfirmAction
-        title={enable ? t("guest.sshRootEnableTitle") : t("guest.sshRootDisableTitle")}
-        description={enable ? t("guest.sshRootEnableBody") : t("guest.sshRootDisableBody")}
-        actionLabel={label}
-        destructive={!enable}
-        onConfirm={async () => {
-          await toggle.mutateAsync(enable);
-        }}
-      >
-        {button}
-      </ConfirmAction>
-    );
-  }
+  if (blocked) return button;
 
   return (
-    <>
-      {actionButton(true)}
-      {actionButton(false)}
-    </>
+    <ConfirmAction
+      title={next ? t("guest.sshRootEnableTitle") : t("guest.sshRootDisableTitle")}
+      description={next ? t("guest.sshRootEnableBody") : t("guest.sshRootDisableBody")}
+      actionLabel={label}
+      destructive={on}
+      onConfirm={async () => {
+        await toggle.mutateAsync(next);
+      }}
+    >
+      {button}
+    </ConfirmAction>
   );
 }

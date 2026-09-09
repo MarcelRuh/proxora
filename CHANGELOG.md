@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.0.10] – 2026-09-09
+
+### Changed
+
+- LXC detail pages use one root-SSH button that shows **off** when SSH is on, and **on** when it is off.
+
 ## [2.0.9] – 2026-09-09
 
 ### Fixed
