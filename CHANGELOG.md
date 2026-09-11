@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.1] – 2026-09-11
+
+### Fixed
+
+- Docker/`next build` no longer fails on `app/favicon.ico` (`The PNG is not in RGBA format`).
+
 ## [2.1.0] – 2026-09-11
 
 ### Added
