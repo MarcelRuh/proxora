@@ -11,7 +11,7 @@
 [![Active](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FMarcelRuh%2Fproxora%2Fusage%2Fusage.json&query=%24%5B-1%5D.active7d&label=active%207d)](https://github.com/MarcelRuh/proxora/tree/usage)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-> Status: **v2.0.14** – self-hosted Proxmox control plane with an Android client.
+> Status: **v2.1.0** – self-hosted Proxmox control plane with an Android client.
 
 Proxora talks to each node through the official **Proxmox VE API**. No cluster required.
 
