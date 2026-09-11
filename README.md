@@ -43,16 +43,22 @@ Host, guest, and disk identifiers in these shots are anonymized lab labels.
 
 ## One-line install (wget)
 
-Requires Docker + Compose V2. Installs to `/opt/proxora` by default and generates strong secrets.
+Requires Linux (x86_64/arm64). Installs Docker Engine + Compose V2 when missing. Default directory: `/opt/proxora`. Run as **root**, or pipe to `sudo bash`.
 
 ```bash
 wget -qO- https://raw.githubusercontent.com/MarcelRuh/proxora/main/scripts/install.sh | bash
 ```
 
+Not root:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/MarcelRuh/proxora/main/scripts/install.sh | sudo bash
+```
+
 Custom directory:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/MarcelRuh/proxora/main/scripts/install.sh | PROXORA_DIR=/srv/proxora bash
+wget -qO- https://raw.githubusercontent.com/MarcelRuh/proxora/main/scripts/install.sh | sudo env PROXORA_DIR=/srv/proxora bash
 ```
 
 Or with curl:

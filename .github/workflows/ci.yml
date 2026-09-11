@@ -16,6 +16,8 @@ jobs:
       APP_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: bash -n scripts/install.sh scripts/update.sh scripts/self-update-apply.sh scripts/update-watcher.sh
       - uses: actions/setup-node@v4
         with:
           node-version: 22

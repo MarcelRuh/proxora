@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- wget installer installs Docker Engine + Compose V2 when missing (`get.docker.com`, Distro-Pakete as fallback).
+
+### Changed
+
+- wget installer: `.env` is `chmod 600`, missing self-update keys are filled in, curl works without wget, low disk / PVE / firewall get a hint.
+
 ## [2.1.2] – 2026-09-11
 
 ### Fixed

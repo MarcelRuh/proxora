@@ -23,6 +23,8 @@ wget -qO- https://raw.githubusercontent.com/MarcelRuh/proxora/main/scripts/insta
 wget -qO- https://raw.githubusercontent.com/MarcelRuh/proxora/main/scripts/update.sh | bash
 ```
 
+The installer installs Docker Engine + Compose V2 when they are missing (`https://get.docker.com`; opt out with `PROXORA_SKIP_DOCKER_INSTALL=1`).
+
 In-app: **Updates → Proxora self-update**. The UI shows `current → latest` and a live progress bar while Compose rebuilds. Set `PROXORA_INSTALL_DIR` to the host path that contains `docker-compose.yml` (the installer does this automatically).
 
 The app container does **not** mount `docker.sock` and does **not** mount the install tree (so `.env` stays off the app). A sidecar (`proxora-updater`) has the Docker socket and starts the updater only when the app writes `/update-signal/request`. The request file is a trigger, not a command channel — the sidecar runs the local `scripts/self-update-apply.sh`. Compose build cannot run through `docker-socket-proxy` (HTTP 403 on TCP upgrade).
