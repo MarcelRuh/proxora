@@ -16,6 +16,14 @@ export function backupsForGuest<T extends { vmid: number | null; kind: BackupKin
   return files.filter((file) => file.vmid === vmid && (file.kind === kind || file.kind === "unknown"));
 }
 
+export function backupsForGuestNewestFirst<T extends { vmid: number | null; kind: BackupKind; ctime: number }>(
+  files: T[],
+  vmid: number,
+  kind: "vm" | "lxc",
+): T[] {
+  return backupsForGuest(files, vmid, kind).slice().sort((a, b) => b.ctime - a.ctime);
+}
+
 export function assertGuestBackupVolids(volids: string[], vmid: number, kind: "vm" | "lxc"): string[] {
   const unique = [...new Set(volids.map((value) => value.trim()).filter(Boolean))];
   for (const volid of unique) {

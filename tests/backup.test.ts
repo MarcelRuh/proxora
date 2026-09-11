@@ -3,6 +3,7 @@ import {
   backupCtimeMs,
   filterBackupFiles,
   backupsForGuest,
+  backupsForGuestNewestFirst,
   assertGuestBackupVolids,
   guestNeedsStopForRestore,
   jobSchedulePayload,
@@ -111,6 +112,18 @@ describe("backup file filter", () => {
     expect(backupsForGuest(files, 100, "vm").map((f) => f.volid)).toEqual(["local:backup/vzdump-qemu-100-a.vma.zst"]);
     expect(backupsForGuest(files, 204, "lxc")).toHaveLength(1);
     expect(backupsForGuest(files, 100, "lxc")).toHaveLength(0);
+  });
+
+  it("sorts guest backups newest first", () => {
+    const lxc = [
+      { volid: "local:backup/vzdump-lxc-204-old.tar.zst", vmid: 204, kind: "lxc" as const, ctime: 1_700_000_000_000 },
+      { volid: "local:backup/vzdump-lxc-204-new.tar.zst", vmid: 204, kind: "lxc" as const, ctime: 1_700_100_000_000 },
+      { volid: "local:backup/vzdump-qemu-100-a.vma.zst", vmid: 100, kind: "vm" as const, ctime: 1_700_200_000_000 },
+    ];
+    expect(backupsForGuestNewestFirst(lxc, 204, "lxc").map((f) => f.volid)).toEqual([
+      "local:backup/vzdump-lxc-204-new.tar.zst",
+      "local:backup/vzdump-lxc-204-old.tar.zst",
+    ]);
   });
 
   it("rejects backup volids that belong to another guest", () => {

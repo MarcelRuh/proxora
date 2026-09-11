@@ -17,7 +17,6 @@ import { CloneDialog } from "@/components/guests/clone-dialog";
 import { MigrateDialog } from "@/components/guests/migrate-dialog";
 import { BackupNowDialog } from "@/components/backups/backup-now-dialog";
 import { RestoreDialog } from "@/components/backups/restore-dialog";
-import type { BackupFile, BackupOverview } from "@/components/backups/types";
 import { api } from "@/lib/api";
 import { bytesToSize, formatUptime, guestCpuPercent, guestSizeDetail, percentage } from "@/lib/utils";
 import type { PublicHost } from "@/lib/types";
@@ -113,7 +112,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     enabled: Boolean(isCluster),
     staleTime: 20_000,
   });
-  const [restoreFile, setRestoreFile] = useState<BackupFile | null>(null);
+  const [restoreOpen, setRestoreOpen] = useState(false);
 
   useEffect(() => {
     const tab = search.get("tab");
@@ -134,18 +133,6 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     router.replace(pathname);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open once from old ?console=1 links
   }, []);
-  const { data: backupOverview } = useQuery({
-    queryKey: ["backups", params.hostId],
-    queryFn: () => api<BackupOverview>(`/api/hosts/${params.hostId}/backups`),
-    enabled: Boolean(restoreFile),
-    staleTime: 60_000,
-  });
-  const { data: backups } = useQuery({
-    queryKey: ["backup-files", params.hostId],
-    queryFn: () => api<{ files: BackupFile[] }>(`/api/hosts/${params.hostId}/backups/files`),
-    enabled: Boolean(restoreFile),
-    staleTime: 60_000,
-  });
 
   async function action(name: string, extra: Record<string, unknown> = {}) {
     await api(path, { method: "POST", body: JSON.stringify({ action: name, ...extra }) });
@@ -366,28 +353,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           variant="outline"
           disabled={Boolean(deny(can.restore, share.restore))}
           title={deny(can.restore, share.restore)}
-          onClick={() => {
-            const latest = (backups?.files ?? []).find((f) => f.vmid === Number(params.vmid));
-            if (latest) {
-              setRestoreFile(latest);
-              return;
-            }
-            void qc
-              .fetchQuery({
-                queryKey: ["backup-files", params.hostId],
-                queryFn: () => api<{ files: BackupFile[] }>(`/api/hosts/${params.hostId}/backups/files`),
-                staleTime: 60_000,
-              })
-              .then((overview) => {
-                const file = (overview.files ?? []).find((f) => f.vmid === Number(params.vmid));
-                if (!file) {
-                  toast.error(t("backup.noFiles"));
-                  return;
-                }
-                setRestoreFile(file);
-              })
-              .catch((err: unknown) => toast.error(err instanceof Error ? err.message : t("common.failed")));
-          }}
+          onClick={() => setRestoreOpen(true)}
         >
           {t("backup.restore")}
         </Button>
@@ -598,18 +564,13 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           ))}
         </CardContent>
       </Card>
-      {backupOverview ? (
-        <RestoreDialog
-          hostId={params.hostId}
-          overview={backupOverview}
-          file={restoreFile}
-          open={Boolean(restoreFile)}
-          onOpenChange={(next) => {
-            if (!next) setRestoreFile(null);
-          }}
-          onDone={() => void refetch()}
-        />
-      ) : null}
+      <RestoreDialog
+        hostId={params.hostId}
+        pickFor={{ vmid: Number(params.vmid), kind }}
+        open={restoreOpen}
+        onOpenChange={setRestoreOpen}
+        onDone={() => void refetch()}
+      />
     </div>
   );
 }

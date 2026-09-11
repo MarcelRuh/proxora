@@ -8,8 +8,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input, Label } from "@/components/ui/input";
 import { ProxmoxTaskProgress } from "@/components/backups/task-progress";
 import { api } from "@/lib/api";
-import { guestNeedsStopForRestore, normalizeProxmoxTaskLog } from "@/lib/backup";
+import { backupsForGuestNewestFirst, guestNeedsStopForRestore, normalizeProxmoxTaskLog, parseBackupVolid } from "@/lib/backup";
 import { isFailedTaskExit } from "@/lib/backup-tasks";
+import { bytesToSize } from "@/lib/utils";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { SELECT_CLASS, type BackupFile, type BackupOverview } from "@/components/backups/types";
 
@@ -20,20 +21,22 @@ type TaskPayload = {
 
 export function RestoreDialog({
   hostId,
-  overview,
-  file,
+  overview: overviewProp,
+  file: fileProp,
+  pickFor,
   open,
   onOpenChange,
   onDone,
 }: {
   hostId: string;
-  overview: BackupOverview;
-  file: BackupFile | null;
+  overview?: BackupOverview;
+  file?: BackupFile | null;
+  pickFor?: { vmid: number; kind: "vm" | "lxc" };
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDone: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [vmid, setVmid] = useState("");
   const [node, setNode] = useState("");
   const [storage, setStorage] = useState("");
@@ -43,32 +46,80 @@ export function RestoreDialog({
   const [upid, setUpid] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [pickedVolid, setPickedVolid] = useState<string | null>(null);
   const settledRef = useRef(false);
+  const picking = Boolean(pickFor);
+
+  const { data: fetchedOverview } = useQuery({
+    queryKey: ["backups", hostId],
+    queryFn: () => api<BackupOverview>(`/api/hosts/${hostId}/backups`),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const overview = overviewProp ?? fetchedOverview;
+
+  const { data: filesPayload, isLoading: filesLoading } = useQuery({
+    queryKey: ["backup-files", hostId],
+    queryFn: () => api<{ files: BackupFile[] }>(`/api/hosts/${hostId}/backups/files`),
+    enabled: open && picking,
+    staleTime: 30_000,
+  });
+
+  const guestFiles = useMemo(() => {
+    if (!pickFor) return fileProp ? [fileProp] : [];
+    return backupsForGuestNewestFirst(filesPayload?.files ?? [], pickFor.vmid, pickFor.kind);
+  }, [fileProp, filesPayload?.files, pickFor]);
+
+  const file = useMemo(
+    () => guestFiles.find((entry) => entry.volid === pickedVolid) ?? (!picking ? (fileProp ?? null) : null),
+    [fileProp, guestFiles, pickedVolid, picking],
+  );
 
   useEffect(() => {
-    if (!open || !file) return;
-    if (busy || upid) return;
-    setVmid(String(file.vmid ?? ""));
-    setNode(file.node || overview.primaryNode || overview.nodes[0] || "");
-    setStorage(overview.diskStorages[0] || "");
+    if (!open) {
+      setPickedVolid(null);
+      return;
+    }
+    if (fileProp?.volid) {
+      setPickedVolid(fileProp.volid);
+      return;
+    }
+    setPickedVolid(null);
+  }, [open, fileProp?.volid, pickFor?.kind, pickFor?.vmid]);
+
+  useEffect(() => {
+    if (!open || !picking || pickedVolid || !guestFiles.length) return;
+    setPickedVolid(guestFiles[0].volid);
+  }, [guestFiles, open, pickedVolid, picking]);
+
+  useEffect(() => {
+    if (!open) return;
+    setVmid(String(pickFor?.vmid ?? fileProp?.vmid ?? ""));
     setForce(true);
     setStartAfter(false);
     setFinished(false);
     setErrorMsg(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, file?.volid]);
+  }, [open, pickFor?.vmid, fileProp?.vmid]);
+
+  useEffect(() => {
+    if (!open || busy || upid) return;
+    if (file?.node) setNode(file.node);
+    else setNode((current) => current || overview?.primaryNode || overview?.nodes[0] || "");
+    setStorage((current) => current || overview?.diskStorages[0] || "");
+  }, [busy, file?.node, open, overview?.diskStorages, overview?.nodes, overview?.primaryNode, upid]);
 
   const target = useMemo(() => {
     const id = Number(vmid);
     if (!id) return null;
-    return overview.guests.find((g) => g.vmid === id) ?? null;
-  }, [overview.guests, vmid]);
+    return overview?.guests.find((g) => g.vmid === id) ?? null;
+  }, [overview?.guests, vmid]);
 
-  const kind = target?.kind ?? (file?.kind === "vm" ? "vm" : "lxc");
+  const kind = target?.kind ?? pickFor?.kind ?? (file?.kind === "vm" ? "vm" : "lxc");
   const kindLabel = t(kind === "vm" ? "backup.kind.vm" : "backup.kind.lxc");
   const running = guestNeedsStopForRestore(target?.status);
   const shutdownRestore = force && running;
   const tracking = Boolean(upid) && !finished && !errorMsg;
+  const dateLocale = locale === "en" ? "en-GB" : "de-DE";
 
   const { data: task } = useQuery({
     queryKey: ["restore-task", hostId, node, upid],
@@ -154,6 +205,8 @@ export function RestoreDialog({
   }
 
   const locked = showProgress && !finished && !errorMsg;
+  const nodes = overview?.nodes ?? [];
+  const diskStorages = overview?.diskStorages ?? [];
 
   return (
     <Dialog
@@ -186,7 +239,7 @@ export function RestoreDialog({
                 : t("backup.restoreBody")}
           </DialogDescription>
         </DialogHeader>
-        <p className="break-all text-xs text-muted-foreground">{file?.volid}</p>
+        {picking ? null : <p className="break-all text-xs text-muted-foreground">{file?.volid}</p>}
         {showProgress ? (
           <div className="mt-3 grid gap-3">
             {errorMsg ? <p className="text-sm text-danger">{errorMsg}</p> : null}
@@ -203,6 +256,46 @@ export function RestoreDialog({
           </div>
         ) : (
           <div className="mt-3 grid gap-3">
+            {picking ? (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">{t("backup.restorePick")}</p>
+                <p className="text-xs text-muted-foreground">{t("backup.restorePickHint")}</p>
+                {filesLoading ? (
+                  <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+                ) : guestFiles.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t("backup.noFiles")}</p>
+                ) : (
+                  <ul className="max-h-48 space-y-1 overflow-auto rounded-md border border-border p-2">
+                    {guestFiles.map((entry, index) => {
+                      const parsed = parseBackupVolid(entry.volid);
+                      const when = entry.ctime ? new Date(entry.ctime).toLocaleString(dateLocale) : "—";
+                      return (
+                        <li key={entry.volid}>
+                          <label className="flex cursor-pointer items-start gap-2 rounded-md px-1 py-1 text-sm hover:bg-white/[0.04]">
+                            <input
+                              type="radio"
+                              className="mt-1"
+                              name="restore-backup"
+                              checked={pickedVolid === entry.volid}
+                              onChange={() => setPickedVolid(entry.volid)}
+                            />
+                            <span className="min-w-0">
+                              <span className="block truncate font-mono text-xs">
+                                {parsed.filename}
+                                {index === 0 ? ` · ${t("backup.restoreLatest")}` : ""}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {when} · {bytesToSize(entry.size)} · {entry.storage}
+                              </span>
+                            </span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            ) : null}
             <div className="space-y-1">
               <Label>{t("create.id")}</Label>
               <Input value={vmid} onChange={(e) => setVmid(e.target.value)} />
@@ -210,7 +303,7 @@ export function RestoreDialog({
             <label className="text-sm">
               {t("backup.node")}
               <select className={SELECT_CLASS} value={node} onChange={(e) => setNode(e.target.value)}>
-                {overview.nodes.map((n) => (
+                {nodes.map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
@@ -220,7 +313,7 @@ export function RestoreDialog({
             <label className="text-sm">
               {t("backup.targetStorage")}
               <select className={SELECT_CLASS} value={storage} onChange={(e) => setStorage(e.target.value)}>
-                {overview.diskStorages.map((s) => (
+                {diskStorages.map((s) => (
                   <option key={s} value={s}>
                     {s}
                   </option>
@@ -248,7 +341,7 @@ export function RestoreDialog({
               <Button
                 variant={shutdownRestore ? "destructive" : "default"}
                 onClick={() => void submit()}
-                disabled={!Number(vmid) || !node || !storage || (running && !force)}
+                disabled={!file || !Number(vmid) || !node || !storage || (running && !force)}
               >
                 {shutdownRestore
                   ? t("backup.restoreRunningAction", { kind: kindLabel })
