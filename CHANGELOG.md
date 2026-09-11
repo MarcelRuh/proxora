@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.2] – 2026-09-11
+
+### Fixed
+
+- Guest **Einspielen** lists that VM/CT’s backups so you can choose which file to restore, not only the newest.
+
 ## [2.1.1] – 2026-09-11
 
 ### Fixed
