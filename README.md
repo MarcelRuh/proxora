@@ -1,5 +1,9 @@
 # Proxora
 
+<p align="center">
+  <img src="public/brand/proxora-logo.jpg" alt="Proxora" width="280">
+</p>
+
 **Proxmox management suite** for independent VE hosts — VMs, LXC, storage, ZFS, consoles, and GitHub self-updates.
 
 [![CI](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml)

@@ -8,6 +8,10 @@ All notable changes to this project are documented here.
 
 - Anonymous GitHub usage counters: wget installs and weekly live pings hit the `stats` prerelease so install/active counts show on the repo. Opt out with `PROXORA_TELEMETRY=0`.
 
+### Changed
+
+- Web, favicon, Discord avatar, README, and Android launcher use the new hex/P mark and full Proxora lockup.
+
 ## [2.0.14] – 2026-09-09
 
 ### Removed

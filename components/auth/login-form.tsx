@@ -4,10 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { api, ApiRequestError } from "@/lib/api";
 import { UiAtmosphere } from "@/components/layout/ui-atmosphere";
-import { BrandMark } from "@/components/layout/brand-mark";
 import { APP_NAME } from "@/lib/version";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { LocaleSwitch } from "@/components/i18n/locale-switch";
@@ -62,9 +61,9 @@ export function LoginForm({ next }: { next: string }) {
     <div className="relative flex min-h-screen items-center justify-center p-4">
       <UiAtmosphere />
       <Card className="relative z-10 w-full max-w-md">
-        <CardHeader>
-          <BrandMark className="mb-3 h-12 w-12" />
-          <CardTitle className="proxora-logo text-2xl">{APP_NAME.toUpperCase()}</CardTitle>
+        <CardHeader className="items-center text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/proxora-logo.jpg" alt={APP_NAME} className="mx-auto mb-2 w-56 object-contain" />
           <CardDescription>{ticket ? t("login.totpSubtitle") : t("login.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
