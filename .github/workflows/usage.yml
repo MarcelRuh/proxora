@@ -1,0 +1,57 @@
+name: Usage
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Ensure stats prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view stats >/dev/null 2>&1; then
+            exit 0
+          fi
+          tmp="$(mktemp -d)"
+          printf 'proxora-install\n' > "${tmp}/install"
+          printf 'proxora-live\n' > "${tmp}/live"
+          gh release create stats "${tmp}/install" "${tmp}/live" \
+            --prerelease \
+            --title "Usage counters" \
+            --notes "Anonymous wget install + weekly live pings. Not a Proxora version. Opt out with PROXORA_TELEMETRY=0."
+      - name: Load previous snapshots
+        run: |
+          mkdir -p usage-out
+          if git show origin/usage:usage.json >/dev/null 2>&1; then
+            git show origin/usage:usage.json > usage-out/usage.json
+          else
+            printf '[]\n' > usage-out/usage.json
+          fi
+      - name: Snapshot download counts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          USAGE_OUT: usage-out
+        run: python3 scripts/usage-snapshot.py
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit stats --notes-file usage-out/README.md
+          git checkout --orphan usage-publish
+          git reset
+          cp usage-out/README.md README.md
+          cp usage-out/usage.json usage.json
+          git add README.md usage.json
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "Update Proxora usage snapshot"
+          git push -f origin HEAD:usage

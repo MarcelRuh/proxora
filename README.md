@@ -3,6 +3,8 @@
 **Proxmox management suite** for independent VE hosts — VMs, LXC, storage, ZFS, consoles, and GitHub self-updates.
 
 [![CI](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcelRuh/proxora/actions/workflows/ci.yml)
+[![Installs](https://img.shields.io/github/downloads/MarcelRuh/proxora/stats/install?label=wget%20installs)](https://github.com/MarcelRuh/proxora/releases/tag/stats)
+[![Active](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FMarcelRuh%2Fproxora%2Fusage%2Fusage.json&query=%24%5B-1%5D.active7d&label=active%207d)](https://github.com/MarcelRuh/proxora/tree/usage)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 > Status: **v2.0.14** – self-hosted Proxmox control plane with an Android client.
@@ -68,6 +70,8 @@ wget -qO- https://raw.githubusercontent.com/MarcelRuh/proxora/main/scripts/updat
 ```
 
 Preserves `.env` and data volumes, syncs from GitHub, then runs `docker compose up -d --build`.
+
+Installs and running copies send an anonymous ping to the GitHub `stats` prerelease (a dummy file download, no IDs). Totals: [wget installs](https://github.com/MarcelRuh/proxora/releases/tag/stats) · [active ~7 days](https://github.com/MarcelRuh/proxora/tree/usage). Opt out with `PROXORA_TELEMETRY=0`.
 
 ## Features
 

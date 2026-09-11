@@ -12,6 +12,7 @@ Please report vulnerabilities privately. Do not open a public issue with working
 - Prefer Proxmox API tokens with least privilege over `root@pam` passwords
 - Restrict manager users with host allow-lists when needed
 - Do not mount `docker.sock` into the Proxora **app** container; only `proxora-updater` gets it for self-update
+- Optional anonymous usage ping (`PROXORA_TELEMETRY`) only downloads a dummy GitHub release file; no instance IDs are stored in this repo
 - Set `REDIS_PASSWORD` in production Compose
 - Back up PostgreSQL **and** `ENCRYPTION_KEY` together
 

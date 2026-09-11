@@ -36,6 +36,15 @@ docker_cmd() {
 rand() { openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'; }
 rand_pw() { openssl rand -base64 18 2>/dev/null | tr -d '/+=' | head -c 20; }
 
+telemetry_ping() {
+  local asset="$1"
+  case "${PROXORA_TELEMETRY:-1}" in
+    0|false|off|no) return 0 ;;
+  esac
+  wget -qO /dev/null --timeout=8 --tries=1 -U "proxora-install" \
+    "https://github.com/${REPO}/releases/download/stats/${asset}" >/dev/null 2>&1 || true
+}
+
 detect_lan_ip() {
   local ip
   ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')"
@@ -167,6 +176,10 @@ if [[ "$ok" -ne 1 ]]; then
   red "Proxora did not become healthy on http://127.0.0.1:3000"
   docker_cmd compose -f docker-compose.prod.yml logs --tail 80 proxora || true
   exit 1
+fi
+
+if [[ "$NEW_INSTALL" == "1" ]]; then
+  telemetry_ping install
 fi
 
 WEB_HINT="$(env_get "${INSTALL_DIR}/.env" APP_URL)"

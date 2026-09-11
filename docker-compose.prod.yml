@@ -39,6 +39,7 @@ services:
       PROXORA_UPDATE_SIGNAL_DIR: /update-signal
       WG_CONFIG_DIR: /wireguard
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      PROXORA_TELEMETRY: ${PROXORA_TELEMETRY:-1}
     volumes:
       - proxora_update_signal:/update-signal
       - proxora_wireguard:/wireguard

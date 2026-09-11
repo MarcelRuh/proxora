@@ -8,6 +8,6 @@ describe("settings allowlist", () => {
     expect(isPublicSettingKey("guest-ip")).toBe(true);
     expect(isPublicSettingKey("disk.watch.state")).toBe(false);
     expect(isPublicSettingKey("zfs.watch.state")).toBe(false);
-    expect(isPublicSettingKey("app")).toBe(false);
+    expect(isPublicSettingKey("telemetry.livePing")).toBe(false);
   });
 });

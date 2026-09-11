@@ -15,6 +15,7 @@ import { startZfsWatchScheduler } from "@/server/services/zfs-watch";
 import { startHostReconnectScheduler } from "@/server/services/host-reconnect";
 import { startPeerSyncScheduler } from "@/server/services/peer-sync";
 import { announcePeerUpdateToPeers } from "@/server/services/peer-update";
+import { startUsageTelemetry } from "@/server/services/usage-telemetry";
 import { writeWireguardConfig } from "@/server/services/wireguard-service";
 import { ensureSystemRoles } from "@/server/services/role-sync";
 
@@ -87,6 +88,7 @@ async function main() {
     void announcePeerUpdateToPeers({ updating: false }).catch((error) =>
       logger.warn({ err: error }, "Peer update recovery announce failed"),
     );
+    startUsageTelemetry();
   });
 }
 

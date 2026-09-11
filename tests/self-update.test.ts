@@ -72,6 +72,7 @@ describe("github release parse", () => {
       htmlUrl: "https://example",
     });
     expect(parseGithubRelease({ tag_name: "nightly" })).toBeNull();
+    expect(parseGithubRelease({ tag_name: "stats" })).toBeNull();
   });
 
   it("reads the latest tag from a GitHub release URL", () => {
@@ -81,7 +82,7 @@ describe("github release parse", () => {
   });
 
   it("picks the highest semver tag, not lexicographic order", () => {
-    expect(pickLatestSemverTag(["v1.0.9", "v1.0.73", "v1.0.8", "nightly"])).toBe("v1.0.73");
+    expect(pickLatestSemverTag(["v1.0.9", "v1.0.73", "v1.0.8", "nightly", "stats"])).toBe("v1.0.73");
     expect(pickLatestSemverTag([])).toBeNull();
   });
 });
