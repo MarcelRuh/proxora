@@ -1,0 +1,56 @@
+[
+  {
+    "at": "2026-09-11T16:27:02Z",
+    "install": 0,
+    "live": 0,
+    "active7d": 0
+  },
+  {
+    "at": "2026-09-12T10:48:32Z",
+    "install": 1,
+    "live": 3,
+    "active7d": 3
+  },
+  {
+    "at": "2026-09-13T11:54:17Z",
+    "install": 1,
+    "live": 3,
+    "active7d": 3
+  },
+  {
+    "at": "2026-09-14T12:49:45Z",
+    "install": 1,
+    "live": 3,
+    "active7d": 3
+  },
+  {
+    "at": "2026-09-15T11:45:12Z",
+    "install": 1,
+    "live": 3,
+    "active7d": 3
+  },
+  {
+    "at": "2026-09-16T11:35:58Z",
+    "install": 1,
+    "live": 3,
+    "active7d": 3
+  },
+  {
+    "at": "2026-09-17T11:42:57Z",
+    "install": 1,
+    "live": 3,
+    "active7d": 3
+  },
+  {
+    "at": "2026-09-18T11:16:32Z",
+    "install": 1,
+    "live": 3,
+    "active7d": 3
+  },
+  {
+    "at": "2026-09-19T11:00:47Z",
+    "install": 1,
+    "live": 5,
+    "active7d": 2
+  }
+]
