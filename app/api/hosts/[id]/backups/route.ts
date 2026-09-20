@@ -52,6 +52,7 @@ const schema = z.discriminatedUnion("action", [
     storage: z.string().min(1),
     force: z.boolean().optional(),
     startAfter: z.boolean().optional(),
+    attempt: z.number().int().min(1).optional(),
   }),
   z.object({
     action: z.literal("delete-file"),
@@ -118,8 +119,11 @@ export const POST = apiRoute(
         notifyName = (await lookupGuestName(client, body.node, body.vmid)) || parseBackupVolid(body.volid).filename;
         notifyId = String(body.vmid);
         notifyNode = body.node;
-        const upid = await restoreBackup(client, { ...body, hostId: params.id });
-        return { upid };
+        return restoreBackup(client, {
+          ...body,
+          hostId: params.id,
+          forceStop: (body.attempt ?? 1) >= 18,
+        });
       }
       case "delete-file": {
         const parsed = parseBackupVolid(body.volid);
@@ -157,6 +161,10 @@ export const POST = apiRoute(
       });
     }
     throw error;
+  }
+
+  if (body.action === "restore" && result.phase === "stopping") {
+    return json(result);
   }
 
   const audit =

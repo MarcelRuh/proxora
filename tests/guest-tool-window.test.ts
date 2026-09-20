@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   guestToolPath,
+  guestToolParentPath,
   guestToolWindowFeatures,
   guestToolWindowName,
   guestToolWindowSize,
@@ -44,5 +45,12 @@ describe("guest tool windows", () => {
     expect(shouldOpenGuestToolInPlace("Mozilla/5.0 ProxoraAndroid/1.7.0", 1200)).toBe(true);
     expect(shouldOpenGuestToolInPlace("Mozilla/5.0 Chrome/120", 390)).toBe(true);
     expect(shouldOpenGuestToolInPlace("Mozilla/5.0 Chrome/120", 1280)).toBe(false);
+  });
+
+  it("maps in-place console and files URLs back to the guest page", () => {
+    expect(guestToolParentPath("/vms/abc/pve/100/console")).toBe("/vms/abc/pve/100");
+    expect(guestToolParentPath("/containers/h%2F1/node-a/101/files")).toBe("/containers/h%2F1/node-a/101");
+    expect(guestToolParentPath("/vms/abc/pve/100")).toBeNull();
+    expect(guestToolParentPath("/hosts/abc/console")).toBeNull();
   });
 });

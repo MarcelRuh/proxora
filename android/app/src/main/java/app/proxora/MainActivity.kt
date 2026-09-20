@@ -64,6 +64,16 @@ class MainActivity : AppCompatActivity() {
 
   companion object {
     const val ACTION_RELOAD = "app.proxora.RELOAD"
+
+    internal fun guestToolParentUrl(url: String?): String? {
+      if (url.isNullOrBlank()) return null
+      val uri = Uri.parse(url)
+      val path = uri.path ?: return null
+      val match = Regex("^/(vms|containers)/([^/]+)/([^/]+)/([^/]+)/(console|files)/?$").matchEntire(path)
+        ?: return null
+      val parent = "/${match.groupValues[1]}/${match.groupValues[2]}/${match.groupValues[3]}/${match.groupValues[4]}"
+      return uri.buildUpon().encodedPath(parent).encodedQuery(null).fragment(null).build().toString()
+    }
   }
 
   private val downloadComplete = object : BroadcastReceiver() {
@@ -191,6 +201,12 @@ class MainActivity : AppCompatActivity() {
           val overlay = extraWindows.peekLast()
           if (overlay != null) {
             overlay.dismiss()
+            return
+          }
+          val current = webView.url
+          val parent = guestToolParentUrl(current)
+          if (parent != null) {
+            webView.loadUrl(parent)
             return
           }
           if (webView.canGoBack()) webView.goBack() else finish()
@@ -449,8 +465,24 @@ class MainActivity : AppCompatActivity() {
         resultMsg.sendToTarget()
 
         val dialog = Dialog(this@MainActivity, R.style.Theme_Proxora)
+        val close = proxoraOutlinedButton(getString(R.string.menu_close)) { dialog.dismiss() }
+        val header = LinearLayout(this@MainActivity).apply {
+          orientation = LinearLayout.VERTICAL
+          setBackgroundColor(getColor(R.color.proxora_bg))
+          setPadding(dp(12), dp(8), dp(12), dp(8))
+          addView(close, buttonRowParams())
+        }
+        val chrome = LinearLayout(this@MainActivity).apply {
+          orientation = LinearLayout.VERTICAL
+          setBackgroundColor(getColor(R.color.proxora_bg))
+          addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+          addView(
+            child,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+          )
+        }
         dialog.setContentView(
-          child,
+          chrome,
           ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
         dialog.setOnDismissListener {

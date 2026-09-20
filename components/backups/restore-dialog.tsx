@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input, Label } from "@/components/ui/input";
 import { ProxmoxTaskProgress } from "@/components/backups/task-progress";
-import { api } from "@/lib/api";
+import { api, isNetworkFetchError } from "@/lib/api";
 import { backupsForGuestNewestFirst, guestNeedsStopForRestore, normalizeProxmoxTaskLog, parseBackupVolid } from "@/lib/backup";
 import { isFailedTaskExit } from "@/lib/backup-tasks";
 import { bytesToSize } from "@/lib/utils";
@@ -184,23 +184,33 @@ export function RestoreDialog({
     setErrorMsg(null);
     settledRef.current = false;
     try {
-      const res = await api<{ upid?: string }>(`/api/hosts/${hostId}/backups`, {
-        method: "POST",
-        body: JSON.stringify({
-          action: "restore",
-          node,
-          volid: file.volid,
-          vmid: Number(vmid),
-          storage,
-          force,
-          startAfter,
-        }),
-      });
-      if (!res.upid) throw new Error(t("common.failed"));
-      setUpid(res.upid);
+      let nextUpid: string | undefined;
+      for (let attempt = 1; attempt <= 45; attempt++) {
+        const res = await api<{ upid?: string; phase?: string }>(`/api/hosts/${hostId}/backups`, {
+          method: "POST",
+          body: JSON.stringify({
+            action: "restore",
+            node,
+            volid: file.volid,
+            vmid: Number(vmid),
+            storage,
+            force,
+            startAfter,
+            attempt,
+          }),
+        });
+        if (res.upid) {
+          nextUpid = res.upid;
+          break;
+        }
+        if (res.phase !== "stopping") throw new Error(t("common.failed"));
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
+      }
+      if (!nextUpid) throw new Error(t("backup.restoreFailed"));
+      setUpid(nextUpid);
     } catch (e) {
       setBusy(false);
-      toast.error(e instanceof Error ? e.message : t("common.failed"));
+      toast.error(isNetworkFetchError(e) ? t("common.networkFailed") : e instanceof Error ? e.message : t("common.failed"));
     }
   }
 

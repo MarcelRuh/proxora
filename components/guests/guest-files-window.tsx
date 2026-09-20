@@ -13,6 +13,7 @@ import { peerHostAllowsPermission } from "@/lib/federation-access";
 import type { PublicHost } from "@/lib/types";
 import { APP_NAME } from "@/lib/version";
 import { isWindowsOstype } from "@/lib/iso-images";
+import { GuestToolCloseButton } from "@/components/guests/guest-tool-close";
 
 type GuestPayload = {
   status: Record<string, unknown>;
@@ -86,6 +87,9 @@ export function GuestFilesWindow({ kind }: { kind: "vm" | "lxc" }) {
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
             {APP_NAME} · {t("files.title")}
           </p>
+        </div>
+        <div className="ml-auto">
+          <GuestToolCloseButton kind={kind} hostId={params.hostId} node={params.node} vmid={params.vmid} />
         </div>
       </header>
       <div className="min-h-0 flex-1">

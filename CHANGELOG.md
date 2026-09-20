@@ -4,13 +4,21 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.3] – 2026-09-20
+
 ### Added
 
 - wget installer installs Docker Engine + Compose V2 when missing (`get.docker.com`, Distro-Pakete as fallback).
+- Guest console and files pages have a **Schließen** button (Android has no popup chrome).
 
 ### Changed
 
 - wget installer: `.env` is `chmod 600`, missing self-update keys are filled in, curl works without wget, low disk / PVE / firewall get a hint.
+
+### Fixed
+
+- Android back from an in-place console/files page returns to the guest instead of trapping you there.
+- Backup restore no longer holds one HTTP request for the whole guest shutdown (WebView `Failed to fetch`).
 
 ## [2.1.2] – 2026-09-11
 

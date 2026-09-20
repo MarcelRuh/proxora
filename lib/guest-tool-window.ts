@@ -41,6 +41,24 @@ export function guestToolWindowFeatures(
   return `popup=yes,width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes`;
 }
 
+export function guestDetailPath(input: {
+  kind: "vm" | "lxc";
+  hostId: string;
+  node: string;
+  vmid: number | string;
+}): string {
+  const base = guestToolBase(input.kind);
+  return `/${base}/${encodeURIComponent(input.hostId)}/${encodeURIComponent(input.node)}/${encodeURIComponent(String(input.vmid))}`;
+}
+
+/** Parent guest page for an in-place console/files URL (`/vms/.../100/console` → `/vms/.../100`). */
+export function guestToolParentPath(pathname: string): string | null {
+  const path = pathname.split("?")[0] ?? "";
+  const match = /^\/(vms|containers)\/([^/]+)\/([^/]+)\/([^/]+)\/(console|files)\/?$/.exec(path);
+  if (!match) return null;
+  return `/${match[1]}/${match[2]}/${match[3]}/${match[4]}`;
+}
+
 /** Android app and small screens cannot host a real popup; stay in the same WebView. */
 export function shouldOpenGuestToolInPlace(
   userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent,
@@ -71,4 +89,18 @@ export function openGuestToolWindow(input: {
   }
   win.focus();
   return win;
+}
+
+export function closeGuestToolWindow(input: {
+  kind: "vm" | "lxc";
+  hostId: string;
+  node: string;
+  vmid: number | string;
+}): void {
+  if (typeof window === "undefined") return;
+  if (window.opener && !window.opener.closed) {
+    window.close();
+    return;
+  }
+  window.location.assign(guestDetailPath(input));
 }

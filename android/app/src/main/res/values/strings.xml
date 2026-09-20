@@ -9,6 +9,7 @@
   <string name="setup_invalid">Ungültige URL. Nur http:// oder https://.</string>
   <string name="menu_reload">Neu laden</string>
   <string name="menu_server">Server ändern</string>
+  <string name="menu_close">Schließen</string>
   <string name="download_started">Download: %1$s</string>
   <string name="download_failed">Download fehlgeschlagen.</string>
   <string name="ssl_blocked">Zertifikat abgelehnt. App-Icon lange drücken → Server ändern, dann selbstsignierte Zertifikate erlauben.</string>

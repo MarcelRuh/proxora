@@ -12,7 +12,6 @@ import {
   waitUntilGuestStopped,
 } from "@/lib/backup";
 import { ValidationError } from "@/lib/errors";
-import { TASK_TIMEOUT, waitUpid } from "@/server/proxmox/task-wait";
 import { withHostClient } from "@/server/services/host-service";
 import type { SessionUser } from "@/server/auth/session";
 import { filterGuestsForUser } from "@/server/auth/session-core";
@@ -222,10 +221,10 @@ async function currentGuestStatus(
   }
 }
 
-async function stopGuestIfRunningForRestore(
+async function prepareGuestForRestore(
   client: ProxmoxClient,
-  input: { hostId: string; node: string; vmid: number; kind: "vm" | "lxc" },
-) {
+  input: { hostId: string; node: string; vmid: number; kind: "vm" | "lxc"; forceStop?: boolean },
+): Promise<boolean> {
   const listed = await loadHostInventory(client, input.hostId).catch(() => ({ vms: [], containers: [] }));
   const ct = listed.containers.find((g) => g.vmid === input.vmid);
   const vm = listed.vms.find((g) => g.vmid === input.vmid);
@@ -233,43 +232,46 @@ async function stopGuestIfRunningForRestore(
   const kind: "vm" | "lxc" = match ? (match === ct ? "lxc" : "vm") : input.kind;
   const node = match?.node || input.node;
   const status = match?.status ?? (await currentGuestStatus(client, kind, node, input.vmid));
-  if (!guestNeedsStopForRestore(status)) return;
+  if (!guestNeedsStopForRestore(status)) return true;
 
   const api = kind === "lxc" ? client.lxc : client.vms;
   try {
-    await api.shutdown(node, input.vmid);
+    if (input.forceStop) await api.stop(node, input.vmid);
+    else await api.shutdown(node, input.vmid);
   } catch {
     // already stopping or not running
   }
 
-  const stoppedGracefully = await waitUntilGuestStopped(() => currentGuestStatus(client, kind, node, input.vmid), {
-    timeoutMs: 45_000,
+  return waitUntilGuestStopped(() => currentGuestStatus(client, kind, node, input.vmid), {
+    timeoutMs: 2_500,
+    intervalMs: 500,
   });
-  if (!stoppedGracefully) {
-    try {
-      const upid = await api.stop(node, input.vmid);
-      await waitUpid(client, node, upid, TASK_TIMEOUT.stop);
-    } catch {
-      // poll below
-    }
-  }
-
-  const stopped = await waitUntilGuestStopped(() => currentGuestStatus(client, kind, node, input.vmid), {
-    timeoutMs: 30_000,
-  });
-  if (!stopped) {
-    throw new Error("Gast läuft noch und konnte nicht heruntergefahren werden");
-  }
 }
 
 export async function restoreBackup(
   client: ProxmoxClient,
-  input: { hostId: string; node: string; volid: string; vmid: number; storage: string; force?: boolean; startAfter?: boolean },
-) {
+  input: {
+    hostId: string;
+    node: string;
+    volid: string;
+    vmid: number;
+    storage: string;
+    force?: boolean;
+    startAfter?: boolean;
+    forceStop?: boolean;
+  },
+): Promise<{ upid?: string; phase?: "stopping" }> {
   const parsed = parseBackupVolid(input.volid);
   const kind = parsed.kind === "unknown" ? "vm" : parsed.kind;
   if (input.force) {
-    await stopGuestIfRunningForRestore(client, { hostId: input.hostId, node: input.node, vmid: input.vmid, kind });
+    const ready = await prepareGuestForRestore(client, {
+      hostId: input.hostId,
+      node: input.node,
+      vmid: input.vmid,
+      kind,
+      forceStop: input.forceStop,
+    });
+    if (!ready) return { phase: "stopping" };
   }
   const payload = compactProxmoxBody({
     vmid: input.vmid,
@@ -278,14 +280,18 @@ export async function restoreBackup(
     start: input.startAfter ? 1 : undefined,
   });
   if (kind === "lxc") {
-    return client.backup.restoreLxc(input.node, {
-      ...payload,
-      ostemplate: input.volid,
-      restore: 1,
-    });
+    return {
+      upid: await client.backup.restoreLxc(input.node, {
+        ...payload,
+        ostemplate: input.volid,
+        restore: 1,
+      }),
+    };
   }
-  return client.backup.restoreVm(input.node, {
-    ...payload,
-    archive: input.volid,
-  });
+  return {
+    upid: await client.backup.restoreVm(input.node, {
+      ...payload,
+      archive: input.volid,
+    }),
+  };
 }

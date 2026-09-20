@@ -12,6 +12,7 @@ import { useCan } from "@/components/auth/session-user";
 import { QueryGate } from "@/components/layout/query-gate";
 import { vmHasGraphics } from "@/lib/guest-console";
 import { APP_NAME } from "@/lib/version";
+import { GuestToolCloseButton } from "@/components/guests/guest-tool-close";
 
 type GuestPayload = {
   status: Record<string, unknown>;
@@ -97,6 +98,7 @@ export function GuestConsoleWindow({ kind }: { kind: "vm" | "lxc" }) {
             </Button>
           </div>
         ) : null}
+        <GuestToolCloseButton kind={kind} hostId={params.hostId} node={params.node} vmid={params.vmid} />
       </header>
       <div className="min-h-0 flex-1 p-2">
         <QueryGate isLoading={isLoading} error={error} onRetry={() => void refetch()}>
