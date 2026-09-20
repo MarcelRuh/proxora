@@ -119,6 +119,36 @@ export function parseGithubRelease(json: unknown): GithubRelease | null {
   return { tag, version, sha, htmlUrl: typeof raw.html_url === "string" ? raw.html_url : null };
 }
 
+export function pickGithubReleaseApkUrl(json: unknown): string | null {
+  if (!json || typeof json !== "object") return null;
+  const assets = (json as { assets?: unknown }).assets;
+  if (!Array.isArray(assets)) return null;
+  for (const asset of assets) {
+    if (!asset || typeof asset !== "object") continue;
+    const name = String((asset as { name?: unknown }).name ?? "");
+    const url = String((asset as { browser_download_url?: unknown }).browser_download_url ?? "");
+    if (/\.apk$/i.test(name) && /^https:\/\//i.test(url)) return url;
+  }
+  return null;
+}
+
+export async function fetchGithubReleaseApkUrl(repo: string, tag: string): Promise<string | null> {
+  const version = tag.replace(/^v/i, "");
+  const normalized = /^v/i.test(tag) ? tag : `v${version}`;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(normalized)}`, {
+      headers: githubHeaders(),
+    });
+    if (res.ok) {
+      const fromAssets = pickGithubReleaseApkUrl(await res.json());
+      if (fromAssets) return fromAssets;
+    }
+  } catch {
+    /* fall through */
+  }
+  return null;
+}
+
 export function parseReleaseTagFromUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   const match = url.match(/\/releases\/tag\/(v?\d+\.\d+\.\d+)/i);

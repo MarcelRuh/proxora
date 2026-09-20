@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Android CI no longer installs the removed SDK package `tools`, so the signed APK is uploaded to the GitHub release again.
+
 ## [2.1.3] – 2026-09-20
 
 ### Added

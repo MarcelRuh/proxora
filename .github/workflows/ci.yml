@@ -39,20 +39,29 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@v3
+      - name: Accept Android SDK licenses
+        run: |
+          sdkmanager="$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager "$ANDROID_SDK_ROOT"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1 || true)"
+          if [ -n "$sdkmanager" ]; then
+            yes | "$sdkmanager" --licenses >/dev/null || true
+          fi
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
       - name: Decode release keystore
+        id: keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
             echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/proxora-release.jks
             echo "PROXORA_KEYSTORE_FILE=${GITHUB_WORKSPACE}/android/proxora-release.jks" >> "$GITHUB_ENV"
+            echo "present=true" >> "$GITHUB_OUTPUT"
           elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "Tagged releases require ANDROID_KEYSTORE_BASE64" >&2
             exit 1
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
           fi
       - run: gradle :app:assembleRelease --stacktrace
         working-directory: android
@@ -64,13 +73,14 @@ jobs:
         with:
           name: proxora-android
           path: android/app/build/outputs/apk/release/*.apk
-      - if: startsWith(github.ref, 'refs/tags/v')
+      - name: Upload APK to GitHub release
+        if: github.event_name != 'pull_request' && steps.keystore.outputs.present == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ver="${GITHUB_REF_NAME#v}"
+          ver="$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
           cp android/app/build/outputs/apk/release/app-release.apk "proxora-${ver}.apk"
-          gh release upload "$GITHUB_REF_NAME" "proxora-${ver}.apk" --clobber
+          gh release upload "v${ver}" "proxora-${ver}.apk" --clobber
 
   docker:
     runs-on: ubuntu-latest

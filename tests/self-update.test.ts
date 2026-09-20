@@ -16,6 +16,7 @@ import {
   extractNewerChangelog,
   parseGithubRelease,
   parseReleaseTagFromUrl,
+  pickGithubReleaseApkUrl,
   pickLatestSemverTag,
 } from "@/server/services/github-revision";
 import { mergeProgress, parseProgressFile, parseUpdaterLogs } from "@/server/services/self-update-progress";
@@ -73,6 +74,18 @@ describe("github release parse", () => {
     });
     expect(parseGithubRelease({ tag_name: "nightly" })).toBeNull();
     expect(parseGithubRelease({ tag_name: "stats" })).toBeNull();
+  });
+
+  it("picks the APK asset URL from a GitHub release", () => {
+    expect(
+      pickGithubReleaseApkUrl({
+        assets: [
+          { name: "notes.md", browser_download_url: "https://example/notes.md" },
+          { name: "proxora-2.1.3.apk", browser_download_url: "https://github.com/x/releases/download/v2.1.3/proxora-2.1.3.apk" },
+        ],
+      }),
+    ).toBe("https://github.com/x/releases/download/v2.1.3/proxora-2.1.3.apk");
+    expect(pickGithubReleaseApkUrl({ assets: [] })).toBeNull();
   });
 
   it("reads the latest tag from a GitHub release URL", () => {

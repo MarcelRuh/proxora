@@ -3,7 +3,7 @@ import { apiRoute } from "@/server/http/api-route";
 import { json } from "@/server/http/respond";
 import { DEFAULT_GITHUB_REPO } from "@/lib/version";
 import { androidApkUpdateAvailable, parseProxoraAndroidVersion } from "@/lib/android-apk";
-import { fetchGithubLatestRelease } from "@/server/services/github-revision";
+import { fetchGithubLatestRelease, fetchGithubReleaseApkUrl } from "@/server/services/github-revision";
 
 export const GET = apiRoute(null, async (req) => {
   const current =
@@ -13,7 +13,8 @@ export const GET = apiRoute(null, async (req) => {
   const repo = process.env.PROXORA_REPO ?? DEFAULT_GITHUB_REPO;
   const release = await fetchGithubLatestRelease(repo).catch(() => null);
   const latest = release?.version ?? null;
-  const updateAvailable = Boolean(current && androidApkUpdateAvailable(current, latest));
+  const apkUrl = release ? await fetchGithubReleaseApkUrl(repo, release.tag).catch(() => null) : null;
+  const updateAvailable = Boolean(current && apkUrl && androidApkUpdateAvailable(current, latest));
   return json({
     current,
     latest,
