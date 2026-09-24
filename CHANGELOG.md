@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.6] – 2026-09-24
+
+### Added
+
+- LXC console has an APT button that types `apt update && apt upgrade -y && apt autoremove -y` into the open shell.
+
 ## [2.1.5] – 2026-09-24
 
 ### Added
