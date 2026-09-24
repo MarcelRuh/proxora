@@ -366,6 +366,7 @@ BOOTSTRAP_ADMIN_EMAIL=${ADMIN_EMAIL}
 PROXORA_INSTALL_DIR=${INSTALL_DIR}
 PROXORA_REPO=${REPO}
 PROXORA_BRANCH=${BRANCH}
+PROXORA_VERSION=2.1.4
 LISTEN_HOST=0.0.0.0
 PORT=3000
 EOF
@@ -382,6 +383,11 @@ else
   env_ensure "${INSTALL_DIR}/.env" PROXORA_BRANCH "$BRANCH"
   env_ensure "${INSTALL_DIR}/.env" LISTEN_HOST "0.0.0.0"
   env_ensure "${INSTALL_DIR}/.env" PORT "3000"
+  if grep -q '^PROXORA_VERSION=' "${INSTALL_DIR}/.env"; then
+    as_root sed -i 's|^PROXORA_VERSION=.*|PROXORA_VERSION=2.1.4|' "${INSTALL_DIR}/.env"
+  else
+    printf 'PROXORA_VERSION=%s\n' "2.1.4" | as_root tee -a "${INSTALL_DIR}/.env" >/dev/null
+  fi
 fi
 as_root chmod 600 "${INSTALL_DIR}/.env" 2>/dev/null || true
 
@@ -398,13 +404,20 @@ fi
 as_root chmod +x "${INSTALL_DIR}/scripts/"*.sh 2>/dev/null || true
 
 cd "$INSTALL_DIR"
-info "Building and starting containers"
+info "Pulling image and starting containers"
 set +e
-docker_cmd compose -f docker-compose.prod.yml up -d --build --wait --wait-timeout 180
-COMPOSE_RC=$?
-if [[ "$COMPOSE_RC" -ne 0 ]]; then
-  docker_cmd compose -f docker-compose.prod.yml up -d --build
+if [[ "${PROXORA_BUILD:-0}" != "1" ]] && docker_cmd compose -f docker-compose.prod.yml pull proxora; then
+  docker_cmd compose -f docker-compose.prod.yml up -d --build --no-deps proxora-wireguard || true
+  docker_cmd compose -f docker-compose.prod.yml up -d --no-build --wait --wait-timeout 180
   COMPOSE_RC=$?
+else
+  yellow "Image nicht verfügbar – baue lokal"
+  docker_cmd compose -f docker-compose.prod.yml up -d --build --wait --wait-timeout 180
+  COMPOSE_RC=$?
+  if [[ "$COMPOSE_RC" -ne 0 ]]; then
+    docker_cmd compose -f docker-compose.prod.yml up -d --build
+    COMPOSE_RC=$?
+  fi
 fi
 set -e
 

@@ -184,27 +184,28 @@ export function RestoreDialog({
     setErrorMsg(null);
     settledRef.current = false;
     try {
-      let nextUpid: string | undefined;
-      for (let attempt = 1; attempt <= 45; attempt++) {
-        const res = await api<{ upid?: string; phase?: string }>(`/api/hosts/${hostId}/backups`, {
-          method: "POST",
-          body: JSON.stringify({
-            action: "restore",
-            node,
-            volid: file.volid,
-            vmid: Number(vmid),
-            storage,
-            force,
-            startAfter,
-            attempt,
-          }),
-        });
-        if (res.upid) {
-          nextUpid = res.upid;
-          break;
+      const started = await api<{ upid?: string; jobId?: string; phase?: string }>(`/api/hosts/${hostId}/backups`, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "restore",
+          node,
+          volid: file.volid,
+          vmid: Number(vmid),
+          storage,
+          force,
+          startAfter,
+        }),
+      });
+      let nextUpid = started.upid;
+      if (!nextUpid && started.jobId) {
+        for (let attempt = 0; attempt < 80 && !nextUpid; attempt++) {
+          await new Promise((resolve) => window.setTimeout(resolve, 1500));
+          const job = await api<{ phase?: string; upid?: string; error?: string }>(
+            `/api/hosts/${hostId}/backups/restore?job=${encodeURIComponent(started.jobId)}`,
+          );
+          if (job.phase === "error") throw new Error(job.error || t("backup.restoreFailed"));
+          nextUpid = job.upid;
         }
-        if (res.phase !== "stopping") throw new Error(t("common.failed"));
-        await new Promise((resolve) => window.setTimeout(resolve, 1500));
       }
       if (!nextUpid) throw new Error(t("backup.restoreFailed"));
       setUpid(nextUpid);

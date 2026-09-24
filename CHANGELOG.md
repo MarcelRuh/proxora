@@ -4,8 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.4] – 2026-09-24
+
+### Changed
+
+- Updates pull `ghcr.io/marcelruh/proxora` instead of compiling on the host. Local build remains the fallback (`PROXORA_BUILD=1`).
+
 ### Fixed
 
+- Backup restore keeps running on the server after you confirm, even if the phone sleeps.
+- Console back on the old Android app returns to the guest (the page plants a history entry; Schließen stays in the server UI).
 - Android CI no longer installs the removed SDK package `tools`, so the signed APK is uploaded to the GitHub release again.
 
 ## [2.1.3] – 2026-09-20

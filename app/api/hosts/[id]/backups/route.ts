@@ -8,7 +8,8 @@ import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { compactProxmoxBody } from "@/lib/lxc-net";
 import { newBackupJobId, parseBackupVolid } from "@/lib/backup";
-import { listHostBackups, restoreBackup, runBackupJob, upsertBackupJob } from "@/server/services/backup-service";
+import { listHostBackups, runBackupJob, upsertBackupJob } from "@/server/services/backup-service";
+import { enqueueRestoreJob } from "@/server/services/restore-jobs";
 import { ValidationError } from "@/lib/errors";
 import { lookupGuestName } from "@/server/notifications/guest-name";
 import { notifyTopic } from "@/server/notifications/dispatch";
@@ -119,11 +120,19 @@ export const POST = apiRoute(
         notifyName = (await lookupGuestName(client, body.node, body.vmid)) || parseBackupVolid(body.volid).filename;
         notifyId = String(body.vmid);
         notifyNode = body.node;
-        return restoreBackup(client, {
-          ...body,
+        const jobId = enqueueRestoreJob({
+          user: session.user,
           hostId: params.id,
-          forceStop: (body.attempt ?? 1) >= 18,
+          hostName,
+          node: body.node,
+          volid: body.volid,
+          vmid: body.vmid,
+          storage: body.storage,
+          force: body.force,
+          startAfter: body.startAfter,
+          name: notifyName,
         });
+        return { jobId, phase: "accepted" as const };
       }
       case "delete-file": {
         const parsed = parseBackupVolid(body.volid);
@@ -163,7 +172,16 @@ export const POST = apiRoute(
     throw error;
   }
 
-  if (body.action === "restore" && result.phase === "stopping") {
+  if (body.action === "restore" && (result.phase === "stopping" || result.phase === "accepted")) {
+    await writeAuditLog({
+      userId: session.user.id,
+      ip: await clientIp(),
+      action: AUDIT_ACTIONS.BACKUP_RESTORED,
+      target: "volid" in body ? body.volid : params.id,
+      hostId: params.id,
+      result: "SUCCESS",
+      metadata: { action: body.action, ...result },
+    });
     return json(result);
   }
 

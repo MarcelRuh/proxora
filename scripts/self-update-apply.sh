@@ -65,6 +65,7 @@ watch_compose_log() {
       *"exporting to image"*) write_progress 72 export "Exporting image" ;;
       *"Compiled successfully"*) write_progress 64 buildWeb "Web compiled" ;;
       *"proxora Building"*|*" Building web"*|*" Building proxora"*) write_progress 42 buildWeb "Building image" ;;
+      *"Pulling"*|*"pulling"*|*"Downloaded newer image"*|*"Image is up to date"*) write_progress 55 pull "Pulling image" ;;
     esac
     sleep 1
   done
@@ -327,12 +328,21 @@ if [ "$SKIP_COMPOSE" = "1" ]; then
   exit 0
 fi
 
-echo "==> Rebuilding stack (docker compose up -d --build)"
-write_progress 26 cleanup "Freeing space before rebuild"
+echo "==> Updating stack"
+write_progress 26 cleanup "Freeing space before update"
 free_docker_space 26
-write_progress 28 build "Stack rebuild starting"
+write_progress 28 build "Stack update starting"
 cd "$INSTALL_DIR"
 sync_app_url_if_localhost "${INSTALL_DIR}/.env"
+VER="$(sed -n 's/^  "version": "\([^"]*\)".*/\1/p' package.json | head -1)"
+if [ -n "$VER" ] && [ -f .env ]; then
+  if grep -q '^PROXORA_VERSION=' .env; then
+    sed -i "s|^PROXORA_VERSION=.*|PROXORA_VERSION=${VER}|" .env
+  else
+    printf 'PROXORA_VERSION=%s\n' "$VER" >> .env
+  fi
+  export PROXORA_VERSION="$VER"
+fi
 # Compose/BuildKit hijack fails through docker-socket-proxy (403). Prefer the unix socket.
 if [ -S /var/run/docker.sock ]; then
   unset DOCKER_HOST
@@ -340,7 +350,15 @@ fi
 export COMPOSE_BAKE=false
 COMPOSE_FILE="docker-compose.yml"
 if [ -f docker-compose.prod.yml ]; then COMPOSE_FILE="docker-compose.prod.yml"; fi
-docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans > "$TMP/compose.log" 2>&1 &
+if [ "${PROXORA_BUILD:-0}" = "1" ]; then
+  docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans > "$TMP/compose.log" 2>&1 &
+elif docker compose -f "$COMPOSE_FILE" pull proxora > "$TMP/compose.log" 2>&1; then
+  docker compose -f "$COMPOSE_FILE" up -d --build --no-deps proxora-wireguard >> "$TMP/compose.log" 2>&1 || true
+  docker compose -f "$COMPOSE_FILE" up -d --no-build --remove-orphans >> "$TMP/compose.log" 2>&1 &
+else
+  echo "==> Image pull failed, building locally" >> "$TMP/compose.log"
+  docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans >> "$TMP/compose.log" 2>&1 &
+fi
 CPID=$!
 watch_compose_log "$CPID" "$TMP/compose.log" &
 WATCH=$!
