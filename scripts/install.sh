@@ -366,7 +366,7 @@ BOOTSTRAP_ADMIN_EMAIL=${ADMIN_EMAIL}
 PROXORA_INSTALL_DIR=${INSTALL_DIR}
 PROXORA_REPO=${REPO}
 PROXORA_BRANCH=${BRANCH}
-PROXORA_VERSION=2.1.9
+PROXORA_VERSION=2.1.10
 LISTEN_HOST=0.0.0.0
 PORT=3000
 EOF
@@ -384,9 +384,9 @@ else
   env_ensure "${INSTALL_DIR}/.env" LISTEN_HOST "0.0.0.0"
   env_ensure "${INSTALL_DIR}/.env" PORT "3000"
   if grep -q '^PROXORA_VERSION=' "${INSTALL_DIR}/.env"; then
-    as_root sed -i 's|^PROXORA_VERSION=.*|PROXORA_VERSION=2.1.9|' "${INSTALL_DIR}/.env"
+    as_root sed -i 's|^PROXORA_VERSION=.*|PROXORA_VERSION=2.1.10|' "${INSTALL_DIR}/.env"
   else
-    printf 'PROXORA_VERSION=%s\n' "2.1.9" | as_root tee -a "${INSTALL_DIR}/.env" >/dev/null
+    printf 'PROXORA_VERSION=%s\n' "2.1.10" | as_root tee -a "${INSTALL_DIR}/.env" >/dev/null
   fi
 fi
 as_root chmod 600 "${INSTALL_DIR}/.env" 2>/dev/null || true

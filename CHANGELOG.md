@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.10] – 2026-09-24
+
+### Fixed
+
+- LXC SSH toggle creates `/run/sshd` before `sshd -t`, so a fresh container no longer prints `Missing privilege separation directory`.
+
 ## [2.1.9] – 2026-09-24
 
 ### Fixed

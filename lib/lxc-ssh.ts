@@ -3,7 +3,7 @@
  * fails even when the config is valid, so only reload when the service is running.
  */
 export const LXC_SSH_APPLY =
-  "/usr/sbin/sshd -t && if systemctl is-active --quiet ssh; then systemctl reload ssh; fi";
+  "install -d -m 0755 /run/sshd && /usr/sbin/sshd -t && if systemctl is-active --quiet ssh; then systemctl reload ssh; fi";
 
 /** Typed into an open root shell. Uncommented PermitRootLogin yes, otherwise sshd keeps the default. */
 export const LXC_SSH_ENABLE_LINE =
