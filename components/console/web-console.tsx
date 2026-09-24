@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { Button } from "@/components/ui/button";
+import { ConfirmAction } from "@/components/confirm-action";
 import { Maximize2, Minus, Plus, RefreshCw } from "lucide-react";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { consoleProxyErrorDetail } from "@/lib/host-console";
+import { LXC_APT_UPGRADE_INPUT } from "@/lib/lxc-apt";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -185,6 +187,23 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
         </span>
         {detail && status === "error" ? <span className="text-red-400">{detail}</span> : null}
         <div className="ml-auto flex items-center gap-1">
+          {kind === "lxc" ? (
+            <ConfirmAction
+              title={t("guest.consoleAptTitle")}
+              description={t("guest.consoleAptBody")}
+              actionLabel={t("guest.consoleAptRun")}
+              disabled={status !== "connected"}
+              onConfirm={async () => {
+                const ws = wsRef.current;
+                if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                ws.send(JSON.stringify({ type: "input", data: LXC_APT_UPGRADE_INPUT }));
+              }}
+            >
+              <Button size="sm" variant="outline" disabled={status !== "connected"} className="h-7 px-2 text-xs">
+                {t("guest.consoleApt")}
+              </Button>
+            </ConfirmAction>
+          ) : null}
           <Button size="icon" variant="ghost" onClick={() => setFontSize((s) => Math.max(10, s - 1))}>
             <Minus className="h-3 w-3" />
           </Button>
