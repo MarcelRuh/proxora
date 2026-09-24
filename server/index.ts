@@ -10,6 +10,7 @@ import { handleNodeGuestFileTransfer } from "@/server/http/guest-file-node";
 import { GUEST_FILE_UPLOAD_WS_PATH } from "@/lib/guest-file-http";
 import { startAptRefreshScheduler } from "@/server/services/apt-refresh";
 import { startBackupWatchScheduler } from "@/server/services/backup-watch";
+import { startCpuTempWatchScheduler } from "@/server/services/cpu-temp-watch";
 import { startDiskWatchScheduler } from "@/server/services/disk-watch";
 import { startZfsWatchScheduler } from "@/server/services/zfs-watch";
 import { startHostReconnectScheduler } from "@/server/services/host-reconnect";
@@ -84,6 +85,7 @@ async function main() {
     startAptRefreshScheduler();
     startBackupWatchScheduler();
     startDiskWatchScheduler();
+    startCpuTempWatchScheduler();
     startZfsWatchScheduler();
     void announcePeerUpdateToPeers({ updating: false }).catch((error) =>
       logger.warn({ err: error }, "Peer update recovery announce failed"),

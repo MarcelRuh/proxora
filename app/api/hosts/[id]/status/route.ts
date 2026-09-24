@@ -9,6 +9,8 @@ import { filterGuestsForUser } from "@/server/auth/session-core";
 import { userHasPermission } from "@/lib/permissions";
 import { ForbiddenError } from "@/lib/errors";
 import { loadHostInventory } from "@/server/services/inventory-cache";
+import { readNodeCpuTemp } from "@/server/services/cpu-temp";
+import { loadCpuTempSettings } from "@/server/services/cpu-temp-settings";
 
 const actionSchema = z.object({
   action: z.enum(["reboot", "shutdown"]),
@@ -19,18 +21,27 @@ const actionSchema = z.object({
 export const GET = apiRoute("hosts.view", async (_req, session, params) => {
   const data = await withHostClient(params.id, session.user, async (client, host) => {
     const inv = await loadHostInventory(client, params.id);
-    const details = inv.nodes
-      .filter((n) => n.node)
-      .map((n) => ({
-        node: n.node as string,
-        online: n.status ?? "unknown",
-        status: {
-          cpu: n.cpu ?? 0,
-          memory: { used: n.mem ?? 0, total: n.maxmem ?? 0 },
-          rootfs: { used: n.disk ?? 0, total: n.maxdisk ?? 0 },
-          uptime: n.uptime ?? 0,
-        },
-      }));
+    const tempSettings = await loadCpuTempSettings();
+    const details = await Promise.all(
+      inv.nodes
+        .filter((n) => n.node)
+        .map(async (n) => {
+          const node = n.node as string;
+          const reading = n.status === "offline" ? null : await readNodeCpuTemp(client, node).catch(() => null);
+          return {
+            node,
+            online: n.status ?? "unknown",
+            status: {
+              cpu: n.cpu ?? 0,
+              memory: { used: n.mem ?? 0, total: n.maxmem ?? 0 },
+              rootfs: { used: n.disk ?? 0, total: n.maxdisk ?? 0 },
+              uptime: n.uptime ?? 0,
+              cpuTempC: reading?.celsius ?? null,
+              cpuTempHot: reading != null && reading.celsius >= tempSettings.alertCelsius,
+            },
+          };
+        }),
+    );
     return {
       host: host.name,
       nodes: details,

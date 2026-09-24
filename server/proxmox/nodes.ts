@@ -12,6 +12,11 @@ export class NodeApi {
     return this.http.get<ProxmoxNodeStatus>(`/nodes/${encodeURIComponent(node)}/status`);
   }
 
+  /** Proposed PVE sensors API. 404 on stock hosts; callers fall back to node status. */
+  cpuTemperature(node: string) {
+    return this.http.get<unknown>(`/nodes/${encodeURIComponent(node)}/hardware/sensors/temperature/cpu`);
+  }
+
   reboot(node: string) {
     return this.http.post<string>(`/nodes/${encodeURIComponent(node)}/status`, { command: "reboot" });
   }

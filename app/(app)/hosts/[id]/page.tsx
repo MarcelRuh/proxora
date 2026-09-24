@@ -28,7 +28,14 @@ type Status = {
   nodes: Array<{
     node: string;
     online: string;
-    status: { cpu: number; memory: { used: number; total: number }; rootfs?: { used: number; total: number }; uptime: number } | null;
+    status: {
+      cpu: number;
+      memory: { used: number; total: number };
+      rootfs?: { used: number; total: number };
+      uptime: number;
+      cpuTempC?: number | null;
+      cpuTempHot?: boolean;
+    } | null;
   }>;
   vms: Array<{ vmid: number; name: string; status: string; node: string }>;
   containers: Array<{ vmid: number; name: string; status: string; node: string }>;
@@ -199,6 +206,7 @@ export default function HostDetailPage() {
                 <Metric label={t("table.cpu")} value={st.cpu * 100} />
                 <Metric label={t("table.ram")} value={percentage(st.memory.used, st.memory.total)} />
                 <Metric label={t("hosts.rootfs")} value={percentage(st.rootfs?.used, st.rootfs?.total)} />
+                <CpuTemp label={t("hosts.cpuTemp")} celsius={st.cpuTempC} hot={st.cpuTempHot} missing={t("hosts.cpuTempMissing")} hotLabel={t("hosts.cpuTempHot")} />
                 <p className="text-sm text-muted-foreground sm:col-span-3">{t("guest.uptime", { time: formatUptime(st.uptime) })}</p>
               </CardContent>
             ) : null}
@@ -248,6 +256,33 @@ export default function HostDetailPage() {
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+function CpuTemp({
+  label,
+  celsius,
+  hot,
+  missing,
+  hotLabel,
+}: {
+  label: string;
+  celsius?: number | null;
+  hot?: boolean;
+  missing: string;
+  hotLabel: string;
+}) {
+  const text = celsius == null ? missing : `${celsius.toLocaleString("de-DE", { maximumFractionDigits: 1 })} °C`;
+  return (
+    <div>
+      <div className="mb-1 flex justify-between text-sm">
+        <span>{label}</span>
+        <span className={hot ? "font-medium text-destructive" : "text-muted-foreground"}>
+          {text}
+          {hot ? ` · ${hotLabel}` : ""}
+        </span>
+      </div>
     </div>
   );
 }

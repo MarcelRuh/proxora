@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.5] – 2026-09-24
+
+### Added
+
+- Host page shows node CPU temperature when Proxmox sensors or `lm-sensors` (`thermalstate`) provide a reading.
+- CPU temperature alerts (default 85 °C, clear below 75 °C) with notification topic **CPU zu heiß**.
+
 ## [2.1.4] – 2026-09-24
 
 ### Changed

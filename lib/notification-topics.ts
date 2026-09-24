@@ -11,6 +11,7 @@ export const NOTIFICATION_TOPICS = [
   "backup.restored",
   "task.failed",
   "disk.full",
+  "host.cpu.hot",
   "zfs.degraded",
   "peer.update",
 ] as const;

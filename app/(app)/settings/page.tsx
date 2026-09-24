@@ -6,6 +6,7 @@ import { TotpSection } from "@/components/settings/totp-section";
 import { SessionsSection } from "@/components/settings/sessions-section";
 import { GuestNetworksSection } from "@/components/settings/guest-networks-section";
 import { NotificationsSection } from "@/components/settings/notifications-section";
+import { CpuTempSection } from "@/components/settings/cpu-temp-section";
 import { DiskAlertsSection } from "@/components/settings/disk-alerts-section";
 import { AppearanceSection } from "@/components/settings/appearance-section";
 import { useI18n } from "@/components/i18n/locale-provider";
@@ -21,6 +22,7 @@ export default function SettingsPage() {
       <SessionsSection />
       <GuestNetworksSection />
       <DiskAlertsSection />
+      <CpuTempSection />
       <div id="webhooks" className="space-y-3">
         <h2 className="proxora-title text-2xl">{t("settings.notifications")}</h2>
         <NotificationsSection />
