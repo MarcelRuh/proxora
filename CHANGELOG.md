@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.11] – 2026-09-24
+
+### Fixed
+
+- LXC SSH toggle no longer calls `systemctl reload ssh`. A fresh Debian container reports that job as failed even after a valid config change. A running sshd gets SIGHUP directly.
+
 ## [2.1.10] – 2026-09-24
 
 ### Fixed

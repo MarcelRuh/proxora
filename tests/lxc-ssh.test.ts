@@ -6,8 +6,8 @@ describe("lxc ssh toggle", () => {
     expect(LXC_SSH_ENABLE_LINE).toContain("s/^#Port 22$/Port 22/");
     expect(LXC_SSH_ENABLE_LINE).toContain("s/^#PermitRootLogin prohibit-password$/PermitRootLogin yes/");
     expect(LXC_SSH_ENABLE_LINE).toContain("install -d -m 0755 /run/sshd");
-    expect(LXC_SSH_ENABLE_LINE).toContain("systemctl is-active --quiet ssh");
-    expect(LXC_SSH_ENABLE_LINE).not.toContain("&& systemctl reload ssh");
+    expect(LXC_SSH_ENABLE_LINE).toContain("kill -HUP");
+    expect(LXC_SSH_ENABLE_LINE).not.toContain("systemctl reload ssh");
     expect(lxcSshInput(true).endsWith("\r")).toBe(true);
   });
 

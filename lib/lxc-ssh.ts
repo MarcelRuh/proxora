@@ -1,9 +1,6 @@
-/**
- * Debian LXC often activates ssh via ssh.socket. Reloading an inactive ssh.service
- * fails even when the config is valid, so only reload when the service is running.
- */
+/** HUP a running sshd. `systemctl reload ssh` fails on a fresh Debian LXC even when the config is valid. */
 export const LXC_SSH_APPLY =
-  "install -d -m 0755 /run/sshd && /usr/sbin/sshd -t && if systemctl is-active --quiet ssh; then systemctl reload ssh; fi";
+  "install -d -m 0755 /run/sshd && /usr/sbin/sshd -t && pid=$(systemctl show -p MainPID --value ssh 2>/dev/null || true); if [ -n \"$pid\" ] && [ \"$pid\" != 0 ] && [ -d \"/proc/$pid\" ]; then kill -HUP \"$pid\" || true; fi";
 
 /** Typed into an open root shell. Uncommented PermitRootLogin yes, otherwise sshd keeps the default. */
 export const LXC_SSH_ENABLE_LINE =

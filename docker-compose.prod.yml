@@ -15,7 +15,7 @@ services:
       retries: 10
 
   proxora:
-    image: ghcr.io/marcelruh/proxora:${PROXORA_VERSION:-2.1.10}
+    image: ghcr.io/marcelruh/proxora:${PROXORA_VERSION:-2.1.11}
     build: .
     container_name: proxora
     restart: unless-stopped
