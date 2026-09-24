@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.8] – 2026-09-24
+
+### Fixed
+
+- LXC SSH toggle no longer fails when `ssh.service` is inactive (Debian socket activation). It checks `sshd -t` and reloads only a running service.
+- The button reads `PermitRootLogin yes` from the container and shows Einschalten or Ausschalten from that, not from a remembered click.
+
 ## [2.1.7] – 2026-09-24
 
 ### Added

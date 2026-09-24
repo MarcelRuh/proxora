@@ -9,7 +9,7 @@ import { Maximize2, Minus, Plus, RefreshCw } from "lucide-react";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { consoleProxyErrorDetail } from "@/lib/host-console";
 import { LXC_APT_UPGRADE_INPUT } from "@/lib/lxc-apt";
-import { lxcSshInput, lxcSshStorageKey } from "@/lib/lxc-ssh";
+import { lxcShellPrompt, lxcSshInput, lxcSshProbeInput, lxcSshStateFromOutput } from "@/lib/lxc-ssh";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -37,8 +37,8 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
   const [detail, setDetail] = useState<string | null>(null);
   const [fontSize, setFontSize] = useState(14);
   const [nonce, setNonce] = useState(0);
-  const [sshOn, setSshOn] = useState(false);
-  const sshKey = lxcSshStorageKey(hostId, node, vmid);
+  const [sshOn, setSshOn] = useState<boolean | null>(null);
+  const sshBufRef = useRef("");
   fontSizeRef.current = fontSize;
 
   useEffect(() => {
@@ -59,6 +59,15 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
     fit.fit();
     termRef.current = term;
     fitRef.current = fit;
+    sshBufRef.current = "";
+    setSshOn(null);
+
+    const noteSsh = (chunk: string) => {
+      if (kind !== "lxc") return;
+      sshBufRef.current = (sshBufRef.current + chunk).slice(-800);
+      const next = lxcSshStateFromOutput(sshBufRef.current);
+      if (next != null) setSshOn(next);
+    };
 
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     const wsBase = process.env.NEXT_PUBLIC_WS_URL || `${proto}://${window.location.host}`;
@@ -111,13 +120,20 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
         }
       }
       if (event.data instanceof Blob) {
-        void event.data.arrayBuffer().then((buf) => term.write(new Uint8Array(buf)));
+        void event.data.arrayBuffer().then((buf) => {
+          const bytes = new Uint8Array(buf);
+          noteSsh(new TextDecoder().decode(bytes));
+          term.write(bytes);
+        });
         return;
       }
       if (event.data instanceof ArrayBuffer) {
-        term.write(new Uint8Array(event.data));
+        const bytes = new Uint8Array(event.data);
+        noteSsh(new TextDecoder().decode(bytes));
+        term.write(bytes);
         return;
       }
+      noteSsh(event.data as string);
       term.write(event.data as string);
     };
 
@@ -136,12 +152,21 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
     }, 30_000);
     const onResize = () => fit.fit();
     window.addEventListener("resize", onResize);
+    const probeTimer = setInterval(() => {
+      if (kind !== "lxc" || ws.readyState !== WebSocket.OPEN) return;
+      const buffer = term.buffer.active;
+      const row = buffer.getLine(buffer.baseY + buffer.cursorY)?.translateToString(true) ?? "";
+      if (!lxcShellPrompt(row)) return;
+      ws.send(JSON.stringify({ type: "input", data: lxcSshProbeInput() }));
+      clearInterval(probeTimer);
+    }, 1000);
 
     return () => {
       closedByCleanup = true;
       disposable.dispose();
       resizeDisp.dispose();
       clearInterval(ping);
+      clearInterval(probeTimer);
       window.removeEventListener("resize", onResize);
       ws.close();
       term.dispose();
@@ -149,10 +174,6 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
       fitRef.current = null;
     };
   }, [hostId, node, kind, vmid, cmd, nonce]);
-
-  useEffect(() => {
-    setSshOn(window.sessionStorage.getItem(sshKey) === "1");
-  }, [sshKey]);
 
   useEffect(() => {
     const term = termRef.current;
@@ -216,18 +237,15 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
               title={t(sshOn ? "guest.consoleSshOffTitle" : "guest.consoleSshOnTitle")}
               description={t(sshOn ? "guest.consoleSshOffBody" : "guest.consoleSshOnBody")}
               actionLabel={t(sshOn ? "guest.consoleSshOff" : "guest.consoleSshOn")}
-              disabled={status !== "connected"}
+              disabled={status !== "connected" || sshOn == null}
               onConfirm={async () => {
                 const ws = wsRef.current;
-                if (!ws || ws.readyState !== WebSocket.OPEN) return;
-                const turnOn = !sshOn;
-                ws.send(JSON.stringify({ type: "input", data: lxcSshInput(turnOn) }));
-                setSshOn(turnOn);
-                window.sessionStorage.setItem(sshKey, turnOn ? "1" : "0");
+                if (!ws || ws.readyState !== WebSocket.OPEN || sshOn == null) return;
+                ws.send(JSON.stringify({ type: "input", data: lxcSshInput(!sshOn) }));
               }}
             >
               <Button size="sm" variant="outline" disabled={status !== "connected"} className="h-7 px-2 text-xs">
-                {t(sshOn ? "guest.consoleSshOff" : "guest.consoleSshOn")}
+                {t(sshOn == null ? "guest.consoleSshUnknown" : sshOn ? "guest.consoleSshOff" : "guest.consoleSshOn")}
               </Button>
             </ConfirmAction>
           ) : null}
