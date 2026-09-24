@@ -9,6 +9,7 @@ import { Maximize2, Minus, Plus, RefreshCw } from "lucide-react";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { consoleProxyErrorDetail } from "@/lib/host-console";
 import { LXC_APT_UPGRADE_INPUT } from "@/lib/lxc-apt";
+import { lxcSshInput, lxcSshStorageKey } from "@/lib/lxc-ssh";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -36,6 +37,8 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
   const [detail, setDetail] = useState<string | null>(null);
   const [fontSize, setFontSize] = useState(14);
   const [nonce, setNonce] = useState(0);
+  const [sshOn, setSshOn] = useState(false);
+  const sshKey = lxcSshStorageKey(hostId, node, vmid);
   fontSizeRef.current = fontSize;
 
   useEffect(() => {
@@ -148,6 +151,10 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
   }, [hostId, node, kind, vmid, cmd, nonce]);
 
   useEffect(() => {
+    setSshOn(window.sessionStorage.getItem(sshKey) === "1");
+  }, [sshKey]);
+
+  useEffect(() => {
     const term = termRef.current;
     if (!term) return;
     term.options.fontSize = fontSize;
@@ -201,6 +208,26 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
             >
               <Button size="sm" variant="outline" disabled={status !== "connected"} className="h-7 px-2 text-xs">
                 {t("guest.consoleApt")}
+              </Button>
+            </ConfirmAction>
+          ) : null}
+          {kind === "lxc" ? (
+            <ConfirmAction
+              title={t(sshOn ? "guest.consoleSshOffTitle" : "guest.consoleSshOnTitle")}
+              description={t(sshOn ? "guest.consoleSshOffBody" : "guest.consoleSshOnBody")}
+              actionLabel={t(sshOn ? "guest.consoleSshOff" : "guest.consoleSshOn")}
+              disabled={status !== "connected"}
+              onConfirm={async () => {
+                const ws = wsRef.current;
+                if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                const turnOn = !sshOn;
+                ws.send(JSON.stringify({ type: "input", data: lxcSshInput(turnOn) }));
+                setSshOn(turnOn);
+                window.sessionStorage.setItem(sshKey, turnOn ? "1" : "0");
+              }}
+            >
+              <Button size="sm" variant="outline" disabled={status !== "connected"} className="h-7 px-2 text-xs">
+                {t(sshOn ? "guest.consoleSshOff" : "guest.consoleSshOn")}
               </Button>
             </ConfirmAction>
           ) : null}

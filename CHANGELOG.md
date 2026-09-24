@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.7] – 2026-09-24
+
+### Added
+
+- LXC console toggles SSH root login: `Port 22` and `PermitRootLogin yes`, or back to the Debian defaults. The button label switches between Einschalten and Ausschalten.
+
 ## [2.1.6] – 2026-09-24
 
 ### Added
