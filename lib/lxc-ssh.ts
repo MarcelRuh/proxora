@@ -14,12 +14,12 @@ export const LXC_SSH_DISABLE_LINE =
 
 export const LXC_SSH_MARKER = "PROXORA_SSH:";
 
-/** Prints PROXORA_SSH:1 when an uncommented PermitRootLogin yes is present. */
+/** Prints a single PROXORA_SSH:0 or :1 line. The command text itself contains neither, so the shell echo cannot flip the button. */
 export const LXC_SSH_PROBE_LINE =
-  `grep -q '^PermitRootLogin yes$' /etc/ssh/sshd_config && echo ${LXC_SSH_MARKER}1 || echo ${LXC_SSH_MARKER}0`;
+  `printf '${LXC_SSH_MARKER}%s\\n' "$(grep -q '^PermitRootLogin yes$' /etc/ssh/sshd_config && printf 1 || printf 0)"`;
 
 export function lxcSshInput(turnOn: boolean): string {
-  return `${turnOn ? LXC_SSH_ENABLE_LINE : LXC_SSH_DISABLE_LINE} && ${LXC_SSH_PROBE_LINE}\r`;
+  return `${turnOn ? LXC_SSH_ENABLE_LINE : LXC_SSH_DISABLE_LINE}; ${LXC_SSH_PROBE_LINE}\r`;
 }
 
 export function lxcSshProbeInput(): string {
@@ -27,7 +27,7 @@ export function lxcSshProbeInput(): string {
 }
 
 export function lxcSshStateFromOutput(text: string): boolean | null {
-  const matches = text.match(/PROXORA_SSH:([01])/g);
+  const matches = text.match(/(?:^|[\r\n])PROXORA_SSH:([01])/g);
   const last = matches?.at(-1);
   if (!last) return null;
   return last.endsWith("1");

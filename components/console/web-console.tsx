@@ -241,7 +241,9 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
               onConfirm={async () => {
                 const ws = wsRef.current;
                 if (!ws || ws.readyState !== WebSocket.OPEN || sshOn == null) return;
-                ws.send(JSON.stringify({ type: "input", data: lxcSshInput(!sshOn) }));
+                const turnOn = !sshOn;
+                setSshOn(turnOn);
+                ws.send(JSON.stringify({ type: "input", data: lxcSshInput(turnOn) }));
               }}
             >
               <Button size="sm" variant="outline" disabled={status !== "connected"} className="h-7 px-2 text-xs">

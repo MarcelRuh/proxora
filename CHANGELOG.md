@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.9] – 2026-09-24
+
+### Fixed
+
+- LXC SSH button switches as soon as you turn root login on or off. The shell echo of the probe command no longer keeps the old label until a reload.
+
 ## [2.1.8] – 2026-09-24
 
 ### Fixed

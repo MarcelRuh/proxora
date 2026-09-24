@@ -19,6 +19,7 @@ describe("lxc ssh toggle", () => {
   it("reads the last marker from the shell", () => {
     expect(lxcSshStateFromOutput("PROXORA_SSH:0\r\n")).toBe(false);
     expect(lxcSshStateFromOutput("PROXORA_SSH:0\nPROXORA_SSH:1\n")).toBe(true);
+    expect(lxcSshStateFromOutput("printf 'PROXORA_SSH:%s\\n' \"$(printf 0)\"\r\nPROXORA_SSH:1\r\n")).toBe(true);
     expect(lxcSshStateFromOutput("root@colibri:~# ")).toBeNull();
     expect(lxcShellPrompt("root@colibri:~# ")).toBe(true);
     expect(lxcShellPrompt("colibri login: ")).toBe(false);
