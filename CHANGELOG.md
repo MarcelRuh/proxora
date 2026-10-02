@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.15] – 2026-10-02
+
+### Added
+
+- The dashboard shows CPU, memory, disk, and temperature for every host.
+- A host with Proxmox packages can be upgraded from the dashboard. The upgrade opens its own console.
+- A notice appears when a newer Proxora release is available.
+
+### Changed
+
+- Stopped VMs and containers are no longer listed on the dashboard.
+
 ## [2.1.14] – 2026-10-02
 
 ### Added

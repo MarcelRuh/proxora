@@ -35,6 +35,8 @@ export type HostOverview = {
   onlineNodes?: number;
   origin?: "LOCAL" | "PEER";
   peerName?: string | null;
+  shareLevel?: string | null;
+  sharePermissions?: string[] | null;
 };
 
 type HostCounts = { vms: number; lxc: number; running: number; stopped: number; paused: number };
@@ -66,6 +68,8 @@ function hostShell(
     isClusterMember: boolean;
     origin?: "LOCAL" | "PEER";
     peerName?: string | null;
+    shareLevel?: string | null;
+    sharePermissions?: string[] | null;
   },
   extra: Partial<HostOverview> = {},
 ): HostOverview {
@@ -80,6 +84,8 @@ function hostShell(
     isClusterMember: host.isClusterMember,
     origin: host.origin,
     peerName: host.peerName,
+    shareLevel: host.shareLevel,
+    sharePermissions: host.sharePermissions,
     ...extra,
   };
 }

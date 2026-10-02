@@ -78,6 +78,8 @@ export type DashboardHost = {
   onlineNodes?: number;
   origin?: "LOCAL" | "PEER";
   peerName?: string | null;
+  shareLevel?: string | null;
+  sharePermissions?: string[] | null;
 };
 
 export type Dashboard = {
