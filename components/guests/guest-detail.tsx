@@ -134,8 +134,17 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open once from old ?console=1 links
   }, []);
 
+  const [pending, setPending] = useState<{ from: string; action: string } | null>(null);
+
   async function action(name: string, extra: Record<string, unknown> = {}) {
+    const power = name === "start" || name === "shutdown" || name === "reboot" || name === "stop";
+    if (power) setPending({ from: runState, action: name });
+    try {
     await api(path, { method: "POST", body: JSON.stringify({ action: name, ...extra }) });
+    } catch (err) {
+      if (power) setPending(null);
+      throw err;
+    }
     if (name === "delete") {
       toast.success(t("guest.deleted", { kind: kindLabel, id: params.vmid }));
       await invalidateDashboardQueries(qc);
@@ -149,7 +158,15 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           ? t("config.diskResized")
           : name === "snapshot"
             ? t("guest.snapshotCreated")
-            : t("common.taskDone"),
+            : name === "start"
+              ? t("guest.sentStart")
+              : name === "shutdown"
+                ? t("guest.sentShutdown")
+                : name === "reboot"
+                  ? t("guest.sentReboot")
+                  : name === "stop"
+                    ? t("guest.sentStop")
+                    : t("common.taskDone"),
     );
     void refetch();
     void qc.invalidateQueries({ queryKey: ["guest-live", kind, params.hostId, params.node, params.vmid] });
@@ -168,6 +185,19 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const running = runState === "running";
   const paused = runState === "paused";
   const stopped = !running && !paused;
+  useEffect(() => {
+    if (pending && runState !== pending.from) setPending(null);
+  }, [runState, pending]);
+  const pendingLabel =
+    pending?.action === "start"
+      ? t("guest.pendingStart")
+      : pending?.action === "shutdown"
+        ? t("guest.pendingShutdown")
+        : pending?.action === "reboot"
+          ? t("guest.pendingReboot")
+          : pending?.action === "stop"
+            ? t("guest.pendingStop")
+            : null;
   const name = String(config.name ?? config.hostname ?? status.name ?? params.vmid);
   const hostName = hosts?.hosts.find((h) => h.id === params.hostId)?.name ?? params.hostId;
   const cores = num(status.cpus) || num(config.cores) * Math.max(1, num(config.sockets) || 1) || num(config.cores);
@@ -241,11 +271,13 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             ) : null}
           </p>
         </div>
-        <GuestStateBadge status={runState} />
+        <div className="flex items-center gap-2">
+          <GuestStateBadge status={runState} />
+          {pendingLabel ? <span className="proxora-pending text-xs text-warning">{pendingLabel}</span> : null}
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           disabled={Boolean(deny(can.start, share.start)) || !stopped}
           title={deny(can.start, share.start)}
@@ -253,68 +285,88 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
         >
           {t("guest.start")}
         </Button>
+        <Button
+          variant="outline"
+          disabled={Boolean(deny(can.console, share.console))}
+          title={deny(can.console, share.console)}
+          onClick={() =>
+            openGuestToolWindow({
+              kind,
+              hostId: params.hostId,
+              node: params.node,
+              vmid: params.vmid,
+              tool: "console",
+            })
+          }
+        >
+          {t("guest.console")}
+        </Button>
+        <details className="relative">
+          <summary className="flex h-9 cursor-pointer list-none items-center rounded-[var(--ui-radius)] border border-border px-3 text-sm [&::-webkit-details-marker]:hidden">
+            {t("table.more")}
+          </summary>
+          <div className="absolute right-0 z-30 mt-1 grid w-64 gap-1 rounded-[var(--ui-radius)] border border-border bg-card p-2 shadow-lg">
+        {running ? (
         <ConfirmAction
           title={t("guest.shutdownTitle")}
           description={t("guest.shutdownBody", { id: params.vmid, name })}
           actionLabel={t("guest.shutdown")}
-          disabled={Boolean(deny(can.shutdown, share.shutdown)) || !running}
+          disabled={Boolean(deny(can.shutdown, share.shutdown))}
           onConfirm={() => action("shutdown")}
         >
-          <Button variant="outline" disabled={Boolean(deny(can.shutdown, share.shutdown)) || !running} title={deny(can.shutdown, share.shutdown)}>
+          <Button variant="outline" className="w-full" disabled={Boolean(deny(can.shutdown, share.shutdown))} title={deny(can.shutdown, share.shutdown)}>
             {t("guest.shutdown")}
           </Button>
         </ConfirmAction>
+        ) : null}
+        {running ? (
         <ConfirmAction
           title={t("guest.rebootTitle")}
           description={t("guest.rebootBody", { id: params.vmid, name })}
           actionLabel={t("guest.reboot")}
-          disabled={Boolean(deny(can.reboot, share.reboot)) || !running}
+          disabled={Boolean(deny(can.reboot, share.reboot))}
           onConfirm={() => action("reboot")}
         >
-          <Button variant="outline" disabled={Boolean(deny(can.reboot, share.reboot)) || !running} title={deny(can.reboot, share.reboot)}>
+          <Button variant="outline" className="w-full" disabled={Boolean(deny(can.reboot, share.reboot))} title={deny(can.reboot, share.reboot)}>
             {t("guest.reboot")}
           </Button>
         </ConfirmAction>
-        {kind === "vm" ? (
-          <>
+        ) : null}
+        {kind === "vm" && running ? (
             <Button
               variant="outline"
-              disabled={Boolean(deny(can.pause, share.pause)) || !running}
+              disabled={Boolean(deny(can.pause, share.pause))}
               title={deny(can.pause, share.pause)}
               onClick={() => runAction("pause")}
             >
               {t("guest.pause")}
             </Button>
+        ) : null}
+        {kind === "vm" && paused ? (
             <Button
               variant="outline"
-              disabled={Boolean(deny(can.resume, share.resume)) || !paused}
+              disabled={Boolean(deny(can.resume, share.resume))}
               title={deny(can.resume, share.resume)}
               onClick={() => runAction("resume")}
             >
               {t("guest.resume")}
             </Button>
-          </>
         ) : null}
-        </div>
-        <div className="flex flex-wrap gap-2">
+        {!stopped ? (
         <ConfirmAction
           title={t("guest.stopTitle")}
           description={t("guest.stopBody", { id: params.vmid, name })}
           actionLabel={t("guest.stop")}
           destructive
-          disabled={Boolean(deny(can.stop, share.stop)) || stopped}
+          disabled={Boolean(deny(can.stop, share.stop))}
           onConfirm={() => action("stop")}
         >
-          <Button variant="destructive" disabled={Boolean(deny(can.stop, share.stop)) || stopped} title={deny(can.stop, share.stop)}>
+          <Button variant="destructive" className="w-full" disabled={Boolean(deny(can.stop, share.stop))} title={deny(can.stop, share.stop)}>
             {t("guest.stop")}
           </Button>
         </ConfirmAction>
-        {kind === "vm" ? (
-          deny(can.reset, share.reset) || stopped ? (
-            <Button variant="destructive" disabled title={deny(can.reset, share.reset)}>
-              {t("guest.reset")}
-            </Button>
-          ) : (
+        ) : null}
+        {kind === "vm" && !stopped && !deny(can.reset, share.reset) ? (
             <ConfirmAction
               title={t("guest.resetTitle")}
               description={t("guest.resetBody")}
@@ -322,12 +374,9 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
               destructive
               onConfirm={() => action("reset", { confirm: true })}
             >
-              <Button variant="destructive">{t("guest.reset")}</Button>
+              <Button variant="destructive" className="w-full">{t("guest.reset")}</Button>
             </ConfirmAction>
-          )
         ) : null}
-        </div>
-        <div className="flex flex-wrap gap-2">
         <CloneDialog
           kind={kind}
           hostId={params.hostId}
@@ -374,22 +423,6 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
         >
           {t("backup.restore")}
         </Button>
-        <Button
-          variant="outline"
-          disabled={Boolean(deny(can.console, share.console))}
-          title={deny(can.console, share.console)}
-          onClick={() =>
-            openGuestToolWindow({
-              kind,
-              hostId: params.hostId,
-              node: params.node,
-              vmid: params.vmid,
-              tool: "console",
-            })
-          }
-        >
-          {t("guest.console")}
-        </Button>
         {windows ? null : (
           <Button
             variant="outline"
@@ -408,18 +441,20 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             {t("files.show")}
           </Button>
         )}
+        <div className="mt-1 border-t border-border pt-1">
         <GuestDeleteDialog
           hostId={params.hostId}
           node={params.node}
           kind={kind}
           vmid={Number(params.vmid)}
           name={name}
+          status={runState}
           kindLabel={kindLabel}
           disabled={Boolean(deny(can.delete, share.delete))}
           onConfirm={(backupVolids, phase) =>
             api<{ upid?: unknown; phase?: "shutdown" | "stop" | "delete" }>(path, {
               method: "POST",
-              body: JSON.stringify({ action: "delete", confirm: true, wait: false, backupVolids, phase }),
+              body: JSON.stringify({ action: "delete", confirm: true, confirmId: Number(params.vmid), wait: false, backupVolids, phase }),
             })
           }
           onFinished={() => {
@@ -429,6 +464,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
         >
           <Button
             variant="destructive"
+            className="w-full"
             disabled={Boolean(deny(can.delete, share.delete))}
             title={deny(can.delete, share.delete)}
           >
@@ -436,6 +472,8 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           </Button>
         </GuestDeleteDialog>
         </div>
+          </div>
+        </details>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

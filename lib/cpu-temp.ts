@@ -121,6 +121,31 @@ export function cpuTempFromSensorsJson(raw: unknown): CpuTempReading | null {
   return best;
 }
 
+const CPU_CHIP = /^(coretemp|k10temp|zenpower|x86_pkg_temp|cpu_thermal|k8temp|via-cputemp)/i;
+const CPU_LABEL = /package|tctl|tdie|^core\b|tccd/i;
+
+/** hwmon dump from the node shell: `PROXORA_ROW:chip|label|millidegree`. */
+export function cpuTempFromHwmonDump(text: string): CpuTempReading | null {
+  const start = text.lastIndexOf("PROXORA_HWMON");
+  const body = start >= 0 ? text.slice(start) : text;
+  const end = body.indexOf("PROXORA_TEMP_END");
+  const slice = end >= 0 ? body.slice(0, end) : body;
+  let best: CpuTempReading | null = null;
+  for (const line of slice.split(/\r?\n/)) {
+    const match = line.match(/PROXORA_ROW:([^|\r\n]*)\|([^|\r\n]*)\|(-?\d+(?:\.\d+)?)/);
+    if (!match) continue;
+    const chip = match[1]?.trim() ?? "";
+    const label = match[2]?.trim() || chip || "CPU";
+    const raw = Number(match[3]);
+    if (!Number.isFinite(raw)) continue;
+    if (!CPU_CHIP.test(chip) && !CPU_LABEL.test(label)) continue;
+    const celsius = celsiusFromUnknown(raw >= 1000 ? raw / 1000 : raw);
+    if (celsius == null) continue;
+    best = preferReading(best, { celsius, label });
+  }
+  return best;
+}
+
 export function cpuTempFromNodeStatus(status: unknown): CpuTempReading | null {
   if (!status || typeof status !== "object") return null;
   const rec = status as Record<string, unknown>;

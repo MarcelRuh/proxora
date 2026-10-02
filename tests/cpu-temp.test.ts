@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyCpuTempWatchState,
+  cpuTempFromHwmonDump,
   cpuTempFromNodeStatus,
   cpuTempFromSensorRows,
   cpuTempFromSensorsJson,
@@ -33,6 +34,18 @@ describe("cpu temperature", () => {
       }),
     });
     expect(status).toEqual({ celsius: 54, label: "Package id 0" });
+  });
+
+  it("reads a hwmon dump and skips disk sensors", () => {
+    const reading = cpuTempFromHwmonDump(`
+PROXORA_HWMON
+PROXORA_ROW:nvme|Composite|42000
+PROXORA_ROW:coretemp|Core 0|81000
+PROXORA_ROW:coretemp|Package id 0|74000
+PROXORA_TEMP_END
+`);
+    expect(reading).toEqual({ celsius: 74, label: "Package id 0" });
+    expect(cpuTempFromHwmonDump("PROXORA_HWMON\nPROXORA_ROW:nvme|Composite|42000\nPROXORA_TEMP_END\n")).toBeNull();
   });
 
   it("ignores missing sensors", () => {

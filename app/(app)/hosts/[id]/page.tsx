@@ -202,12 +202,12 @@ export default function HostDetailPage() {
               </div>
             </CardHeader>
             {st ? (
-              <CardContent className="grid gap-4 sm:grid-cols-3">
+              <CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <Metric label={t("table.cpu")} value={st.cpu * 100} />
                 <Metric label={t("table.ram")} value={percentage(st.memory.used, st.memory.total)} />
                 <Metric label={t("hosts.rootfs")} value={percentage(st.rootfs?.used, st.rootfs?.total)} />
                 <CpuTemp label={t("hosts.cpuTemp")} celsius={st.cpuTempC} hot={st.cpuTempHot} missing={t("hosts.cpuTempMissing")} hotLabel={t("hosts.cpuTempHot")} />
-                <p className="text-sm text-muted-foreground sm:col-span-3">{t("guest.uptime", { time: formatUptime(st.uptime) })}</p>
+                <p className="text-sm text-muted-foreground sm:col-span-2 xl:col-span-4">{t("guest.uptime", { time: formatUptime(st.uptime) })}</p>
               </CardContent>
             ) : null}
           </Card>
@@ -273,16 +273,18 @@ function CpuTemp({
   missing: string;
   hotLabel: string;
 }) {
-  const text = celsius == null ? missing : `${celsius.toLocaleString("de-DE", { maximumFractionDigits: 1 })} °C`;
+  const text =
+    celsius == null ? "—" : `${celsius.toLocaleString("de-DE", { maximumFractionDigits: 1 })} °C`;
   return (
     <div>
       <div className="mb-1 flex justify-between text-sm">
         <span>{label}</span>
-        <span className={hot ? "font-medium text-destructive" : "text-muted-foreground"}>
+        <span className={hot ? "font-medium text-destructive" : undefined} title={celsius == null ? missing : undefined}>
           {text}
           {hot ? ` · ${hotLabel}` : ""}
         </span>
       </div>
+      {celsius == null ? <p className="text-xs text-muted-foreground">{missing}</p> : <ProgressBar value={Math.min(100, celsius)} />}
     </div>
   );
 }

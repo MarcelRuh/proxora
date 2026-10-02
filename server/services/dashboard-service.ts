@@ -6,6 +6,8 @@ import { loadHostInventory } from "@/server/services/inventory-cache";
 import { canAccessGuest, filterGuestsForUser } from "@/server/auth/session-core";
 import { userHasPermission } from "@/lib/permissions";
 import { isClusterNodeOnline, minPositiveUptime, weightedCpuRatio } from "@/lib/cluster-metrics";
+import { CPU_TEMP_ALERT_CELSIUS } from "@/lib/cpu-temp";
+import { peekNodeCpuTemp, readNodeCpuTemp } from "@/server/services/cpu-temp";
 import { withTimeoutFallback } from "@/lib/promise-timeout";
 import type { ConnectionState, Guest } from "@/lib/types";
 import type { GuestListItem, ProxmoxResource } from "@/server/proxmox/types";
@@ -21,6 +23,8 @@ export type HostOverview = {
   isClusterMember: boolean;
   cpu?: number;
   cpuCores?: number;
+  cpuTempC?: number | null;
+  cpuTempHot?: boolean;
   memUsed?: number;
   memTotal?: number;
   diskUsed?: number;
@@ -126,6 +130,12 @@ async function snapshotHost(
       const diskUsed = pool.reduce((acc, n) => acc + (n.disk ?? 0), 0);
       const diskTotal = pool.reduce((acc, n) => acc + (n.maxdisk ?? 0), 0);
       const onlineNodes = inv.nodes.filter((n) => isClusterNodeOnline(n.status)).length;
+      const nodeNames = pool.map((n) => n.node).filter((name): name is string => Boolean(name));
+      void Promise.all(nodeNames.map((name) => readNodeCpuTemp(client, name).catch(() => null)));
+      const temps = nodeNames
+        .map((name) => peekNodeCpuTemp(client, name))
+        .filter((reading): reading is NonNullable<typeof reading> => reading != null);
+      const hottest = temps.sort((a, b) => b.celsius - a.celsius)[0];
       const filteredVms = filterGuestsForUser(user, host.id, "vm", inv.vms);
       const filteredLxc = filterGuestsForUser(user, host.id, "lxc", inv.containers);
       const overview = hostShell(host, {
@@ -140,6 +150,8 @@ async function snapshotHost(
         uptime: minPositiveUptime(pool),
         nodeCount: inv.nodes.length,
         onlineNodes,
+        cpuTempC: hottest?.celsius ?? null,
+        cpuTempHot: hottest != null && hottest.celsius >= CPU_TEMP_ALERT_CELSIUS,
       });
       if (mode === "overview") {
         return { overview, counts: guestCounts(filteredVms, filteredLxc), vms: [], containers: [] };

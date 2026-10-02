@@ -245,10 +245,14 @@ export function RestoreDialog({
               running={!finished && !errorMsg}
               fallbackDetail={upid ? t("backup.restoreWorking") : t("backup.restoreShutdownWait")}
             />
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={resetAndClose} disabled={locked}>
-                {finished || errorMsg ? t("common.close") : t("common.cancel")}
-              </Button>
+            <div className="flex items-center justify-end gap-3">
+              {locked ? (
+                <p className="text-sm text-muted-foreground">{t("guest.taskContinues")}</p>
+              ) : (
+                <Button variant="outline" onClick={resetAndClose}>
+                  {t("common.close")}
+                </Button>
+              )}
             </div>
           </div>
         ) : (

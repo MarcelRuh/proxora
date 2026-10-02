@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ProxmoxTaskProgress } from "@/components/backups/task-progress";
 import { api } from "@/lib/api";
@@ -23,6 +24,7 @@ export function GuestDeleteDialog({
   kind,
   vmid,
   name,
+  status,
   kindLabel,
   disabled,
   onConfirm,
@@ -34,6 +36,7 @@ export function GuestDeleteDialog({
   kind: "vm" | "lxc";
   vmid: number;
   name: string;
+  status?: string;
   kindLabel: string;
   disabled?: boolean;
   onConfirm: (
@@ -48,6 +51,8 @@ export function GuestDeleteDialog({
   const canDeleteBackups = useCan("backup.delete", hostId);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [typedId, setTypedId] = useState("");
+  const [showArchives, setShowArchives] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [upid, setUpid] = useState<string | null>(null);
   const [phase, setPhase] = useState<DeletePhase>("delete");
@@ -130,6 +135,8 @@ export function GuestDeleteDialog({
     }
   }
 
+  const needsShutdown = status !== "stopped";
+  const idMatches = typedId.trim() === String(vmid);
   const progressTitle =
     phase === "shutdown"
       ? t("guest.deleteShutdownProgress")
@@ -140,9 +147,12 @@ export function GuestDeleteDialog({
   return (
     <>
       <span
+        className="contents"
         onClick={() => {
           if (!busy && !disabled) {
             setSelected(new Set());
+            setTypedId("");
+            setShowArchives(false);
             resetTask();
             setOpen(true);
           }
@@ -153,13 +163,15 @@ export function GuestDeleteDialog({
       <Dialog
         open={open}
         onOpenChange={(next) => {
-          if (locked) return;
+          if (!next && (busy || locked)) return;
           setOpen(next);
         }}
       >
         <DialogContent className={tracking ? "max-w-2xl" : "max-w-lg"}>
           <DialogHeader>
-            <DialogTitle>{tracking ? progressTitle : t("guest.deleteShutdownTitle")}</DialogTitle>
+            <DialogTitle>
+              {tracking ? progressTitle : needsShutdown ? t("guest.deleteShutdownTitle") : t("guest.deleteTitle", { kind: kindLabel, id: vmid })}
+            </DialogTitle>
             <DialogDescription>
               {tracking
                 ? errorMsg
@@ -167,7 +179,9 @@ export function GuestDeleteDialog({
                   : finished
                     ? t("create.progressDone")
                     : t("guest.deleteWorking")
-                : t("guest.deleteShutdownBody", { kind: kindLabel, id: vmid, name })}
+                : needsShutdown
+                  ? t("guest.deleteShutdownBody", { kind: kindLabel, id: vmid, name })
+                  : t("guest.deleteStoppedBody", { kind: kindLabel, id: vmid, name })}
             </DialogDescription>
           </DialogHeader>
 
@@ -179,23 +193,35 @@ export function GuestDeleteDialog({
                 running={!finished && !errorMsg}
                 fallbackDetail={t("guest.deleteWorking")}
               />
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setOpen(false);
-                    resetTask();
-                  }}
-                  disabled={locked}
-                >
-                  {finished || errorMsg ? t("common.close") : t("common.cancel")}
-                </Button>
+              <div className="flex items-center justify-end gap-3">
+                {locked || (busy && !finished && !errorMsg) ? (
+                  <p className="text-sm text-muted-foreground">{t("guest.taskContinues")}</p>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setOpen(false);
+                      resetTask();
+                    }}
+                  >
+                    {t("common.close")}
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
             <>
+              <label className="grid gap-1 text-sm">
+                <span>{t("guest.deleteTypeId", { id: vmid })}</span>
+                <Input value={typedId} onChange={(event) => setTypedId(event.target.value)} inputMode="numeric" autoComplete="off" />
+              </label>
               {canViewBackups && canDeleteBackups ? (
                 <div className="space-y-2">
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setShowArchives((current) => !current)}>
+                    {t("guest.deleteArchives")}
+                  </Button>
+                  {showArchives ? (
+                  <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium">{t("guest.deleteBackups")}</p>
                     {files.length ? (
@@ -243,6 +269,8 @@ export function GuestDeleteDialog({
                       })}
                     </ul>
                   )}
+                  </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -252,14 +280,14 @@ export function GuestDeleteDialog({
                 </Button>
                 <Button
                   variant="destructive"
-                  disabled={busy}
+                  disabled={busy || !idMatches}
                   onClick={() => {
                     const volids = [...selected];
                     setPendingVolids(volids);
                     void runPhase(undefined, volids);
                   }}
                 >
-                  {t("guest.deleteConfirm")}
+                  {needsShutdown ? t("guest.deleteConfirm") : t("guest.delete")}
                 </Button>
               </div>
             </>

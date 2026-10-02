@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ProgressBar, Skeleton } from "@/components/ui/misc";
 import { HostStateBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { uniqueNonEmpty } from "@/lib/cluster-metrics";
 import { bytesToSize, formatPercent, formatUptime, percentage } from "@/lib/utils";
 import { useAptSummary } from "@/components/layout/apt-update-alert";
 import { useDashboard, useDashboardGuests } from "@/components/dashboard/use-dashboard";
@@ -21,10 +20,10 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="grid gap-4 md:grid-cols-4">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="h-28" />
-        ))}
+      <div className="grid gap-4">
+        <Skeleton className="h-16" />
+        <Skeleton className="h-40" />
+        <Skeleton className="h-40" />
       </div>
     );
   }
@@ -53,12 +52,9 @@ export default function DashboardPage() {
 
   const totalGuests = data.virtualization.vms + data.virtualization.lxc;
   const running = data.virtualization.running;
-  const stopped = data.virtualization.stopped;
-  const bad = Math.max(0, totalGuests - running - stopped);
-  const allOnline = data.hosts.total > 0 && data.hosts.online === data.hosts.total;
   const cpuCores = data.hosts.items.reduce((acc, h) => acc + (h.cpuCores ?? 0), 0);
-  const versions = uniqueNonEmpty(data.hosts.items.map((h) => h.proxmoxVersion));
   const unavailable = data.hosts.items.filter((h) => h.connectionState !== "ONLINE");
+  const attention = guests.filter((guest) => guest.status !== "running");
 
   return (
     <div className="space-y-6">
@@ -82,55 +78,17 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <MiniStat label={t("dashboard.hostStatus")} value={allOnline ? t("dashboard.online") : `${data.hosts.online}/${data.hosts.total}`} ok={allOnline} />
-        <MiniStat label={t("dashboard.hosts")} value={String(data.hosts.total)} />
-        <MiniStat label="Proxmox VE" value={versions.length ? versions.join(" · ") : "—"} />
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <CountStat label={t("dashboard.total")} value={totalGuests} />
-        <CountStat label={t("dashboard.running")} value={running} />
-        <CountStat label={t("dashboard.stopped")} value={stopped} />
-        <CountStat label={t("dashboard.error")} value={bad} />
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-3">
-        <ResourceStat
-          label={t("dashboard.cpu")}
-          primary={formatPercent(Math.round(data.resources.cpu * 1000) / 10)}
-          secondary={cpuCores ? t("dashboard.cores", { n: cpuCores }) : undefined}
-          ratio={data.resources.cpu * 100}
-        />
-        <ResourceStat
-          label={t("dashboard.ram")}
-          primary={formatPercent(percentage(data.resources.memUsed, data.resources.memTotal))}
-          secondary={`${bytesToSize(data.resources.memUsed)} / ${bytesToSize(data.resources.memTotal)}`}
-          ratio={percentage(data.resources.memUsed, data.resources.memTotal)}
-        />
-        <ResourceStat
-          label={t("dashboard.disk")}
-          primary={formatPercent(percentage(data.resources.diskUsed, data.resources.diskTotal))}
-          secondary={`${bytesToSize(data.resources.diskUsed)} / ${bytesToSize(data.resources.diskTotal)}`}
-          ratio={percentage(data.resources.diskUsed, data.resources.diskTotal)}
-        />
-      </div>
-
-      <Card>
-        <CardHeader>
-          <p className="proxora-section">{t("dashboard.updates")}</p>
-        </CardHeader>
-        <CardContent>
-          <p className={apt.data?.total ? "text-warning" : "text-muted-foreground"}>
-            {apt.data?.total ? t("dashboard.updatesCount", { n: apt.data.total }) : t("dashboard.noUpdates")}
-          </p>
-          {apt.data?.total ? (
-            <Link href="/updates" className="mt-2 inline-block text-sm text-primary">
-              {t("dashboard.toUpdates")}
+      <p className="text-sm text-muted-foreground">
+        {data.hosts.online}/{data.hosts.total} {t("dashboard.hosts")} · {running}/{totalGuests} {t("dashboard.running")}
+        {apt.data?.total ? (
+          <>
+            {" · "}
+            <Link href="/updates" className="text-warning">
+              {t("dashboard.updatesCount", { n: apt.data.total })}
             </Link>
-          ) : null}
-        </CardContent>
-      </Card>
+          </>
+        ) : null}
+      </p>
 
       <Card>
         <CardHeader>
@@ -145,8 +103,10 @@ export default function DashboardPage() {
               </Link>
               .
             </p>
+          ) : unavailable.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("dashboard.allHostsOnline")}</p>
           ) : (
-            data.hosts.items.map((h) => (
+            unavailable.map((h) => (
               <Link key={h.id} href={`/hosts/${h.id}`} className="block rounded-[4px] border border-border p-3 hover:border-primary/40">
                 <div className="mb-2 flex items-center justify-between">
                   <div>
@@ -159,23 +119,38 @@ export default function DashboardPage() {
                   <HostStateBadge state={h.connectionState} />
                 </div>
                 {h.connectionState === "ONLINE" ? (
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <Metric
-                      label={t("dashboard.cpu")}
-                      value={(h.cpu ?? 0) * 100}
-                      detail={h.cpuCores ? `${t("dashboard.cores", { n: h.cpuCores })} · ${Math.round((h.cpu ?? 0) * 100)}%` : `${Math.round((h.cpu ?? 0) * 100)}%`}
-                    />
-                    <Metric
-                      label={t("dashboard.ram")}
-                      value={percentage(h.memUsed, h.memTotal)}
-                      detail={`${bytesToSize(h.memUsed)} / ${bytesToSize(h.memTotal)}`}
-                    />
-                    <Metric
-                      label={t("dashboard.storage")}
-                      value={percentage(h.diskUsed, h.diskTotal)}
-                      detail={`${bytesToSize(h.diskUsed)} / ${bytesToSize(h.diskTotal)}`}
-                    />
-                  </div>
+                  <>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <Metric
+                        label={t("dashboard.cpu")}
+                        value={(h.cpu ?? 0) * 100}
+                        detail={h.cpuCores ? `${t("dashboard.cores", { n: h.cpuCores })} · ${Math.round((h.cpu ?? 0) * 100)}%` : `${Math.round((h.cpu ?? 0) * 100)}%`}
+                      />
+                      <Metric
+                        label={t("dashboard.ram")}
+                        value={percentage(h.memUsed, h.memTotal)}
+                        detail={`${bytesToSize(h.memUsed)} / ${bytesToSize(h.memTotal)}`}
+                      />
+                      <Metric
+                        label={t("dashboard.storage")}
+                        value={percentage(h.diskUsed, h.diskTotal)}
+                        detail={`${bytesToSize(h.diskUsed)} / ${bytesToSize(h.diskTotal)}`}
+                      />
+                    </div>
+                    <p className="mt-2 text-sm">
+                      <span className="text-muted-foreground">{t("hosts.cpuTemp")}</span>{" "}
+                      {h.cpuTempC != null ? (
+                        <span className={h.cpuTempHot ? "font-medium text-destructive" : undefined}>
+                          {h.cpuTempC.toLocaleString("de-DE", { maximumFractionDigits: 1 })} °C
+                          {h.cpuTempHot ? ` · ${t("hosts.cpuTempHot")}` : ""}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground" title={t("hosts.cpuTempMissing")}>
+                          —
+                        </span>
+                      )}
+                    </p>
+                  </>
                 ) : (
                   <p className="text-sm text-destructive">{h.lastError ?? t("dashboard.unreachable")}</p>
                 )}
@@ -199,49 +174,48 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <p className="proxora-section">{t("dashboard.guests")}</p>
-          <span className="text-xs text-muted-foreground">{totalGuests}</span>
+          <p className="proxora-section">{t("dashboard.attention")}</p>
+          <span className="text-xs text-muted-foreground">
+            <Link href="/vms" className="text-primary">{t("nav.vms")}</Link>
+            {" · "}
+            <Link href="/containers" className="text-primary">{t("nav.containers")}</Link>
+          </span>
         </CardHeader>
         <CardContent className="space-y-3">
           {unavailable.length > 0 ? (
             <p className="text-sm text-warning">{t("dashboard.guestsHidden", { n: unavailable.length })}</p>
           ) : null}
           {guestsQ.isLoading && !guestsQ.data ? (
-            <GuestTable kind="all" items={[]} loading />
-          ) : guests.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("dashboard.noGuests")}</p>
+            <GuestTable kind="all" items={[]} loading compact />
+          ) : attention.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{guests.length === 0 ? t("dashboard.noGuests") : t("dashboard.allRunning")}</p>
           ) : (
-            <GuestTable kind="all" items={guests} />
+            <GuestTable kind="all" items={attention} compact />
           )}
         </CardContent>
       </Card>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <ResourceStat
+          label={t("dashboard.cpu")}
+          primary={formatPercent(Math.round(data.resources.cpu * 1000) / 10)}
+          secondary={cpuCores ? t("dashboard.cores", { n: cpuCores }) : undefined}
+          ratio={data.resources.cpu * 100}
+        />
+        <ResourceStat
+          label={t("dashboard.ram")}
+          primary={formatPercent(percentage(data.resources.memUsed, data.resources.memTotal))}
+          secondary={`${bytesToSize(data.resources.memUsed)} / ${bytesToSize(data.resources.memTotal)}`}
+          ratio={percentage(data.resources.memUsed, data.resources.memTotal)}
+        />
+        <ResourceStat
+          label={t("dashboard.disk")}
+          primary={formatPercent(percentage(data.resources.diskUsed, data.resources.diskTotal))}
+          secondary={`${bytesToSize(data.resources.diskUsed)} / ${bytesToSize(data.resources.diskTotal)}`}
+          ratio={percentage(data.resources.diskUsed, data.resources.diskTotal)}
+        />
+      </div>
     </div>
-  );
-}
-
-function MiniStat({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
-  return (
-    <Card>
-      <CardHeader>
-        <p className="proxora-section">{label}</p>
-      </CardHeader>
-      <CardContent>
-        <p className={ok ? "text-lg font-semibold text-success" : "text-lg font-semibold"}>{value}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function CountStat({ label, value }: { label: string; value: number }) {
-  return (
-    <Card>
-      <CardHeader>
-        <p className="proxora-section">{label}</p>
-      </CardHeader>
-      <CardContent>
-        <p className="proxora-stat text-4xl leading-none">{value}</p>
-      </CardContent>
-    </Card>
   );
 }
 

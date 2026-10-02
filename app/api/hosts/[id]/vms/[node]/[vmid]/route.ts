@@ -43,6 +43,7 @@ const actionSchema = z.object({
     "resize",
   ]),
   confirm: z.boolean().optional(),
+  confirmId: z.number().int().positive().optional(),
   newid: z.number().int().positive().optional(),
   name: z.string().optional(),
   target: z.string().optional(),
@@ -125,6 +126,9 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
   }
   if (["delete", "reset"].includes(body.action) && body.confirm !== true) {
     throw new ValidationError("Confirmation required");
+  }
+  if (body.action === "delete" && body.confirmId !== vmid) {
+    throw new ValidationError("VMID confirmation does not match");
   }
   assertGuestAccess(session.user, params.id, "vm", vmid);
   let hostName = "";

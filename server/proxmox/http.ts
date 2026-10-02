@@ -91,6 +91,10 @@ export class ProxmoxHttpClient {
     if (destroy) void destroy();
   }
 
+  tlsInsecure(): boolean {
+    return Boolean(this.config.allowInsecureTls);
+  }
+
   async get<T>(path: string, query?: Query, timeoutMs?: number): Promise<T> {
     return this.request<T>("GET", path, { query, timeoutMs });
   }

@@ -31,6 +31,7 @@ export function ConfirmAction({
   return (
     <>
       <span
+        className="contents"
         onClick={() => {
           if (!busy && !disabled) setOpen(true);
         }}

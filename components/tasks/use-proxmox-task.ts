@@ -34,7 +34,7 @@ export function useProxmoxTask({
   const errorMsg = upid && settled.upid === upid ? settled.error : null;
   const tracking = Boolean(upid) && !finished && !errorMsg;
 
-  const { data: task } = useQuery({
+  const { data: task, isPlaceholderData } = useQuery({
     queryKey: ["proxmox-task", hostId, node, upid],
     enabled: Boolean(open && upid),
     queryFn: () =>
@@ -48,7 +48,7 @@ export function useProxmoxTask({
   });
 
   useEffect(() => {
-    if (!upid || !task?.status) return;
+    if (!upid || isPlaceholderData || !task?.status) return;
     if (settled.upid === upid && (settled.finished || settled.error)) return;
     const st = task.status;
     if (!st.status || st.status === "running") return;
@@ -57,7 +57,7 @@ export function useProxmoxTask({
       return;
     }
     setSettled({ upid, finished: true, error: null });
-  }, [task, upid, failedFallback, settled]);
+  }, [task, upid, failedFallback, settled, isPlaceholderData]);
 
   return {
     logLines: normalizeProxmoxTaskLog(task?.log).map((l) => l.t),

@@ -42,31 +42,37 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import { LocaleSwitch } from "@/components/i18n/locale-switch";
 import { AndroidUpdateBanner } from "@/components/layout/android-update-banner";
 import { AndroidSessionTtl } from "@/components/layout/android-session-ttl";
-import { UiThemeSelect } from "@/components/theme/ui-theme-select";
 import { PageSkeleton } from "@/components/layout/page-skeleton";
 import type { MessageKey } from "@/lib/i18n/messages";
 
 const NAV: Array<{
   href: string;
   labelKey: MessageKey;
+  group: "operate" | "data" | "system";
   icon: ComponentType<{ className?: string }>;
   anyOf: Permission[];
 }> = [
-  { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard, anyOf: ["hosts.view"] },
-  { href: "/hosts", labelKey: "nav.hosts", icon: Server, anyOf: ["hosts.view"] },
-  { href: "/vms", labelKey: "nav.vms", icon: Boxes, anyOf: ["vm.view"] },
-  { href: "/containers", labelKey: "nav.containers", icon: Box, anyOf: ["lxc.view"] },
-  { href: "/templates", labelKey: "nav.templates", icon: Library, anyOf: ["lxc.create", "vm.create"] },
-  { href: "/storage", labelKey: "nav.storage", icon: HardDrive, anyOf: ["storage.view", "zfs.view"] },
-  { href: "/backups", labelKey: "nav.backups", icon: Archive, anyOf: ["backup.view"] },
-  { href: "/tasks", labelKey: "nav.tasks", icon: Activity, anyOf: ["tasks.view"] },
-  { href: "/updates", labelKey: "nav.updates", icon: Shield, anyOf: ["updates.view"] },
-  { href: "/proxora", labelKey: "nav.proxora", icon: ArrowUpCircle, anyOf: ["proxora.update", "updates.view"] },
-  { href: "/users", labelKey: "nav.users", icon: Users, anyOf: ["users.view"] },
-  { href: "/roles", labelKey: "nav.roles", icon: Shield, anyOf: ["roles.view"] },
-  { href: "/audit", labelKey: "nav.audit", icon: ClipboardList, anyOf: ["audit.view"] },
-  { href: "/wireguard", labelKey: "nav.wireguard", icon: Network, anyOf: ["peers.manage"] },
-  { href: "/settings", labelKey: "nav.settings", icon: Settings, anyOf: ["settings.view", "notifications.view"] },
+  { href: "/dashboard", labelKey: "nav.dashboard", group: "operate", icon: LayoutDashboard, anyOf: ["hosts.view"] },
+  { href: "/hosts", labelKey: "nav.hosts", group: "operate", icon: Server, anyOf: ["hosts.view"] },
+  { href: "/vms", labelKey: "nav.vms", group: "operate", icon: Boxes, anyOf: ["vm.view"] },
+  { href: "/containers", labelKey: "nav.containers", group: "operate", icon: Box, anyOf: ["lxc.view"] },
+  { href: "/templates", labelKey: "nav.templates", group: "operate", icon: Library, anyOf: ["lxc.create", "vm.create"] },
+  { href: "/tasks", labelKey: "nav.tasks", group: "operate", icon: Activity, anyOf: ["tasks.view"] },
+  { href: "/storage", labelKey: "nav.storage", group: "data", icon: HardDrive, anyOf: ["storage.view", "zfs.view"] },
+  { href: "/backups", labelKey: "nav.backups", group: "data", icon: Archive, anyOf: ["backup.view"] },
+  { href: "/updates", labelKey: "nav.updates", group: "system", icon: Shield, anyOf: ["updates.view"] },
+  { href: "/proxora", labelKey: "nav.proxora", group: "system", icon: ArrowUpCircle, anyOf: ["proxora.update", "updates.view"] },
+  { href: "/users", labelKey: "nav.users", group: "system", icon: Users, anyOf: ["users.view"] },
+  { href: "/roles", labelKey: "nav.roles", group: "system", icon: Shield, anyOf: ["roles.view"] },
+  { href: "/audit", labelKey: "nav.audit", group: "system", icon: ClipboardList, anyOf: ["audit.view"] },
+  { href: "/wireguard", labelKey: "nav.wireguard", group: "system", icon: Network, anyOf: ["peers.manage"] },
+  { href: "/settings", labelKey: "nav.settings", group: "system", icon: Settings, anyOf: ["settings.view", "notifications.view"] },
+];
+
+const NAV_GROUPS: Array<{ id: "operate" | "data" | "system"; labelKey: MessageKey }> = [
+  { id: "operate", labelKey: "nav.groupOperate" },
+  { id: "data", labelKey: "nav.groupData" },
+  { id: "system", labelKey: "nav.groupSystem" },
 ];
 
 export function AppShell({ children, user }: { children: ReactNode; user: SessionUser }) {
@@ -120,26 +126,35 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
           </div>
         </div>
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-          {NAV.filter((item) => navItemVisible(user, item.href, item.anyOf)).map((item) => (
-            <NavLink
-              key={item.href}
-              href={item.href}
-              label={t(item.labelKey)}
-              icon={item.icon}
-              active={
-                item.href === "/dashboard"
-                  ? pathname === item.href
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`)
-              }
-              badge={
-                item.href === "/updates" && userHasPermission(user, "updates.view") ? (
-                  <UpdatesBadge />
-                ) : item.href === "/proxora" ? (
-                  <ProxoraBadge />
-                ) : undefined
-              }
-            />
-          ))}
+          {NAV_GROUPS.map((group) => {
+            const items = NAV.filter((item) => item.group === group.id && navItemVisible(user, item.href, item.anyOf));
+            if (!items.length) return null;
+            return (
+              <div key={group.id} className="mb-2">
+                <p className="px-3 pb-1 pt-3 text-[11px] text-sidebar-muted">{t(group.labelKey)}</p>
+                {items.map((item) => (
+                  <NavLink
+                    key={item.href}
+                    href={item.href}
+                    label={t(item.labelKey)}
+                    icon={item.icon}
+                    active={
+                      item.href === "/dashboard"
+                        ? pathname === item.href
+                        : pathname === item.href || pathname.startsWith(`${item.href}/`)
+                    }
+                    badge={
+                      item.href === "/updates" && userHasPermission(user, "updates.view") ? (
+                        <UpdatesBadge />
+                      ) : item.href === "/proxora" ? (
+                        <ProxoraBadge />
+                      ) : undefined
+                    }
+                  />
+                ))}
+              </div>
+            );
+          })}
         </nav>
         <div className="app-sidebar-footer shrink-0 space-y-2 border-t p-3">
           <button
@@ -151,7 +166,6 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             <kbd className="ml-auto hidden text-[10px] text-sidebar-muted sm:inline">{shortcut}</kbd>
           </button>
           {userHasAnyPermission(user, ["proxora.update", "updates.view"]) ? <SidebarVersion /> : null}
-          <UiThemeSelect />
           <LocaleSwitch className="px-1" />
           <p className="px-1 text-[10px] text-sidebar-muted">
             {user.username} · {user.role.name}

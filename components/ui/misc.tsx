@@ -27,8 +27,8 @@ export function ProgressBar({
   return (
     <div className={cn("h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]", className)}>
       <div
-        className={cn("h-full rounded-full transition-all", color)}
-        style={{ width: `${clamped}%` }}
+        className={cn("proxora-meter h-full w-full origin-left rounded-full", color)}
+        style={{ transform: `scaleX(${clamped / 100})` }}
       />
     </div>
   );

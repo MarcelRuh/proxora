@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { Dashboard, DashboardGuests, Guest } from "@/lib/types";
@@ -33,13 +34,24 @@ export function applyGuestIpsToCache(
 }
 
 export function useDashboard() {
-  return useQuery({
+  const query = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => api<Dashboard>("/api/dashboard"),
     refetchInterval: DASHBOARD_OVERVIEW_POLL_MS,
     staleTime: 60_000,
     placeholderData: (previous) => previous,
   });
+  const retried = useRef(false);
+  const { data, refetch } = query;
+  useEffect(() => {
+    if (retried.current || !data) return;
+    const missing = data.hosts.items.some((host) => host.connectionState === "ONLINE" && host.cpuTempC == null);
+    if (!missing) return;
+    retried.current = true;
+    const id = setTimeout(() => void refetch(), 8_000);
+    return () => clearTimeout(id);
+  }, [data, refetch]);
+  return query;
 }
 
 export function useDashboardGuests(kind: "vm" | "lxc" | "all" = "all") {

@@ -39,6 +39,7 @@ const actionSchema = z.object({
     "resize",
   ]),
   confirm: z.boolean().optional(),
+  confirmId: z.number().int().positive().optional(),
   newid: z.number().int().positive().optional(),
   hostname: z.string().optional(),
   target: z.string().optional(),
@@ -97,6 +98,9 @@ export const POST = apiRoute("lxc.view", async (req, session, params) => {
   }
   if (body.action === "delete" && body.confirm !== true) {
     throw new ValidationError("Confirmation required");
+  }
+  if (body.action === "delete" && body.confirmId !== vmid) {
+    throw new ValidationError("VMID confirmation does not match");
   }
   assertGuestAccess(session.user, params.id, "lxc", vmid);
   let hostName = "";

@@ -66,6 +66,8 @@ export type DashboardHost = {
   proxmoxVersion: string | null;
   cpu?: number;
   cpuCores?: number;
+  cpuTempC?: number | null;
+  cpuTempHot?: boolean;
   memUsed?: number;
   memTotal?: number;
   diskUsed?: number;

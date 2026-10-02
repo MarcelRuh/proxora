@@ -4,6 +4,25 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.14] – 2026-10-02
+
+### Added
+
+- Host CPU temperature is read from the node when Proxmox has no sensor API. Dashboard cards and the host page show degrees Celsius. Nothing is invented when no sensor can be read.
+
+### Fixed
+
+- Deleting a guest no longer treats the next Proxmox task as already finished. The dialog stays open until shutdown, stop, and delete have each completed.
+- The server rejects a delete unless the request repeats the VMID. Typing it in the dialog is no longer only a browser check.
+- A failed shutdown or hard stop clears the in-row status immediately.
+
+### Changed
+
+- Guest rows show Start and Console. Shutdown, reboot, hard stop, snapshot, files, and delete sit in More.
+- The guest page uses that same row. Power verbs in German are Starten, Herunterfahren, Neu starten, and Hart aus.
+- The dashboard leads with hosts that are not online and guests that are not running.
+- Navigation is grouped into Operate, Data, and System. Theme choices stay in Appearance.
+
 ## [2.1.13] – 2026-10-02
 
 ### Fixed

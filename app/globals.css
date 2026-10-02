@@ -220,8 +220,30 @@ select optgroup {
   animation: proxora-dialog-out 150ms var(--ease-out);
 }
 
-.proxora-pending {
-  animation: proxora-fade-in 160ms var(--ease-out);
+.proxora-pending::before {
+  content: "";
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-right: 0.35rem;
+  border-radius: 999px;
+  background: currentColor;
+  vertical-align: middle;
+  animation: proxora-pending-pulse 1.6s var(--ease-in-out) infinite;
+}
+
+.proxora-meter {
+  transition: transform 200ms var(--ease-out);
+}
+
+@keyframes proxora-pending-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 .app-sidebar {
@@ -242,6 +264,12 @@ select optgroup {
   }
 
   .app-sidebar {
+    transition: none;
+  }
+
+  .proxora-pending::before,
+  .proxora-meter {
+    animation: none;
     transition: none;
   }
 }
@@ -278,10 +306,7 @@ select optgroup {
   backdrop-filter: var(--ui-panel-blur);
   position: relative;
   overflow: hidden;
-  transition:
-    border-color 0.35s ease,
-    box-shadow 0.35s ease,
-    transform 0.2s ease;
+  transition: border-color 160ms var(--ease-out);
 }
 
 .proxora-panel:hover {
