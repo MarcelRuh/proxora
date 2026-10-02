@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -26,6 +26,7 @@ export function ConfirmAction({
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
 
   return (
     <>
@@ -39,7 +40,7 @@ export function ConfirmAction({
       <Dialog
         open={open}
         onOpenChange={(next) => {
-          if (next && busy) return;
+          if (busy || inFlight.current) return;
           setOpen(next);
         }}
       >
@@ -56,18 +57,21 @@ export function ConfirmAction({
               variant={destructive ? "destructive" : "default"}
               disabled={busy}
               onClick={() => {
+                if (inFlight.current) return;
+                inFlight.current = true;
                 setBusy(true);
-                setOpen(false);
                 void onConfirm()
+                  .then(() => setOpen(false))
                   .catch((err: unknown) => {
                     toast.error(err instanceof Error ? err.message : t("common.failed"));
                   })
                   .finally(() => {
+                    inFlight.current = false;
                     setBusy(false);
                   });
               }}
             >
-              {actionLabel}
+              {busy ? t("common.loading") : actionLabel}
             </Button>
           </div>
         </DialogContent>

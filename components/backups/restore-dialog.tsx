@@ -40,7 +40,7 @@ export function RestoreDialog({
   const [vmid, setVmid] = useState("");
   const [node, setNode] = useState("");
   const [storage, setStorage] = useState("");
-  const [force, setForce] = useState(true);
+  const [force, setForce] = useState(false);
   const [startAfter, setStartAfter] = useState(false);
   const [busy, setBusy] = useState(false);
   const [upid, setUpid] = useState<string | null>(null);
@@ -95,7 +95,7 @@ export function RestoreDialog({
   useEffect(() => {
     if (!open) return;
     setVmid(String(pickFor?.vmid ?? fileProp?.vmid ?? ""));
-    setForce(true);
+    setForce(false);
     setStartAfter(false);
     setFinished(false);
     setErrorMsg(null);
@@ -152,20 +152,6 @@ export function RestoreDialog({
     onDone();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task]);
-
-  useEffect(() => {
-    if (!finished) return;
-    const timer = window.setTimeout(() => {
-      setBusy(false);
-      setUpid(null);
-      setFinished(false);
-      setErrorMsg(null);
-      settledRef.current = false;
-      onOpenChange(false);
-    }, 800);
-    return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finished]);
 
   function resetAndClose() {
     setBusy(false);
@@ -309,7 +295,11 @@ export function RestoreDialog({
             ) : null}
             <div className="space-y-1">
               <Label>{t("create.id")}</Label>
-              <Input value={vmid} onChange={(e) => setVmid(e.target.value)} />
+              <Input
+                value={vmid}
+                readOnly={Boolean(pickFor?.vmid || file?.vmid)}
+                onChange={(e) => setVmid(e.target.value)}
+              />
             </div>
             <label className="text-sm">
               {t("backup.node")}
@@ -335,11 +325,14 @@ export function RestoreDialog({
               <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
               {t("backup.force")}
             </label>
-            {force ? <p className="text-xs text-muted-foreground">{t("backup.restoreForceHint")}</p> : null}
-            {running && !force ? (
-              <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
-                {t("backup.restoreRunningBody", { kind: kindLabel, id: vmid })}
+            {force ? (
+              <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm">
+                {running
+                  ? t("backup.restoreRunningBody", { kind: kindLabel, id: vmid })
+                  : t("backup.restoreForceHint")}
               </p>
+            ) : running ? (
+              <p className="text-xs text-muted-foreground">{t("backup.restoreRunningBody", { kind: kindLabel, id: vmid })}</p>
             ) : null}
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={startAfter} onChange={(e) => setStartAfter(e.target.checked)} />
@@ -350,7 +343,7 @@ export function RestoreDialog({
                 {t("common.cancel")}
               </Button>
               <Button
-                variant={shutdownRestore ? "destructive" : "default"}
+                variant={force ? "destructive" : "default"}
                 onClick={() => void submit()}
                 disabled={!file || !Number(vmid) || !node || !storage || (running && !force)}
               >

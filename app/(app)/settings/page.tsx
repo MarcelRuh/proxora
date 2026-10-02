@@ -16,13 +16,31 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader kicker={t("settings.kicker")} title={t("settings.title")} />
-      <AppearanceSection />
-      <ChangePasswordForm />
-      <TotpSection />
-      <SessionsSection />
-      <GuestNetworksSection />
-      <DiskAlertsSection />
-      <CpuTempSection />
+      <nav className="flex flex-wrap gap-2 text-sm">
+        {(
+          [
+            ["appearance", "appearance.title"],
+            ["password", "settings.password"],
+            ["totp", "settings.totp"],
+            ["sessions", "settings.sessions"],
+            ["networks", "settings.networks"],
+            ["disk", "settings.diskTitle"],
+            ["cpu", "settings.cpuTempTitle"],
+            ["webhooks", "settings.notifications"],
+          ] as const
+        ).map(([id, key]) => (
+          <a key={id} href={`#${id}`} className="rounded-[4px] border border-border px-2 py-1 text-muted-foreground hover:text-foreground">
+            {t(key)}
+          </a>
+        ))}
+      </nav>
+      <div id="appearance"><AppearanceSection /></div>
+      <div id="password"><ChangePasswordForm /></div>
+      <div id="totp"><TotpSection /></div>
+      <div id="sessions"><SessionsSection /></div>
+      <div id="networks"><GuestNetworksSection /></div>
+      <div id="disk"><DiskAlertsSection /></div>
+      <div id="cpu"><CpuTempSection /></div>
       <div id="webhooks" className="space-y-3">
         <h2 className="proxora-title text-2xl">{t("settings.notifications")}</h2>
         <NotificationsSection />

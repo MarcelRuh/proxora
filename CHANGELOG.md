@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.13] – 2026-10-02
+
+### Fixed
+
+- Restore no longer starts with “replace” checked. The target VMID stays tied to the selected backup, and the warning sits on the path that overwrites a guest.
+- Shutdown, reboot, hard stop, and snapshots ask before they run. The confirm dialog stays open until the request finishes.
+- LXC apt and SSH commands run only at a shell prompt. Their output sits above the terminal instead of covering it.
+- A restore that is still running is remembered across a Proxora restart. Failed restore jobs are dropped instead of staying forever.
+- The health check reports the database. It returns 503 when Postgres is unreachable.
+
+### Changed
+
+- The standard theme is quieter: no floating orbs, flat titles, and shorter page headings.
+- Guest actions are grouped, and the table has a separate hard-stop control.
+- Buttons, dialogs, and the mobile sidebar use a short motion. The command palette stays instant.
+
 ## [2.1.12] – 2026-10-02
 
 ### Fixed

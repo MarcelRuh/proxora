@@ -46,7 +46,7 @@ export function CommandSearch({ open, onOpenChange }: { open: boolean; onOpenCha
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-w-xl p-0">
+      <DialogContent instant className="max-w-xl p-0">
         <DialogHeader className="p-4 pb-0">
           <DialogTitle className="proxora-section text-xs">{t("search.title")}</DialogTitle>
         </DialogHeader>

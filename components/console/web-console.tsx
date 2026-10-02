@@ -38,7 +38,9 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
   const [fontSize, setFontSize] = useState(14);
   const [nonce, setNonce] = useState(0);
   const [sshOn, setSshOn] = useState<boolean | null>(null);
+  const [commandOut, setCommandOut] = useState<string | null>(null);
   const sshBufRef = useRef("");
+  const captureRef = useRef(false);
   fontSizeRef.current = fontSize;
 
   useEffect(() => {
@@ -67,6 +69,10 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
       sshBufRef.current = (sshBufRef.current + chunk).slice(-800);
       const next = lxcSshStateFromOutput(sshBufRef.current);
       if (next != null) setSshOn(next);
+      if (captureRef.current) {
+        const plain = chunk.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "");
+        if (plain) setCommandOut((prev) => ((prev ?? "") + plain).slice(-8000));
+      }
     };
 
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
@@ -153,7 +159,7 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
     const onResize = () => fit.fit();
     window.addEventListener("resize", onResize);
     const probeTimer = setInterval(() => {
-      if (kind !== "lxc" || ws.readyState !== WebSocket.OPEN) return;
+      if (kind !== "lxc" || ws.readyState !== WebSocket.OPEN || captureRef.current) return;
       const buffer = term.buffer.active;
       const row = buffer.getLine(buffer.baseY + buffer.cursorY)?.translateToString(true) ?? "";
       if (!lxcShellPrompt(row)) return;
@@ -172,6 +178,7 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
+      captureRef.current = false;
     };
   }, [hostId, node, kind, vmid, cmd, nonce]);
 
@@ -181,6 +188,25 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
     term.options.fontSize = fontSize;
     fitRef.current?.fit();
   }, [fontSize]);
+
+  function shellReady() {
+    const term = termRef.current;
+    const ws = wsRef.current;
+    if (!term || !ws || ws.readyState !== WebSocket.OPEN) return false;
+    const buffer = term.buffer.active;
+    const row = buffer.getLine(buffer.baseY + buffer.cursorY)?.translateToString(true) ?? "";
+    return lxcShellPrompt(row);
+  }
+
+  function sendShell(data: string) {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    if (!shellReady()) return false;
+    captureRef.current = true;
+    setCommandOut((current) => current ?? "");
+    ws.send(JSON.stringify({ type: "input", data }));
+    return true;
+  }
 
   const statusLabel =
     status === "connected"
@@ -194,26 +220,26 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
   return (
     <div
       className={cn(
-        "flex flex-col overflow-hidden rounded-xl border border-border bg-[#020617]",
+        "flex flex-col overflow-hidden rounded-[var(--ui-radius)] border border-border bg-[#020617]",
         fill ? "h-full min-h-0" : "min-h-[420px]",
       )}
     >
-      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2 text-xs text-slate-300">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground">
         <span
           className={
-            status === "connected" ? "text-emerald-400" : status === "error" ? "text-red-400" : "text-amber-400"
+            status === "connected" ? "text-success" : status === "error" ? "text-danger" : "text-warning"
           }
         >
           ● {statusLabel}
         </span>
-        <span className="text-slate-500">
+        <span>
           {cmd === "upgrade"
             ? `UPGRADE ${node}`
             : kind === "node"
               ? `SHELL ${node}`
               : `${kind.toUpperCase()} ${vmid ?? node} @ ${node}`}
         </span>
-        {detail && status === "error" ? <span className="text-red-400">{detail}</span> : null}
+        {detail && status === "error" ? <span className="text-danger">{detail}</span> : null}
         <div className="ml-auto flex items-center gap-1">
           {kind === "lxc" ? (
             <ConfirmAction
@@ -222,9 +248,7 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
               actionLabel={t("guest.consoleAptRun")}
               disabled={status !== "connected"}
               onConfirm={async () => {
-                const ws = wsRef.current;
-                if (!ws || ws.readyState !== WebSocket.OPEN) return;
-                ws.send(JSON.stringify({ type: "input", data: LXC_APT_UPGRADE_INPUT }));
+                if (!sendShell(LXC_APT_UPGRADE_INPUT)) throw new Error(t("guest.consoleNeedShell"));
               }}
             >
               <Button size="sm" variant="outline" disabled={status !== "connected"} className="h-7 px-2 text-xs">
@@ -239,14 +263,13 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
               actionLabel={t(sshOn ? "guest.consoleSshOff" : "guest.consoleSshOn")}
               disabled={status !== "connected" || sshOn == null}
               onConfirm={async () => {
-                const ws = wsRef.current;
-                if (!ws || ws.readyState !== WebSocket.OPEN || sshOn == null) return;
+                if (sshOn == null) return;
                 const turnOn = !sshOn;
+                if (!sendShell(lxcSshInput(turnOn))) throw new Error(t("guest.consoleNeedShell"));
                 setSshOn(turnOn);
-                ws.send(JSON.stringify({ type: "input", data: lxcSshInput(turnOn) }));
               }}
             >
-              <Button size="sm" variant="outline" disabled={status !== "connected"} className="h-7 px-2 text-xs">
+              <Button size="sm" variant="outline" disabled={status !== "connected" || sshOn == null} className="h-7 px-2 text-xs">
                 {t(sshOn == null ? "guest.consoleSshUnknown" : sshOn ? "guest.consoleSshOff" : "guest.consoleSshOn")}
               </Button>
             </ConfirmAction>
@@ -269,6 +292,24 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
           </Button>
         </div>
       </div>
+      {commandOut != null ? (
+        <div className="border-b border-border bg-card px-3 py-2 text-xs text-foreground">
+          <div className="mb-1 flex items-center justify-between">
+            <span>{t("guest.consoleOutput")}</span>
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                captureRef.current = false;
+                setCommandOut(null);
+              }}
+            >
+              {t("common.close")}
+            </button>
+          </div>
+          <pre className="max-h-40 overflow-auto whitespace-pre-wrap">{commandOut || "…"}</pre>
+        </div>
+      ) : null}
       <div ref={containerRef} className="min-h-0 flex-1" />
     </div>
   );

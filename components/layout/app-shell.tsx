@@ -75,6 +75,10 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [shortcut, setShortcut] = useState("Ctrl+K");
+  useEffect(() => {
+    if (/Mac|iPhone|iPad/.test(navigator.platform)) setShortcut("⌘K");
+  }, []);
 
   useEffect(() => {
     setOpen(false);
@@ -102,7 +106,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
       <UiAtmosphere />
       <aside
         className={cn(
-          "app-sidebar fixed inset-y-0 left-0 z-40 flex h-dvh shrink-0 flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground backdrop-blur-md transition-transform lg:static lg:inset-auto lg:h-auto lg:self-stretch lg:translate-x-0",
+          "app-sidebar fixed inset-y-0 left-0 z-40 flex h-dvh shrink-0 flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground backdrop-blur-md lg:static lg:inset-auto lg:h-auto lg:self-stretch lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
@@ -144,7 +148,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
           >
             <Search className="h-3.5 w-3.5" />
             {t("nav.search")}
-            <kbd className="ml-auto hidden text-[10px] text-sidebar-muted sm:inline">⌘K</kbd>
+            <kbd className="ml-auto hidden text-[10px] text-sidebar-muted sm:inline">{shortcut}</kbd>
           </button>
           {userHasAnyPermission(user, ["proxora.update", "updates.view"]) ? <SidebarVersion /> : null}
           <UiThemeSelect />

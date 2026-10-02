@@ -14,9 +14,9 @@ export function ProgressBar({
 }) {
   const clamped = Math.max(0, Math.min(100, value));
   const color = autoTone
-    ? clamped >= 90
+    ? clamped >= 85
         ? "bg-danger"
-        : clamped >= 75
+        : clamped >= 60
           ? "bg-warning"
           : "proxora-fill"
     : tone === "danger"

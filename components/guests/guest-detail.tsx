@@ -244,7 +244,8 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
         <GuestStateBadge status={runState} />
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <div className="flex flex-wrap gap-2">
         <Button
           disabled={Boolean(deny(can.start, share.start)) || !stopped}
           title={deny(can.start, share.start)}
@@ -252,30 +253,28 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
         >
           {t("guest.start")}
         </Button>
-        <Button
-          variant="outline"
+        <ConfirmAction
+          title={t("guest.shutdownTitle")}
+          description={t("guest.shutdownBody", { id: params.vmid, name })}
+          actionLabel={t("guest.shutdown")}
           disabled={Boolean(deny(can.shutdown, share.shutdown)) || !running}
-          title={deny(can.shutdown, share.shutdown)}
-          onClick={() => runAction("shutdown")}
+          onConfirm={() => action("shutdown")}
         >
-          {t("guest.shutdown")}
-        </Button>
-        <Button
-          variant="outline"
-          disabled={Boolean(deny(can.stop, share.stop)) || stopped}
-          title={deny(can.stop, share.stop)}
-          onClick={() => runAction("stop")}
-        >
-          {t("guest.stop")}
-        </Button>
-        <Button
-          variant="outline"
+          <Button variant="outline" disabled={Boolean(deny(can.shutdown, share.shutdown)) || !running} title={deny(can.shutdown, share.shutdown)}>
+            {t("guest.shutdown")}
+          </Button>
+        </ConfirmAction>
+        <ConfirmAction
+          title={t("guest.rebootTitle")}
+          description={t("guest.rebootBody", { id: params.vmid, name })}
+          actionLabel={t("guest.reboot")}
           disabled={Boolean(deny(can.reboot, share.reboot)) || !running}
-          title={deny(can.reboot, share.reboot)}
-          onClick={() => runAction("reboot")}
+          onConfirm={() => action("reboot")}
         >
-          {t("guest.reboot")}
-        </Button>
+          <Button variant="outline" disabled={Boolean(deny(can.reboot, share.reboot)) || !running} title={deny(can.reboot, share.reboot)}>
+            {t("guest.reboot")}
+          </Button>
+        </ConfirmAction>
         {kind === "vm" ? (
           <>
             <Button
@@ -294,23 +293,41 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             >
               {t("guest.resume")}
             </Button>
-            {deny(can.reset, share.reset) || stopped ? (
-              <Button variant="destructive" disabled title={deny(can.reset, share.reset)}>
-                {t("guest.reset")}
-              </Button>
-            ) : (
-              <ConfirmAction
-                title={t("guest.resetTitle")}
-                description={t("guest.resetBody")}
-                actionLabel={t("guest.reset")}
-                destructive
-                onConfirm={() => action("reset", { confirm: true })}
-              >
-                <Button variant="destructive">{t("guest.reset")}</Button>
-              </ConfirmAction>
-            )}
           </>
         ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+        <ConfirmAction
+          title={t("guest.stopTitle")}
+          description={t("guest.stopBody", { id: params.vmid, name })}
+          actionLabel={t("guest.stop")}
+          destructive
+          disabled={Boolean(deny(can.stop, share.stop)) || stopped}
+          onConfirm={() => action("stop")}
+        >
+          <Button variant="destructive" disabled={Boolean(deny(can.stop, share.stop)) || stopped} title={deny(can.stop, share.stop)}>
+            {t("guest.stop")}
+          </Button>
+        </ConfirmAction>
+        {kind === "vm" ? (
+          deny(can.reset, share.reset) || stopped ? (
+            <Button variant="destructive" disabled title={deny(can.reset, share.reset)}>
+              {t("guest.reset")}
+            </Button>
+          ) : (
+            <ConfirmAction
+              title={t("guest.resetTitle")}
+              description={t("guest.resetBody")}
+              actionLabel={t("guest.reset")}
+              destructive
+              onConfirm={() => action("reset", { confirm: true })}
+            >
+              <Button variant="destructive">{t("guest.reset")}</Button>
+            </ConfirmAction>
+          )
+        ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
         <CloneDialog
           kind={kind}
           hostId={params.hostId}
@@ -418,6 +435,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             {t("guest.delete")}
           </Button>
         </GuestDeleteDialog>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

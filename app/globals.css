@@ -37,26 +37,26 @@
   --ui-radius-panel: 4px;
   --ui-sidebar-width: 16rem;
   --ui-chrome-border: rgba(131, 56, 236, 0.2);
-  --ui-btn-glow: 0 0 18px rgba(255, 0, 110, 0.35);
-  --ui-focus-glow: 0 0 24px rgba(255, 0, 110, 0.22);
+  --ui-btn-glow: none;
+  --ui-focus-glow: 0 0 0 2px rgba(255, 0, 110, 0.35);
   --ui-panel-hover-border: rgba(131, 56, 236, 0.35);
-  --ui-panel-hover-shadow: 0 12px 40px rgba(0, 0, 0, 0.35), 0 0 24px rgba(131, 56, 236, 0.08);
+  --ui-panel-hover-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
   --ui-dialog-shadow: 0 0 40px rgba(131, 56, 236, 0.2);
-  --ui-fill-glow: 0 0 12px rgba(255, 0, 110, 0.45);
-  --ui-logo-glow: drop-shadow(0 0 18px rgba(131, 56, 236, 0.45));
-  --ui-stat-glow: drop-shadow(0 0 16px rgba(255, 0, 110, 0.3));
-  --ui-nav-hover-shadow: 0 0 16px rgba(255, 0, 110, 0.15);
-  --ui-kicker-tracking: 0.28em;
+  --ui-fill-glow: none;
+  --ui-logo-glow: none;
+  --ui-stat-glow: none;
+  --ui-nav-hover-shadow: none;
+  --ui-kicker-tracking: 0.08em;
   --ui-kicker-transform: uppercase;
-  --ui-title-fill: linear-gradient(135deg, #fff, #aaa);
+  --ui-title-fill: var(--foreground);
   --ui-logo-fill: linear-gradient(135deg, var(--proxora-pink), var(--proxora-purple), var(--proxora-blue));
   --ui-fill: linear-gradient(90deg, var(--proxora-pink), var(--proxora-purple));
   --ui-panel-blur: blur(12px);
   --ui-panel-accent-opacity: 0;
-  --ui-panel-accent-hover: 1;
+  --ui-panel-accent-hover: 0;
   --ui-nav-active-bg: rgba(255, 0, 110, 0.1);
   --ui-nav-active-shadow: inset 3px 0 0 var(--proxora-pink), 0 0 18px rgba(255, 0, 110, 0.15);
-  --ui-nav-active-text-shadow: 0 0 16px rgba(255, 0, 110, 0.45);
+  --ui-nav-active-text-shadow: none;
   --ui-nav-radius: 0;
   --ui-nav-tracking: 0.05em;
   --ui-nav-transform: uppercase;
@@ -66,6 +66,20 @@
   --ui-main-radius: 0;
   --font-sans: var(--font-inter);
   --font-display: var(--font-orbitron);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+[data-ui="standard"] {
+  --ui-kicker-transform: none;
+  --ui-nav-transform: none;
+  --ui-nav-tracking: 0;
+  --ui-nav-active-shadow: inset 3px 0 0 var(--proxora-pink);
+  --ui-dialog-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+[data-ui="standard"] .proxora-section {
+  text-shadow: none;
 }
 
 @theme inline {
@@ -123,8 +137,8 @@ select {
 
 select option,
 select optgroup {
-  color: #111111;
-  background-color: #ffffff;
+  color: var(--foreground);
+  background-color: var(--card);
 }
 
 ::selection {
@@ -160,6 +174,78 @@ select optgroup {
   }
 }
 
+@keyframes proxora-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes proxora-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes proxora-dialog-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.97); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes proxora-dialog-out {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to { opacity: 0; transform: translate(-50%, -50%) scale(0.97); }
+}
+
+.proxora-press {
+  transition-property: transform, opacity, background-color, color, border-color;
+  transition-duration: 160ms;
+  transition-timing-function: var(--ease-out);
+}
+
+.proxora-press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.proxora-dialog-overlay[data-state="open"] {
+  animation: proxora-fade-in 200ms var(--ease-out);
+}
+
+.proxora-dialog-overlay[data-state="closed"] {
+  animation: proxora-fade-out 150ms var(--ease-out);
+}
+
+.proxora-dialog[data-state="open"] {
+  animation: proxora-dialog-in 200ms var(--ease-out);
+}
+
+.proxora-dialog[data-state="closed"] {
+  animation: proxora-dialog-out 150ms var(--ease-out);
+}
+
+.proxora-pending {
+  animation: proxora-fade-in 160ms var(--ease-out);
+}
+
+.app-sidebar {
+  transition: transform 200ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .proxora-press:active:not(:disabled) {
+    transform: none;
+  }
+
+  .proxora-dialog[data-state="open"] {
+    animation-name: proxora-fade-in;
+  }
+
+  .proxora-dialog[data-state="closed"] {
+    animation-name: proxora-fade-out;
+  }
+
+  .app-sidebar {
+    transition: none;
+  }
+}
+
 @keyframes proxora-pulse-dot {
   0%,
   100% {
@@ -170,6 +256,10 @@ select optgroup {
     opacity: 0.35;
     transform: scale(0.85);
   }
+}
+
+.ui-atmosphere-orbs {
+  display: none;
 }
 
 .proxora-orb {
@@ -228,22 +318,17 @@ select optgroup {
 }
 
 .proxora-title {
-  font-family: var(--font-display), sans-serif;
-  font-weight: 900;
-  background: var(--ui-title-fill);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  color: var(--foreground);
 }
 
 .proxora-stat {
-  font-family: var(--font-display), sans-serif;
-  font-weight: 900;
-  background: linear-gradient(135deg, var(--proxora-pink), var(--proxora-purple));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter: var(--ui-stat-glow);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  color: var(--foreground);
 }
 
 .proxora-section {
@@ -776,7 +861,7 @@ select optgroup {
   --sidebar-foreground: #f5f0e6;
   --sidebar-muted: #8c8678;
   --sidebar-accent: rgba(255, 208, 0, 0.14);
-  --success: #ffd000;
+  --success: #9dff57;
   --warning: #ffd000;
   --danger: #ff4d00;
   --proxora-blue: #ffd000;
@@ -907,6 +992,7 @@ select optgroup {
 }
 
 [data-ui="harbor"] .ui-atmosphere-orbs {
+  display: block;
   opacity: 0.22;
 }
 

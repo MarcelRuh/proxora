@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ProgressBar, Skeleton } from "@/components/ui/misc";
 import { HostStateBadge } from "@/components/status-badge";
@@ -66,10 +65,9 @@ export default function DashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="proxora-section">{t("dashboard.kicker")}</p>
-          <h1 className="proxora-title mt-1 text-4xl md:text-5xl">{t("dashboard.title")}</h1>
+          <h1 className="proxora-title mt-1 text-3xl">{t("dashboard.title")}</h1>
         </div>
-        <div className="flex items-center gap-3 text-xs uppercase tracking-wider">
-            <LiveClock />
+        <div className="flex items-center gap-3 text-xs">
           <Button
             size="sm"
             variant="outline"
@@ -281,20 +279,5 @@ function Metric({ label, value, detail }: { label: string; value: number; detail
       </div>
       <ProgressBar value={value} />
     </div>
-  );
-}
-
-function LiveClock() {
-  const { t, locale } = useI18n();
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-  return (
-    <span className="flex items-center gap-2 text-success">
-      <span className="proxora-pulse inline-block h-2 w-2 rounded-full bg-success" />
-      {t("common.live", { time: now.toLocaleTimeString(locale === "en" ? "en-US" : "de-DE") })}
-    </span>
   );
 }

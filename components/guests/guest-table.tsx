@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { Play, Square, RotateCcw, Terminal, FolderOpen, Camera, Trash2 } from "lucide-react";
+import { Play, Square, OctagonX, RotateCcw, Terminal, FolderOpen, Camera, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,8 @@ export const GuestTable = memo(function GuestTable({
     return map;
   }, [hostData]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingFrom, setPendingFrom] = useState<Record<string, string>>({});
+  const pendingGen = useRef<Record<string, number>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
@@ -171,20 +173,56 @@ export const GuestTable = memo(function GuestTable({
       .catch(() => undefined);
   }, [hydrateKey, hostId, qc, win.slice]);
 
+  useEffect(() => {
+    setPendingFrom((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const [key, from] of Object.entries(current)) {
+        const guest = items.find((item) => rowKey(item) === key);
+        if (guest && guest.status !== from) {
+          delete next[key];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [items]);
+
   const visibleKeys = filtered.map((g) => rowKey(g));
   const selectedVisible = visibleKeys.filter((key) => selected.has(key));
   const allVisibleSelected = filtered.length > 0 && selectedVisible.length === filtered.length;
   const someVisibleSelected = selectedVisible.length > 0 && !allVisibleSelected;
 
+  function clearPending(key: string, gen: number) {
+    if (pendingGen.current[key] !== gen) return;
+    setPendingFrom((current) => {
+      if (!(key in current)) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  }
+
   async function guestAction(hid: string, node: string, vmid: number, action: string, row: "vm" | "lxc", extra: Record<string, unknown> = {}) {
     const permPath = row === "vm" ? "vms" : "lxc";
     const id = `${hid}:${vmid}`;
+    const power = action === "shutdown" || action === "reboot" || action === "stop" || action === "start";
+    const guest = items.find((item) => (item.hostId ?? hostId) === hid && item.vmid === vmid);
+    const key = guest ? rowKey(guest) : "";
+    let gen = 0;
+    if (power && guest && key) {
+      gen = (pendingGen.current[key] ?? 0) + 1;
+      pendingGen.current[key] = gen;
+      setPendingFrom((current) => ({ ...current, [key]: guest.status }));
+      window.setTimeout(() => clearPending(key, gen), 45_000);
+    }
     setBusyId(id);
     try {
       await api(`/api/hosts/${hid}/${permPath}/${node}/${vmid}`, {
         method: "POST",
         body: JSON.stringify({ action, confirm: action === "delete", ...extra }),
       });
+      if (power && key) clearPending(key, gen);
       toast.success(
         action === "snapshot"
           ? t("guest.snapshotCreated")
@@ -194,9 +232,8 @@ export const GuestTable = memo(function GuestTable({
       );
       await invalidateDashboardQueries(qc);
     } catch (err) {
-      if (action !== "delete") {
-        toast.error(err instanceof Error ? err.message : t("common.failed"));
-      }
+      if (power && key && (action === "start" || action === "reboot")) clearPending(key, gen);
+      if (action === "start") toast.error(err instanceof Error ? err.message : t("common.failed"));
       throw err;
     } finally {
       setBusyId(null);
@@ -337,15 +374,17 @@ export const GuestTable = memo(function GuestTable({
               {t("guest.shutdown")}
             </Button>
           </ConfirmAction>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={bulkBusy || !bulkCanReboot}
-            title={bulkCanReboot ? undefined : shareBlocked}
-            onClick={() => void runBulk("reboot")}
+          <ConfirmAction
+            title={t("table.bulkRebootTitle")}
+            description={t("table.bulkRebootBody", { n: selectedVisible.length })}
+            actionLabel={t("guest.reboot")}
+            disabled={!bulkCanReboot}
+            onConfirm={() => runBulk("reboot")}
           >
-            {t("guest.reboot")}
-          </Button>
+            <Button size="sm" variant="outline" disabled={bulkBusy || !bulkCanReboot} title={bulkCanReboot ? undefined : shareBlocked}>
+              {t("guest.reboot")}
+            </Button>
+          </ConfirmAction>
           <ConfirmAction
             title={t("table.bulkStopTitle")}
             description={t("table.bulkStopBody", { n: selectedVisible.length })}
@@ -455,6 +494,7 @@ export const GuestTable = memo(function GuestTable({
                   start: shareAllows(hid, `${prefix}.start` as Permission),
                   shutdown: shareAllows(hid, `${prefix}.shutdown` as Permission),
                   reboot: shareAllows(hid, `${prefix}.reboot` as Permission),
+                  stop: shareAllows(hid, `${prefix}.force-stop` as Permission),
                   console: shareAllows(hid, `${prefix}.console` as Permission),
                   files: shareAllows(hid, [guestFilePermission(row, "read"), guestFilePermission(row, "write")]),
                   snapshot: shareAllows(hid, `${prefix}.snapshot.create` as Permission),
@@ -541,6 +581,9 @@ export const GuestTable = memo(function GuestTable({
                     ) : null}
                     <td className="px-3 py-2">
                       <GuestStateBadge status={g.status} />
+                      {pendingFrom[rowKey(g)] ? (
+                        <span className="proxora-pending ml-2 text-xs text-warning">{t("guest.pendingPower")}</span>
+                      ) : null}
                     </td>
                     <td className="px-3 py-2">
                       <GuestCpuBar guest={g} />
@@ -563,36 +606,75 @@ export const GuestTable = memo(function GuestTable({
                         >
                           <Play className="h-4 w-4" />
                         </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          title={lockTitle(perms.shutdown, share.shutdown, t("guest.shutdown"))}
+                        <ConfirmAction
+                          title={t("guest.shutdownTitle")}
+                          description={t("guest.shutdownBody", { id: g.vmid, name: g.name })}
+                          actionLabel={t("guest.shutdown")}
                           disabled={!running || rowBusy || !perms.shutdown || !share.shutdown}
-                          onClick={() => void guestAction(hid, g.node, g.vmid, "shutdown", row)}
+                          onConfirm={() => guestAction(hid, g.node, g.vmid, "shutdown", row)}
                         >
-                          <Square className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          title={lockTitle(perms.reboot, share.reboot, t("guest.reboot"))}
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title={lockTitle(perms.shutdown, share.shutdown, t("guest.shutdown"))}
+                            aria-label={t("guest.shutdown")}
+                            disabled={!running || rowBusy || !perms.shutdown || !share.shutdown}
+                          >
+                            <Square className="h-4 w-4" />
+                          </Button>
+                        </ConfirmAction>
+                        <ConfirmAction
+                          title={t("guest.stopTitle")}
+                          description={t("guest.stopBody", { id: g.vmid, name: g.name })}
+                          actionLabel={t("guest.stop")}
+                          destructive
+                          disabled={stopped || rowBusy || !perms.stop || !share.stop}
+                          onConfirm={() => guestAction(hid, g.node, g.vmid, "stop", row)}
+                        >
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title={lockTitle(perms.stop, share.stop, t("guest.stop"))}
+                            aria-label={t("guest.stop")}
+                            disabled={stopped || rowBusy || !perms.stop || !share.stop}
+                          >
+                            <OctagonX className="h-4 w-4" />
+                          </Button>
+                        </ConfirmAction>
+                        <ConfirmAction
+                          title={t("guest.rebootTitle")}
+                          description={t("guest.rebootBody", { id: g.vmid, name: g.name })}
+                          actionLabel={t("guest.reboot")}
                           disabled={!running || rowBusy || !perms.reboot || !share.reboot}
-                          onClick={() => void guestAction(hid, g.node, g.vmid, "reboot", row)}
+                          onConfirm={() => guestAction(hid, g.node, g.vmid, "reboot", row)}
                         >
-                          <RotateCcw className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          title={lockTitle(perms.snapshot, share.snapshot, t("guest.createSnapshot"))}
-                          aria-label={lockTitle(perms.snapshot, share.snapshot, t("guest.createSnapshot"))}
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title={lockTitle(perms.reboot, share.reboot, t("guest.reboot"))}
+                            aria-label={t("guest.reboot")}
+                            disabled={!running || rowBusy || !perms.reboot || !share.reboot}
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        </ConfirmAction>
+                        <ConfirmAction
+                          title={t("guest.snapshotTitle")}
+                          description={t("guest.snapshotBody", { name: g.name })}
+                          actionLabel={t("guest.createSnapshot")}
                           disabled={rowBusy || !perms.snapshot || !share.snapshot}
-                          onClick={() =>
-                            void guestAction(hid, g.node, g.vmid, "snapshot", row, { snapname: `snap-${Date.now()}` })
-                          }
+                          onConfirm={() => guestAction(hid, g.node, g.vmid, "snapshot", row, { snapname: `snap-${Date.now()}` })}
                         >
-                          <Camera className="h-4 w-4" />
-                        </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title={lockTitle(perms.snapshot, share.snapshot, t("guest.createSnapshot"))}
+                            aria-label={lockTitle(perms.snapshot, share.snapshot, t("guest.createSnapshot"))}
+                            disabled={rowBusy || !perms.snapshot || !share.snapshot}
+                          >
+                            <Camera className="h-4 w-4" />
+                          </Button>
+                        </ConfirmAction>
                         <Button
                           size="icon"
                           variant="ghost"
@@ -709,10 +791,18 @@ export const GuestTable = memo(function GuestTable({
               hid,
               guest,
             );
+            const canReboot = userHasPermission(user, `${prefix}.reboot` as Permission, hid, guest);
+            const canStop = userHasPermission(user, `${prefix}.force-stop` as Permission, hid, guest);
+            const canSnapshot = userHasPermission(user, `${prefix}.snapshot.create` as Permission, hid, guest);
+            const canDelete = userHasPermission(user, `${prefix}.delete` as Permission, hid, guest);
             const shareStart = shareAllows(hid, `${prefix}.start` as Permission);
             const shareShutdown = shareAllows(hid, `${prefix}.shutdown` as Permission);
             const shareConsole = shareAllows(hid, `${prefix}.console` as Permission);
             const shareFiles = shareAllows(hid, [guestFilePermission(row, "read"), guestFilePermission(row, "write")]);
+            const shareReboot = shareAllows(hid, `${prefix}.reboot` as Permission);
+            const shareStop = shareAllows(hid, `${prefix}.force-stop` as Permission);
+            const shareSnapshot = shareAllows(hid, `${prefix}.snapshot.create` as Permission);
+            const shareDelete = shareAllows(hid, `${prefix}.delete` as Permission);
             return (
               <article key={key} className="rounded-[4px] border border-border bg-card/40 p-3">
                 <div className="flex items-start gap-2">
@@ -738,6 +828,7 @@ export const GuestTable = memo(function GuestTable({
                       <span className="font-mono text-xs text-muted-foreground">{g.vmid}</span>
                       {mixed ? <Badge variant={row === "vm" ? "default" : "muted"}>{kindLabel}</Badge> : null}
                       <GuestStateBadge status={g.status} />
+                      {pendingFrom[key] ? <span className="proxora-pending text-xs text-warning">{t("guest.pendingPower")}</span> : null}
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {showHost ? `${g.hostName ?? hid} · ${g.node}` : g.node}
@@ -758,15 +849,69 @@ export const GuestTable = memo(function GuestTable({
                       >
                         <Play className="h-4 w-4" />
                       </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        title={lockTitle(canShutdown, shareShutdown, t("guest.shutdown"))}
+                      <ConfirmAction
+                        title={t("guest.shutdownTitle")}
+                        description={t("guest.shutdownBody", { id: g.vmid, name: g.name })}
+                        actionLabel={t("guest.shutdown")}
                         disabled={!running || rowBusy || !canShutdown || !shareShutdown}
-                        onClick={() => void guestAction(hid, g.node, g.vmid, "shutdown", row)}
+                        onConfirm={() => guestAction(hid, g.node, g.vmid, "shutdown", row)}
                       >
-                        <Square className="h-4 w-4" />
-                      </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title={lockTitle(canShutdown, shareShutdown, t("guest.shutdown"))}
+                          aria-label={t("guest.shutdown")}
+                          disabled={!running || rowBusy || !canShutdown || !shareShutdown}
+                        >
+                          <Square className="h-4 w-4" />
+                        </Button>
+                      </ConfirmAction>
+                      <ConfirmAction
+                        title={t("guest.stopTitle")}
+                        description={t("guest.stopBody", { id: g.vmid, name: g.name })}
+                        actionLabel={t("guest.stop")}
+                        destructive
+                        disabled={stopped || rowBusy || !canStop || !shareStop}
+                        onConfirm={() => guestAction(hid, g.node, g.vmid, "stop", row)}
+                      >
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title={t("guest.stop")}
+                          aria-label={t("guest.stop")}
+                          disabled={stopped || rowBusy || !canStop || !shareStop}
+                        >
+                          <OctagonX className="h-4 w-4" />
+                        </Button>
+                      </ConfirmAction>
+                      <ConfirmAction
+                        title={t("guest.rebootTitle")}
+                        description={t("guest.rebootBody", { id: g.vmid, name: g.name })}
+                        actionLabel={t("guest.reboot")}
+                        disabled={!running || rowBusy || !canReboot || !shareReboot}
+                        onConfirm={() => guestAction(hid, g.node, g.vmid, "reboot", row)}
+                      >
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title={t("guest.reboot")}
+                          aria-label={t("guest.reboot")}
+                          disabled={!running || rowBusy || !canReboot || !shareReboot}
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                      </ConfirmAction>
+                      <ConfirmAction
+                        title={t("guest.snapshotTitle")}
+                        description={t("guest.snapshotBody", { name: g.name })}
+                        actionLabel={t("guest.createSnapshot")}
+                        disabled={rowBusy || !canSnapshot || !shareSnapshot}
+                        onConfirm={() => guestAction(hid, g.node, g.vmid, "snapshot", row, { snapname: `snap-${Date.now()}` })}
+                      >
+                        <Button size="icon" variant="ghost" title={t("guest.createSnapshot")} aria-label={t("guest.createSnapshot")} disabled={rowBusy || !canSnapshot || !shareSnapshot}>
+                          <Camera className="h-4 w-4" />
+                        </Button>
+                      </ConfirmAction>
                       <Button
                         size="icon"
                         variant="ghost"
@@ -789,6 +934,35 @@ export const GuestTable = memo(function GuestTable({
                       >
                         <FolderOpen className="h-4 w-4" />
                       </Button>
+                      <GuestDeleteDialog
+                        hostId={hid}
+                        node={g.node}
+                        kind={row}
+                        vmid={g.vmid}
+                        name={g.name}
+                        kindLabel={kindLabel}
+                        disabled={!canDelete || !shareDelete}
+                        onConfirm={(backupVolids, phase) =>
+                          api<{ upid?: unknown; phase?: "shutdown" | "stop" | "delete" }>(
+                            `/api/hosts/${hid}/${row === "vm" ? "vms" : "lxc"}/${g.node}/${g.vmid}`,
+                            {
+                              method: "POST",
+                              body: JSON.stringify({
+                                action: "delete",
+                                confirm: true,
+                                wait: false,
+                                backupVolids,
+                                phase,
+                              }),
+                            },
+                          )
+                        }
+                        onFinished={() => void invalidateDashboardQueries(qc)}
+                      >
+                        <Button size="icon" variant="ghost" title={t("guest.delete")} aria-label={t("guest.delete")} disabled={!canDelete || !shareDelete}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </GuestDeleteDialog>
                     </div>
                   </div>
                 </div>
@@ -817,7 +991,7 @@ function SortHeader({
     <th className="px-3 py-2 font-medium">
       <button
         type="button"
-        className={`uppercase tracking-[0.16em] ${active ? "text-foreground" : "hover:text-foreground"}`}
+        className={active ? "text-foreground" : "hover:text-foreground"}
         aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
         onClick={() => onSort(nextGuestSort(sort, column))}
       >
