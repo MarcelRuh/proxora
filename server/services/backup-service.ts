@@ -182,8 +182,12 @@ export async function upsertBackupJob(
     await client.backup.createJob({ ...payload, id: input.id });
     return;
   }
+  const updatePayload = { ...payload };
+  if (existing && existing.maxfiles != null && String(existing.maxfiles).trim() !== "") {
+    updatePayload.delete = "maxfiles";
+  }
   try {
-    await client.backup.updateJob(input.id, payload);
+    await client.backup.updateJob(input.id, updatePayload);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!isBackupJobScheduleConflict(message)) throw error;

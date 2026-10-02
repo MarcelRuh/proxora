@@ -69,12 +69,23 @@ export function pruneKeepLast(keepLast?: number | null): string | undefined {
   return `keep-last=${keepLast}`;
 }
 
-export function parseKeepLast(prune: unknown): number | null {
-  const raw = String(prune ?? "");
+function positiveInt(value: unknown): number | null {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n) || n < 1) return null;
+  return Math.round(n);
+}
+
+/** Proxmox returns either `keep-last=7` or `{ "keep-last": 7 }`. Older jobs use `maxfiles`. */
+export function parseKeepLast(prune: unknown, maxfiles?: unknown): number | null {
+  if (prune && typeof prune === "object") {
+    const rec = prune as Record<string, unknown>;
+    const fromObject = positiveInt(rec["keep-last"] ?? rec.keep_last ?? rec.keepLast);
+    if (fromObject != null) return fromObject;
+  }
+  const raw = typeof prune === "string" || typeof prune === "number" ? String(prune) : "";
   const match = /keep-last=(\d+)/.exec(raw);
-  if (!match) return null;
-  const n = Number(match[1]);
-  return Number.isFinite(n) ? n : null;
+  if (match) return positiveInt(match[1]);
+  return positiveInt(maxfiles);
 }
 
 /** Proxmox weekday tokens, Monday-first like the PVE backup GUI. */
@@ -163,7 +174,11 @@ export function normalizeBackupJob(raw: Record<string, unknown>): {
   const dow = String(raw.dow ?? "").trim();
   const schedule =
     String(raw.schedule ?? "").trim() || [dow, starttime].filter(Boolean).join(" ").trim() || starttime;
-  const prune = String(raw["prune-backups"] ?? raw.prune_backups ?? "").trim();
+  const pruneValue = raw["prune-backups"] ?? raw.prune_backups;
+  const prune =
+    pruneValue && typeof pruneValue === "object"
+      ? ""
+      : String(pruneValue ?? "").trim();
   return {
     id: String(raw.id ?? ""),
     enabled: raw.enabled === 1 || raw.enabled === "1" || raw.enabled === true,
@@ -175,7 +190,7 @@ export function normalizeBackupJob(raw: Record<string, unknown>): {
     vmid: String(raw.vmid ?? "").trim(),
     node: String(raw.node ?? "").trim(),
     prune,
-    keepLast: parseKeepLast(prune),
+    keepLast: parseKeepLast(pruneValue, raw.maxfiles),
   };
 }
 

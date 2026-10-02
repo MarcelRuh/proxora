@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.12] – 2026-10-02
+
+### Fixed
+
+- Editing a backup job keeps the new “keep last” count. Proxmox often returns that value as an object, which Proxora treated as unset and showed 7 again.
+
 ## [2.1.11] – 2026-09-24
 
 ### Fixed
