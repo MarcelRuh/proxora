@@ -41,13 +41,17 @@ export function useDashboard() {
     staleTime: 60_000,
     placeholderData: (previous) => previous,
   });
-  const retried = useRef(false);
+  const attempts = useRef(0);
   const { data, refetch } = query;
   useEffect(() => {
-    if (retried.current || !data) return;
+    if (!data) return;
     const missing = data.hosts.items.some((host) => host.connectionState === "ONLINE" && host.cpuTempC == null);
-    if (!missing) return;
-    retried.current = true;
+    if (!missing) {
+      attempts.current = 0;
+      return;
+    }
+    if (attempts.current >= 4) return;
+    attempts.current += 1;
     const id = setTimeout(() => void refetch(), 8_000);
     return () => clearTimeout(id);
   }, [data, refetch]);

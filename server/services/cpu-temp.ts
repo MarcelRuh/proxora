@@ -7,6 +7,11 @@ const CACHE_MS = 60_000;
 const cache = new Map<string, { at: number; value: CpuTempReading | null }>();
 const inflight = new Map<string, Promise<CpuTempReading | null>>();
 
+/** A failed refresh must not wipe a temperature that is already on screen. */
+export function retainCpuTemp(previous: CpuTempReading | null, next: CpuTempReading | null): CpuTempReading | null {
+  return next ?? previous;
+}
+
 function cacheKey(client: ProxmoxClient, node: string): string {
   return `${client.http.baseUrl}\n${node}`;
 }
@@ -16,11 +21,17 @@ function missingSensor(error: unknown): boolean {
   return error.status === 404 || error.status === 501 || error.status === 500 || error.status === 400;
 }
 
-/** Last successful or empty read, if it is still fresh. Does not start a new read. */
+/**
+ * Last temperature for this node. A stale reading is still returned so the UI
+ * does not fall back to “—” while a refresh is running. `undefined` means no
+ * read has finished yet. Does not start a new read.
+ */
 export function peekNodeCpuTemp(client: ProxmoxClient, node: string): CpuTempReading | null | undefined {
   const hit = cache.get(cacheKey(client, node));
-  if (!hit || Date.now() - hit.at >= CACHE_MS) return undefined;
-  return hit.value;
+  if (!hit) return undefined;
+  if (hit.value) return hit.value;
+  if (Date.now() - hit.at < CACHE_MS) return null;
+  return undefined;
 }
 
 async function readUncached(client: ProxmoxClient, node: string): Promise<CpuTempReading | null> {
@@ -50,8 +61,9 @@ export function readNodeCpuTemp(client: ProxmoxClient, node: string): Promise<Cp
   if (pending) return pending;
   const job = readUncached(client, node)
     .then((value) => {
-      cache.set(key, { at: Date.now(), value });
-      return value;
+      const kept = retainCpuTemp(cache.get(key)?.value ?? null, value);
+      cache.set(key, { at: Date.now(), value: kept });
+      return kept;
     })
     .finally(() => {
       inflight.delete(key);

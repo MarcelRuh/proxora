@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.16] – 2026-10-02
+
+### Fixed
+
+- Host CPU temperature stays on screen while the next reading is in progress. A failed read no longer replaces the last value with a dash.
+
 ## [2.1.15] – 2026-10-02
 
 ### Added
