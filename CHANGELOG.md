@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.6] – 2026-10-05
+
+### Changed
+
+- Ora-Stack apps sit in their own navigation section, ORA.
+
 ## [2.2.5] – 2026-10-05
 
 ### Fixed

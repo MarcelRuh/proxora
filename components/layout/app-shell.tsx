@@ -72,8 +72,9 @@ const NAV: Array<{
   { href: "/settings", labelKey: "nav.settings", group: "system", icon: Settings, anyOf: ["settings.view", "notifications.view"] },
 ];
 
-const NAV_GROUPS: Array<{ id: "operate" | "data" | "system"; labelKey: MessageKey }> = [
+const NAV_GROUPS: Array<{ id: "operate" | "ora" | "data" | "system"; labelKey: MessageKey }> = [
   { id: "operate", labelKey: "nav.groupOperate" },
+  { id: "ora", labelKey: "nav.groupOra" },
   { id: "data", labelKey: "nav.groupData" },
   { id: "system", labelKey: "nav.groupSystem" },
 ];
@@ -138,7 +139,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
           {NAV_GROUPS.map((group) => {
             const items = NAV.filter((item) => item.group === group.id && navItemVisible(user, item.href, item.anyOf));
-            const suite = group.id === "operate" && stackApps.length > 0;
+            const suite = group.id === "ora" && stackApps.length > 0;
             if (!items.length && !suite) return null;
             return (
               <div key={group.id} className="mb-2">
@@ -159,7 +160,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
                     }
                   />
                 ))}
-                {group.id === "operate"
+                {group.id === "ora"
                   ? stackApps.map((app) => (
                       <NavLink
                         key={app.id}
