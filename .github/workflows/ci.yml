@@ -81,15 +81,16 @@ jobs:
           ver="$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
           tag="v${ver}"
           python3 - "$ver" <<'PY' > /tmp/proxora-release-notes.md
-import pathlib, sys
+import pathlib, re, sys
 ver = sys.argv[1]
 text = pathlib.Path("CHANGELOG.md").read_text()
 parts = text.split("\n## ")
 body = ""
+wanted = re.compile(r"\[" + re.escape(ver) + r"\]")
 for part in parts[1:]:
-    first = part.split("\n", 1)[0]
-    if ver in first:
-        body = part.split("\n", 1)[1].strip()
+    head, _, rest = part.partition("\n")
+    if wanted.search(head):
+        body = rest.strip()
         break
 print(body or f"Proxora {ver}")
 PY
