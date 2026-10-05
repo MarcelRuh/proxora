@@ -148,7 +148,7 @@ export function forwardedScheme(protoHeader: string | undefined): "http" | "http
   return parts.at(-1) ?? "http";
 }
 
-export function useInsecureTls(insecureTls: boolean | undefined, protocol: string): boolean {
+export function allowsInsecureTls(insecureTls: boolean | undefined, protocol: string): boolean {
   return protocol === "https:" && insecureTls === true;
 }
 

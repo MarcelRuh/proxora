@@ -22,8 +22,8 @@ android {
     applicationId = "app.proxora"
     minSdk = 26
     targetSdk = 35
-    versionCode = 2207
-    versionName = "2.2.7"
+    versionCode = 2208
+    versionName = "2.2.8"
   }
 
   val releaseStorePath = signingProp("PROXORA_KEYSTORE_FILE", "storeFile")

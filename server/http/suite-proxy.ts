@@ -7,6 +7,7 @@ import { Agent, request as undiciRequest } from "undici";
 import { SESSION_COOKIE } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import {
+  allowsInsecureTls,
   buildUpstreamHeaders,
   embedContentSecurityPolicy,
   forwardedHost,
@@ -21,7 +22,6 @@ import {
   suiteProxyPrefix,
   targetsSelf,
   upstreamTarget,
-  useInsecureTls,
 } from "@/lib/suite-proxy";
 import { getSessionFromToken } from "@/server/auth/session-core";
 import { loadSuiteEmbeds } from "@/server/services/suite-embeds";
@@ -130,7 +130,7 @@ export async function handleSuiteProxy(req: IncomingMessage, res: ServerResponse
       method,
       headers,
       body: BODYLESS.has(method) ? undefined : req,
-      dispatcher: useInsecureTls(app.insecureTls, target.protocol) ? insecureAgent : undefined,
+      dispatcher: allowsInsecureTls(app.insecureTls, target.protocol) ? insecureAgent : undefined,
     });
     await writeUpstream(req, res, upstream, target, mount, publicOrigin(req));
   } catch (error) {
@@ -165,7 +165,7 @@ export async function handleSuiteProxyUpgrade(req: IncomingMessage, socket: Dupl
       path: `${target.pathname}${target.search}`,
       method: "GET",
       headers,
-      rejectUnauthorized: !useInsecureTls(app.insecureTls, target.protocol),
+      rejectUnauthorized: !allowsInsecureTls(app.insecureTls, target.protocol),
     });
     upstream.on("upgrade", (response, remote, remoteHead) => {
       const lines = [`HTTP/1.1 ${response.statusCode ?? 101} ${response.statusMessage || "Switching Protocols"}`];

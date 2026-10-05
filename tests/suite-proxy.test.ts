@@ -12,7 +12,7 @@ import {
   stripAssetBump,
   targetsSelf,
   upstreamTarget,
-  useInsecureTls,
+  allowsInsecureTls,
 } from "@/lib/suite-proxy";
 
 const mount = "/ora/dockora";
@@ -94,9 +94,9 @@ describe("suite proxy rewriting", () => {
     expect(policy).not.toContain("connect-src https://proxora.example ");
     expect(policy).toContain("frame-ancestors 'self'");
     expect(forwardedScheme("http, https")).toBe("https");
-    expect(useInsecureTls(true, "https:")).toBe(true);
-    expect(useInsecureTls(true, "http:")).toBe(false);
-    expect(useInsecureTls(undefined, "https:")).toBe(false);
+    expect(allowsInsecureTls(true, "https:")).toBe(true);
+    expect(allowsInsecureTls(true, "http:")).toBe(false);
+    expect(allowsInsecureTls(undefined, "https:")).toBe(false);
     const headers = buildUpstreamHeaders({
       headers: {
         origin: "https://proxora.example",
