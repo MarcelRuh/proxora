@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import { useCan } from "@/components/auth/session-user";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { MessageKey } from "@/lib/i18n/messages";
+import { markSelfUpdateActive, SELF_UPDATE_FLAG } from "@/components/layout/update-banner";
 
 export type SelfUpdateStatus = {
   enabled: boolean;
@@ -39,6 +40,7 @@ const STEP_IDS = new Set([
   "resolve",
   "sync",
   "build",
+  "pull",
   "buildWeb",
   "export",
   "startWeb",
@@ -53,20 +55,6 @@ function shortRev(value: string | null | undefined): string {
   return value.length > 12 ? `${value.slice(0, 12)}…` : value;
 }
 
-async function waitForHealth(timeoutMs = 180_000): Promise<boolean> {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    try {
-      const res = await fetch("/api/health", { cache: "no-store" });
-      if (res.ok) return true;
-    } catch {
-      /* down during rebuild */
-    }
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-  return false;
-}
-
 export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
   const qc = useQueryClient();
@@ -75,6 +63,14 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [optimisticProgress, setOptimisticProgress] = useState<SelfUpdateStatus["progress"]>(null);
+
+  useEffect(() => {
+    const sync = () => {
+      if (sessionStorage.getItem(SELF_UPDATE_FLAG) !== "1") setBusy(false);
+    };
+    window.addEventListener("proxora-update", sync);
+    return () => window.removeEventListener("proxora-update", sync);
+  }, []);
 
   const { data: status } = useQuery({
     queryKey: ["self-update"],
@@ -93,37 +89,25 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
     setError(null);
     setSuccess(null);
     setOptimisticProgress({ percent: 2, step: "start", detail: null });
+    markSelfUpdateActive(true);
     try {
       const result = await api<{ ok: boolean; message: string }>("/api/system/self-update", {
         method: "POST",
       });
-      setSuccess(result.message);
       await qc.invalidateQueries({ queryKey: ["self-update"] });
       if (!result.ok) {
         setBusy(false);
+        markSelfUpdateActive(false);
+        setError(result.message);
         return;
       }
+      setSuccess(result.message);
     } catch (err) {
       setBusy(false);
+      markSelfUpdateActive(false);
       setError(err instanceof Error ? err.message : t("proxora.failed"));
       throw err;
     }
-
-    const deadline = Date.now() + 20 * 60 * 1000;
-    while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 1500));
-      try {
-        await qc.invalidateQueries({ queryKey: ["self-update"] });
-        const next = qc.getQueryData<SelfUpdateStatus>(["self-update"]);
-        if (next && !next.updating) break;
-      } catch {
-        /* API down during rebuild */
-      }
-    }
-    const ok = await waitForHealth();
-    setSuccess(ok ? t("proxora.healthOk") : t("proxora.healthManual"));
-    setBusy(false);
-    if (ok) window.setTimeout(() => window.location.reload(), 1500);
   };
 
   return (
@@ -176,7 +160,9 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
                   <span>{Math.round(percent)}%</span>
                 </div>
                 <ProgressBar
+                  className="h-2"
                   value={percent}
+                  indeterminate={!progress}
                   autoTone={false}
                   tone={progress?.step === "error" ? "danger" : "primary"}
                 />

@@ -6,11 +6,13 @@ export function ProgressBar({
   className,
   autoTone = true,
   tone = "primary",
+  indeterminate = false,
 }: {
   value: number;
   className?: string;
   autoTone?: boolean;
   tone?: "primary" | "warning" | "danger";
+  indeterminate?: boolean;
 }) {
   const clamped = Math.max(0, Math.min(100, value));
   const color = autoTone
@@ -25,11 +27,21 @@ export function ProgressBar({
         ? "bg-warning"
         : "proxora-fill";
   return (
-    <div className={cn("h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]", className)}>
-      <div
-        className={cn("proxora-meter h-full w-full origin-left rounded-full", color)}
-        style={{ transform: `scaleX(${clamped / 100})` }}
-      />
+    <div
+      className={cn("h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]", className)}
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={indeterminate ? undefined : Math.round(clamped)}
+    >
+      {indeterminate ? (
+        <div className={cn("proxora-meter-indeterminate h-full w-1/3 rounded-full", color)} />
+      ) : (
+        <div
+          className={cn("proxora-meter h-full w-full origin-left rounded-full", color)}
+          style={{ transform: `scaleX(${clamped / 100})` }}
+        />
+      )}
     </div>
   );
 }

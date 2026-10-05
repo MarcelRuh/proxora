@@ -236,6 +236,19 @@ select optgroup {
   transition: transform 200ms var(--ease-out);
 }
 
+.proxora-meter-indeterminate {
+  animation: proxora-meter-indeterminate 1.2s var(--ease-in-out) infinite;
+}
+
+@keyframes proxora-meter-indeterminate {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
 @keyframes proxora-pending-pulse {
   0%,
   100% {
@@ -268,7 +281,8 @@ select optgroup {
   }
 
   .proxora-pending::before,
-  .proxora-meter {
+  .proxora-meter,
+  .proxora-meter-indeterminate {
     animation: none;
     transition: none;
   }

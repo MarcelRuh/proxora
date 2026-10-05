@@ -42,6 +42,7 @@ import { ProgressBar } from "@/components/ui/misc";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { LocaleSwitch } from "@/components/i18n/locale-switch";
 import { AndroidUpdateBanner } from "@/components/layout/android-update-banner";
+import { UpdateBanner } from "@/components/layout/update-banner";
 import { AndroidSessionTtl } from "@/components/layout/android-session-ttl";
 import { PageSkeleton } from "@/components/layout/page-skeleton";
 import type { MessageKey } from "@/lib/i18n/messages";
@@ -208,6 +209,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
           <span className="proxora-logo min-w-0 flex-1 truncate text-sm">{APP_NAME.toUpperCase()}</span>
           <MobileUpdateLink user={user} />
         </header>
+        <UpdateBanner />
         <main className={cn("flex min-h-0 flex-1 flex-col", framePage ? "overflow-hidden p-0" : "p-3 md:p-6")}>
           <AndroidUpdateBanner />
           <AndroidSessionTtl />
@@ -284,7 +286,7 @@ function SidebarVersion() {
   const current = status?.currentVersion ?? APP_VERSION;
   const target = status?.targetVersion ?? current;
   const updating = Boolean(status?.updating);
-  const percent = updating ? status?.progress?.percent : undefined;
+  const percent = updating ? (status?.progress?.percent ?? 2) : undefined;
   return (
     <Link href="/proxora" className="block rounded-[var(--ui-radius)] border border-[var(--ui-chrome-border)] px-2 py-2 hover:border-primary/50">
       <div className="flex items-center justify-between gap-2 text-[11px]">
@@ -296,7 +298,7 @@ function SidebarVersion() {
       {percent != null ? (
         <div className="mt-1.5">
           <ProgressBar
-            className="h-1"
+            className="h-2"
             value={percent}
             autoTone={false}
             tone={status?.progress?.step === "error" ? "danger" : "primary"}

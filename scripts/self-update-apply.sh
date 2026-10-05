@@ -53,9 +53,22 @@ write_progress() {
   mirror_progress
 }
 
+creep_pull() {
+  last=0
+  if [ -f "$PROGRESS_FILE" ]; then
+    parsed="$(sed -n 's/^percent=\([0-9][0-9]*\).*/\1/p' "$PROGRESS_FILE" | head -1)"
+    if [ -n "${parsed:-}" ]; then last="$parsed"; fi
+  fi
+  next=$((last + 1))
+  if [ "$next" -lt 32 ]; then next=32; fi
+  if [ "$next" -gt 74 ]; then next=74; fi
+  write_progress "$next" pull "Pulling image"
+}
+
 watch_compose_log() {
   pid="$1"
   logf="$2"
+  ticks=0
   while kill -0 "$pid" 2>/dev/null; do
     log="$(tail -c 16000 "$logf" 2>/dev/null || true)"
     case "$log" in
@@ -65,7 +78,11 @@ watch_compose_log() {
       *"exporting to image"*) write_progress 72 export "Exporting image" ;;
       *"Compiled successfully"*) write_progress 64 buildWeb "Web compiled" ;;
       *"proxora Building"*|*" Building web"*|*" Building proxora"*) write_progress 42 buildWeb "Building image" ;;
-      *"Pulling"*|*"pulling"*|*"Downloaded newer image"*|*"Image is up to date"*) write_progress 55 pull "Pulling image" ;;
+      *"Pulled"*|*"Downloaded newer image"*|*"Image is up to date"*) write_progress 82 pull "Image ready" ;;
+      *"Pulling"*|*"Downloading"*|*"Extracting"*)
+        ticks=$((ticks + 1))
+        if [ $((ticks % 3)) -eq 0 ]; then creep_pull; fi
+        ;;
     esac
     sleep 1
   done
@@ -350,16 +367,31 @@ fi
 export COMPOSE_BAKE=false
 COMPOSE_FILE="docker-compose.yml"
 if [ -f docker-compose.prod.yml ]; then COMPOSE_FILE="docker-compose.prod.yml"; fi
+: > "$TMP/compose.log"
 if [ "${PROXORA_BUILD:-0}" = "1" ]; then
-  docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans > "$TMP/compose.log" 2>&1 &
-elif docker compose -f "$COMPOSE_FILE" pull proxora > "$TMP/compose.log" 2>&1; then
-  docker compose -f "$COMPOSE_FILE" up -d --build --no-deps proxora-wireguard >> "$TMP/compose.log" 2>&1 || true
-  docker compose -f "$COMPOSE_FILE" up -d --no-build --remove-orphans >> "$TMP/compose.log" 2>&1 &
-else
-  echo "==> Image pull failed, building locally" >> "$TMP/compose.log"
   docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans >> "$TMP/compose.log" 2>&1 &
+  CPID=$!
+else
+  docker compose -f "$COMPOSE_FILE" pull proxora >> "$TMP/compose.log" 2>&1 &
+  PULLPID=$!
+  watch_compose_log "$PULLPID" "$TMP/compose.log" &
+  PWATCH=$!
+  set +e
+  wait "$PULLPID"
+  PULL_RC=$?
+  set -e
+  kill "$PWATCH" 2>/dev/null || true
+  wait "$PWATCH" 2>/dev/null || true
+  if [ "$PULL_RC" -eq 0 ]; then
+    write_progress 82 pull "Image ready"
+    docker compose -f "$COMPOSE_FILE" up -d --build --no-deps proxora-wireguard >> "$TMP/compose.log" 2>&1 || true
+    docker compose -f "$COMPOSE_FILE" up -d --no-build --remove-orphans >> "$TMP/compose.log" 2>&1 &
+  else
+    echo "==> Image pull failed, building locally" >> "$TMP/compose.log"
+    docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans >> "$TMP/compose.log" 2>&1 &
+  fi
+  CPID=$!
 fi
-CPID=$!
 watch_compose_log "$CPID" "$TMP/compose.log" &
 WATCH=$!
 set +e

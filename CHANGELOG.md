@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.3] – 2026-10-05
+
+### Changed
+
+- A Proxora update shows a progress bar and the current step on every page. The bar keeps moving while the image downloads, and it stays up while the page is briefly unreachable.
+
 ## [2.2.2] – 2026-10-05
 
 ### Changed
