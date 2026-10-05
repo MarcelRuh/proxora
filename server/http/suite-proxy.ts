@@ -12,6 +12,9 @@ import {
   embedContentSecurityPolicy,
   forwardedHost,
   forwardedScheme,
+  externalImageTarget,
+  isExternalImagePath,
+  isProxyImageType,
   parseSuiteProxyUrl,
   rewriteCookie,
   rewriteEmbedBody,
@@ -92,6 +95,78 @@ async function findApp(id: string) {
   return embedCache.apps.find((app) => app.id === id) ?? null;
 }
 
+const IMAGE_BYTES = 2_000_000;
+
+async function writeExternalImage(res: ServerResponse, search: string) {
+  const raw = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search).get("u") ?? "";
+  let current = externalImageTarget(raw);
+  if (!current) {
+    send(res, 400, "Bildadresse ungültig");
+    return;
+  }
+  let hops = 0;
+  while (hops <= 3) {
+    const upstream = await undiciRequest(current, {
+      method: "GET",
+      headers: { accept: "image/*,*/*;q=0.1" },
+      headersTimeout: 10_000,
+      bodyTimeout: 10_000,
+    });
+    if (upstream.statusCode >= 300 && upstream.statusCode < 400) {
+      const next = externalImageTarget(new URL(headerText(upstream.headers.location), current).toString(), true);
+      upstream.body.destroy();
+      if (!next) {
+        send(res, 502, "Bildadresse ungültig");
+        return;
+      }
+      current = next;
+      hops += 1;
+      continue;
+    }
+    if (upstream.statusCode !== 200) {
+      upstream.body.destroy();
+      send(res, upstream.statusCode === 404 ? 404 : 502, "Bild nicht erreichbar");
+      return;
+    }
+    const type = headerText(upstream.headers["content-type"]);
+    if (!isProxyImageType(type)) {
+      upstream.body.destroy();
+      send(res, 415, "Kein Bild");
+      return;
+    }
+    const body = await readLimited(upstream.body, IMAGE_BYTES);
+    if (!body) {
+      send(res, 413, "Bild zu groß");
+      return;
+    }
+    res.writeHead(200, {
+      "content-type": type.split(";")[0]?.trim() || "application/octet-stream",
+      "content-length": String(body.length),
+      "cache-control": "private, max-age=3600",
+      "x-content-type-options": "nosniff",
+      "content-security-policy": "default-src 'none'; sandbox",
+    });
+    res.end(body);
+    return;
+  }
+  send(res, 502, "Bildadresse ungültig");
+}
+
+async function readLimited(body: AsyncIterable<Uint8Array> & { destroy: () => void }, max: number) {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of body) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buf.length;
+    if (size > max) {
+      body.destroy();
+      return null;
+    }
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks);
+}
+
 function send(res: ServerResponse, status: number, body: string) {
   if (res.headersSent) return;
   res.writeHead(status, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
@@ -117,6 +192,10 @@ export async function handleSuiteProxy(req: IncomingMessage, res: ServerResponse
     const app = await findApp(parsed.id);
     if (!app) {
       send(res, 404, "App nicht gefunden");
+      return true;
+    }
+    if (isExternalImagePath(parsed.pathname)) {
+      await writeExternalImage(res, parsed.search);
       return true;
     }
     const target = upstreamTarget(app.url, stripAssetBump(parsed.pathname), parsed.search);

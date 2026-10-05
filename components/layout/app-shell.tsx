@@ -38,7 +38,6 @@ import { navItemVisible } from "@/lib/home-path";
 import { APP_NAME, APP_VERSION } from "@/lib/version";
 import { useQuery } from "@tanstack/react-query";
 import type { SelfUpdateStatus } from "@/components/settings/self-update-section";
-import { ProgressBar } from "@/components/ui/misc";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { LocaleSwitch } from "@/components/i18n/locale-switch";
 import { AndroidUpdateBanner } from "@/components/layout/android-update-banner";
@@ -287,7 +286,6 @@ function SidebarVersion() {
   const current = status?.currentVersion ?? APP_VERSION;
   const target = status?.targetVersion ?? current;
   const updating = Boolean(status?.updating);
-  const percent = updating ? (status?.progress?.percent ?? 2) : undefined;
   return (
     <Link href="/proxora" className="block rounded-[var(--ui-radius)] border border-[var(--ui-chrome-border)] px-2 py-2 hover:border-primary/50">
       <div className="flex items-center justify-between gap-2 text-[11px]">
@@ -296,16 +294,6 @@ function SidebarVersion() {
         </span>
         {status?.updateAvailable || updating ? <span className="text-warning">{t("sidebar.update")}</span> : null}
       </div>
-      {percent != null ? (
-        <div className="mt-1.5">
-          <ProgressBar
-            className="h-2"
-            value={percent}
-            autoTone={false}
-            tone={status?.progress?.step === "error" ? "danger" : "primary"}
-          />
-        </div>
-      ) : null}
     </Link>
   );
 }

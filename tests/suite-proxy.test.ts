@@ -13,6 +13,8 @@ import {
   targetsSelf,
   upstreamTarget,
   allowsInsecureTls,
+  externalImageTarget,
+  isProxyImageType,
 } from "@/lib/suite-proxy";
 
 const mount = "/ora/dockora";
@@ -121,5 +123,20 @@ describe("suite proxy rewriting", () => {
     expect(headers.cookie).toBe("dockora=abc");
     expect(headers.upgrade).toBe("websocket");
     expect(headers.host).toBe("10.0.0.8:8443");
+  });
+
+  it("proxies only plain http images and installs that rewrite in html", () => {
+    expect(externalImageTarget("http://192.168.178.20/icon.png")?.href).toBe("http://192.168.178.20/icon.png");
+    expect(externalImageTarget("https://cdn.example/icon.png")).toBeNull();
+    expect(externalImageTarget("https://cdn.example/icon.png", true)?.protocol).toBe("https:");
+    expect(externalImageTarget("http://127.0.0.1/icon.png")).toBeNull();
+    expect(externalImageTarget("http://169.254.169.254/latest")).toBeNull();
+    expect(externalImageTarget("http://user:secret@10.0.0.8/icon.png")).toBeNull();
+    expect(isProxyImageType("image/png; charset=binary")).toBe(true);
+    expect(isProxyImageType("text/html")).toBe(false);
+    const html = rewriteEmbedBody("<html><head><meta charset=\"utf-8\"/></head><body></body></html>", "html", mount);
+    expect(html.indexOf("<script>")).toBeLessThan(html.indexOf("</head>"));
+    expect(html).toContain('m="/ora/dockora"');
+    expect(html).toContain("/ext-img?u=");
   });
 });

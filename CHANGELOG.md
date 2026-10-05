@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.12] – 2026-10-05
+
+### Fixed
+
+- The sidebar no longer shows a second update progress bar. The bar at the top is the only one.
+- HTTP images inside an embedded app, such as Dockora icons, load through Proxora so the browser does not block them on an HTTPS page.
+
 ## [2.2.11] – 2026-10-05
 
 ### Changed

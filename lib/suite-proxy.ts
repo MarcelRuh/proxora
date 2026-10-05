@@ -70,7 +70,68 @@ export function rewriteEmbedBody(body: string, kind: RewriteKind, mount: string)
   if (kind === "html" || kind === "js") out = rewriteJsHrefs(out, mount);
   out = rewriteRoots(out, mount);
   if (kind === "html" || kind === "css" || kind === "js") out = rewriteCssUrls(out, mount);
+  if (kind === "html") out = injectImageProxy(out, mount);
   return out;
+}
+
+export function isExternalImagePath(pathname: string): boolean {
+  return pathname === "/ext-img" || pathname === "/ext-img/";
+}
+
+export function externalImageTarget(raw: string, allowHttps = false): URL | null {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "http:" && !(allowHttps && url.protocol === "https:")) return null;
+  if (url.username || url.password) return null;
+  if (isBlockedImageHost(url.hostname)) return null;
+  url.hash = "";
+  return url;
+}
+
+export function isProxyImageType(contentType: string): boolean {
+  const type = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+  return (
+    type === "image/png" ||
+    type === "image/jpeg" ||
+    type === "image/gif" ||
+    type === "image/webp" ||
+    type === "image/avif" ||
+    type === "image/bmp" ||
+    type === "image/x-icon" ||
+    type === "image/vnd.microsoft.icon" ||
+    type === "image/svg+xml"
+  );
+}
+
+function injectImageProxy(html: string, mount: string): string {
+  const tag = imageProxyBootstrap(mount);
+  const head = /<head[^>]*>/i.exec(html);
+  if (!head || head.index == null) return tag + html;
+  const at = head.index + head[0].length;
+  return html.slice(0, at) + tag + html.slice(at);
+}
+
+function imageProxyBootstrap(mount: string): string {
+  const prefix = JSON.stringify(mount);
+  return `<script>(function(){var m=${prefix};function r(v){if(typeof v!=="string"||v.slice(0,5)!=="http:")return v;try{var u=new URL(v);if(u.protocol!=="http:"||u.username||u.password)return v;return m+"/ext-img?u="+encodeURIComponent(u.href)}catch(e){return v}}var d=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,"src");if(d&&d.set&&d.get){var set=d.set;Object.defineProperty(HTMLImageElement.prototype,"src",{configurable:!0,enumerable:d.enumerable,get:d.get,set:function(v){set.call(this,r(String(v)))}})}var raw=Element.prototype.setAttribute;Element.prototype.setAttribute=function(n,v){if(this.tagName==="IMG"&&String(n).toLowerCase()==="src")v=r(String(v));return raw.call(this,n,v)}})()</script>`;
+}
+
+function isBlockedImageHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host === "0.0.0.0" || host === "::1") return true;
+  if (host === "metadata.google.internal") return true;
+  const parts = host.split(".").map((part) => Number(part));
+  if (parts.length === 4 && parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
+    const a = parts[0] ?? 0;
+    const b = parts[1] ?? 0;
+    if (a === 0 || a === 127 || a >= 224) return true;
+    if (a === 169 && b === 254) return true;
+  }
+  return false;
 }
 
 export function rewriteLocation(location: string, upstream: URL, mount: string): string {
