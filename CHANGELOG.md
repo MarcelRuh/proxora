@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.2] – 2026-10-05
+
+### Changed
+
+- Ora-Stack embeds are a list of name and address. Further apps do not need their own page. Saved Dockora and Sambora addresses stay.
+
 ## [2.2.1] – 2026-10-05
 
 ### Added
