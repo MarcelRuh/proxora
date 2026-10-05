@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.9] – 2026-10-05
+
+### Fixed
+
+- The Proxora page no longer repeats the update progress bar. The bar at the top of every page is the only one.
+
 ## [2.2.8] – 2026-10-05
 
 ### Fixed

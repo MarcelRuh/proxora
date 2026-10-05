@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ProgressBar } from "@/components/ui/misc";
 import { ConfirmAction } from "@/components/confirm-action";
 import { api } from "@/lib/api";
 import { useCan } from "@/components/auth/session-user";
@@ -34,22 +33,6 @@ export type SelfUpdateStatus = {
   targetVersion: string | null;
 };
 
-const STEP_IDS = new Set([
-  "cleanup",
-  "start",
-  "resolve",
-  "sync",
-  "build",
-  "pull",
-  "buildWeb",
-  "export",
-  "startWeb",
-  "finalize",
-  "done",
-  "error",
-  "apply",
-]);
-
 function shortRev(value: string | null | undefined): string {
   if (!value) return "—";
   return value.length > 12 ? `${value.slice(0, 12)}…` : value;
@@ -62,7 +45,6 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [optimisticProgress, setOptimisticProgress] = useState<SelfUpdateStatus["progress"]>(null);
 
   useEffect(() => {
     const sync = () => {
@@ -78,17 +60,10 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
     refetchInterval: (q) => (busy || q.state.data?.updating ? 1500 : 60_000),
   });
 
-  const progress = status?.progress ?? optimisticProgress;
-  const showProgress = Boolean(busy || status?.updating || progress?.step === "error");
-  const percent = progress?.percent ?? (showProgress ? 2 : 0);
-  const stepId = progress?.step && STEP_IDS.has(progress.step) ? progress.step : "apply";
-  const stepLabel = t(`proxora.step.${stepId}` as MessageKey);
-
   const handleApply = async () => {
     setBusy(true);
     setError(null);
     setSuccess(null);
-    setOptimisticProgress({ percent: 2, step: "start", detail: null });
     markSelfUpdateActive(true);
     try {
       const result = await api<{ ok: boolean; message: string }>("/api/system/self-update", {
@@ -152,22 +127,6 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
                 <dt>{t("proxora.sidecar")}</dt>
                 <dd>{t(`proxora.sidecar.${status.sidecar}` as MessageKey)}</dd>
               </dl>
-            ) : null}
-            {showProgress ? (
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span>{stepLabel}</span>
-                  <span>{Math.round(percent)}%</span>
-                </div>
-                <ProgressBar
-                  className="h-2"
-                  value={percent}
-                  indeterminate={!progress}
-                  autoTone={false}
-                  tone={progress?.step === "error" ? "danger" : "primary"}
-                />
-                {progress?.detail ? <p className="text-xs text-muted-foreground">{progress.detail}</p> : null}
-              </div>
             ) : null}
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={() => void qc.invalidateQueries({ queryKey: ["self-update"] })}>
