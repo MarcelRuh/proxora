@@ -42,6 +42,16 @@ describe("cpu temperature cache", () => {
     expect(peekNodeCpuTemp(api, "pve")).toEqual({ celsius: 51, label: "Package id 0" });
   });
 
+  it("keeps a finished empty read as no sensors", async () => {
+    const api = client("https://cache-empty.example", async () => {
+      throw new Error("no sensors");
+    });
+    vi.spyOn(Date, "now").mockReturnValue(9_000);
+    await expect(readNodeCpuTemp(api, "pve")).resolves.toBeNull();
+    vi.spyOn(Date, "now").mockReturnValue(9_000 + 61_000);
+    expect(peekNodeCpuTemp(api, "pve")).toBeNull();
+  });
+
   it("does not replace a reading when the sensor read throws", async () => {
     let fail = false;
     const api = client("https://cache-fail.example", async () => {

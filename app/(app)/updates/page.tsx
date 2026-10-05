@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -28,6 +30,7 @@ type HostUpdates = {
 
 export default function UpdatesPage() {
   const { t, locale } = useI18n();
+  const hostFilter = useSearchParams().get("host");
   const user = useSessionUser();
   const qc = useQueryClient();
   const [shell, setShell] = useState<{ hostId: string; node: string; name: string } | null>(null);
@@ -112,6 +115,7 @@ export default function UpdatesPage() {
   const checkAll = useMutation({
     mutationFn: async () => {
       const ids = (hosts?.hosts ?? [])
+        .filter((h) => !hostFilter || h.id === hostFilter)
         .filter((h) => userHasPermission(user, "updates.check", h.id) && peerHostAllowsPermission(h, "updates.check"))
         .map((h) => h.id);
       const results = await Promise.allSettled(
@@ -150,7 +154,11 @@ export default function UpdatesPage() {
             disabled={checkAll.isPending || !hosts?.hosts.length}
             onClick={() => checkAll.mutate()}
           >
-            {checkAll.isPending ? t("updates.checkingAll") : t("updates.checkAll")}
+            {checkAll.isPending
+              ? t("updates.checkingAll")
+              : hostFilter
+                ? t("updates.checkNamed", { name: hosts?.hosts.find((h) => h.id === hostFilter)?.name ?? hostFilter })
+                : t("updates.checkAll")}
           </Button>
         }
       />
@@ -187,8 +195,17 @@ export default function UpdatesPage() {
       ) : null}
 
       <QueryGate isLoading={false} error={hostsError} onRetry={() => void refetchHosts()}>
+        {hostFilter ? (
+          <p className="mb-3 text-sm">
+            {t("updates.filtered", { name: hosts?.hosts.find((h) => h.id === hostFilter)?.name ?? hostFilter })}
+            {" · "}
+            <Link href="/updates" className="text-primary underline-offset-4 hover:underline">
+              {t("updates.showAll")}
+            </Link>
+          </p>
+        ) : null}
         <div className="grid gap-4 md:grid-cols-2">
-          {(details ?? []).map((row) => {
+          {(details ?? []).filter((row) => !hostFilter || row.host.id === hostFilter).map((row) => {
             const count = row.updates.reduce((acc, n) => acc + n.count, 0);
             const checking = checkOne.isPending && checkOne.variables?.hostId === row.host.id;
             const canCheck =
@@ -232,16 +249,9 @@ export default function UpdatesPage() {
                     >
                       {checking ? t("updates.checking") : t("updates.checkOne")}
                     </Button>
-                    {(row.updates.length ? row.updates : [{ node: "", count: 0, packages: [] }]).map((n) => {
-                      const label = t("updates.upgrade", { node: row.updates.length > 1 ? n.node : "" });
-                      const canUpgrade = canUpgradeHost && !row.error && n.count > 0;
-                      if (!canUpgrade) {
-                        return (
-                          <Button key={n.node || row.host.id} size="sm" disabled>
-                            {label}
-                          </Button>
-                        );
-                      }
+                    {row.updates.filter((n) => n.count > 0).map((n) => {
+                      const label = t("updates.upgrade", { node: row.updates.filter((item) => item.count > 0).length > 1 ? n.node : "" });
+                      if (!canUpgradeHost || row.error) return null;
                       return (
                         <ConfirmAction
                           key={n.node || row.host.id}
@@ -275,6 +285,9 @@ export default function UpdatesPage() {
             );
           })}
         </div>
+        {hostFilter && details && !details.some((row) => row.host.id === hostFilter) ? (
+          <p className="mt-3 text-sm text-muted-foreground">{t("updates.filteredEmpty")}</p>
+        ) : null}
         {isFetching && !details ? <p className="text-sm text-muted-foreground">{t("updates.loading")}</p> : null}
       </QueryGate>
 

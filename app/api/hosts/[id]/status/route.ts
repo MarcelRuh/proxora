@@ -44,6 +44,7 @@ export const GET = apiRoute("hosts.view", async (_req, session, params) => {
     );
     return {
       host: host.name,
+      cpuTempAlertC: tempSettings.alertCelsius,
       nodes: details,
       vms: filterGuestsForUser(session.user, params.id, "vm", inv.vms),
       containers: filterGuestsForUser(session.user, params.id, "lxc", inv.containers),

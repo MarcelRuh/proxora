@@ -68,6 +68,8 @@ export type DashboardHost = {
   cpuCores?: number;
   cpuTempC?: number | null;
   cpuTempHot?: boolean;
+  cpuTempNode?: string | null;
+  cpuTempState?: "reading" | "none" | "value";
   memUsed?: number;
   memTotal?: number;
   diskUsed?: number;
@@ -92,6 +94,7 @@ export type Dashboard = {
   };
   virtualization: { vms: number; lxc: number; running: number; stopped: number; paused: number };
   resources: { cpu: number; memUsed: number; memTotal: number; diskUsed: number; diskTotal: number };
+  cpuTempAlertC?: number;
 };
 
 export type DashboardGuests = {

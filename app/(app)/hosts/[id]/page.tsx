@@ -14,6 +14,7 @@ import { formatUptime, percentage } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { useState } from "react";
 import { useCan, useCanAny } from "@/components/auth/session-user";
+import { isClusterNodeOnline } from "@/lib/cluster-metrics";
 import { peerHostAllowsPermission } from "@/lib/federation-access";
 import { actionDeniedTitle } from "@/lib/action-lock";
 import { useI18n } from "@/components/i18n/locale-provider";
@@ -25,6 +26,7 @@ import { QueryGate } from "@/components/layout/query-gate";
 
 type Status = {
   host: string;
+  cpuTempAlertC?: number;
   nodes: Array<{
     node: string;
     online: string;
@@ -43,7 +45,7 @@ type Status = {
 };
 
 export default function HostDetailPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const params = useParams<{ id: string }>();
   const qc = useQueryClient();
   const canConsole = useCan("hosts.console", params.id);
@@ -147,7 +149,7 @@ export default function HostDetailPage() {
                 {t("hosts.node")} {item.node}
                 <span className="ml-2 text-sm font-normal text-muted-foreground">{item.online}</span>
               </CardTitle>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {consoleDenied ? (
                   <Button size="sm" disabled title={consoleDenied}>
                     {t("hosts.terminal")}
@@ -159,57 +161,77 @@ export default function HostDetailPage() {
                     </Link>
                   </Button>
                 )}
-                <Button size="sm" variant="outline" asChild>
-                  <Link href={`/updates?host=${params.id}`}>{t("nav.updates")}</Link>
-                </Button>
-                <Button size="sm" variant="outline" asChild>
-                  <Link href="/backups">{t("nav.backups")}</Link>
-                </Button>
-                {rebootDenied ? (
-                  <Button size="sm" variant="destructive" disabled title={rebootDenied}>
-                    {t("guest.reboot")}
-                  </Button>
-                ) : (
-                  <ConfirmAction
-                    title={t("hosts.rebootTitle", { node: item.node })}
-                    description={t("hosts.rebootBody")}
-                    actionLabel={t("guest.reboot")}
-                    destructive
-                    onConfirm={() => power("reboot", item.node)}
-                  >
-                    <Button size="sm" variant="destructive">
-                      {t("guest.reboot")}
+                <details className="relative">
+                  <summary className="flex h-8 cursor-pointer list-none items-center rounded-[var(--ui-radius)] border border-border px-3 text-xs [&::-webkit-details-marker]:hidden">
+                    {t("table.more")}
+                  </summary>
+                  <div className="absolute right-0 z-30 mt-1 grid w-56 gap-1 rounded-[var(--ui-radius)] border border-border bg-card p-2 shadow-lg">
+                    <Button size="sm" variant="outline" className="w-full" asChild>
+                      <Link href={`/updates?host=${params.id}`}>{t("nav.updates")}</Link>
                     </Button>
-                  </ConfirmAction>
-                )}
-                {shutdownDenied ? (
-                  <Button size="sm" variant="destructive" disabled title={shutdownDenied}>
-                    {t("guest.shutdown")}
-                  </Button>
-                ) : (
-                  <ConfirmAction
-                    title={t("hosts.shutdownTitle", { node: item.node })}
-                    description={t("hosts.shutdownBody")}
-                    actionLabel={t("guest.shutdown")}
-                    destructive
-                    onConfirm={() => power("shutdown", item.node)}
-                  >
-                    <Button size="sm" variant="destructive">
-                      {t("guest.shutdown")}
+                    <Button size="sm" variant="outline" className="w-full" asChild>
+                      <Link href="/backups">{t("nav.backups")}</Link>
                     </Button>
-                  </ConfirmAction>
-                )}
+                    {rebootDenied ? (
+                      <Button size="sm" variant="outline" className="w-full" disabled title={rebootDenied}>
+                        {t("guest.reboot")}
+                      </Button>
+                    ) : (
+                      <ConfirmAction
+                        title={t("hosts.rebootTitle", { node: item.node })}
+                        description={t("hosts.rebootBody")}
+                        actionLabel={t("guest.reboot")}
+                        destructive
+                        onConfirm={() => power("reboot", item.node)}
+                      >
+                        <Button size="sm" variant="outline" className="w-full">
+                          {t("guest.reboot")}
+                        </Button>
+                      </ConfirmAction>
+                    )}
+                    {shutdownDenied ? (
+                      <Button size="sm" variant="outline" className="w-full" disabled title={shutdownDenied}>
+                        {t("guest.shutdown")}
+                      </Button>
+                    ) : (
+                      <ConfirmAction
+                        title={t("hosts.shutdownTitle", { node: item.node })}
+                        description={t("hosts.shutdownBody")}
+                        actionLabel={t("guest.shutdown")}
+                        destructive
+                        onConfirm={() => power("shutdown", item.node)}
+                      >
+                        <Button size="sm" variant="destructive" className="w-full">
+                          {t("guest.shutdown")}
+                        </Button>
+                      </ConfirmAction>
+                    )}
+                  </div>
+                </details>
               </div>
             </CardHeader>
-            {st ? (
-              <CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <Metric label={t("table.cpu")} value={st.cpu * 100} />
-                <Metric label={t("table.ram")} value={percentage(st.memory.used, st.memory.total)} />
-                <Metric label={t("hosts.rootfs")} value={percentage(st.rootfs?.used, st.rootfs?.total)} />
-                <CpuTemp label={t("hosts.cpuTemp")} celsius={st.cpuTempC} hot={st.cpuTempHot} missing={t("hosts.cpuTempMissing")} hotLabel={t("hosts.cpuTempHot")} />
-                <p className="text-sm text-muted-foreground sm:col-span-2 xl:col-span-4">{t("guest.uptime", { time: formatUptime(st.uptime) })}</p>
+            {st && isClusterNodeOnline(item.online) ? (
+              <CardContent className="space-y-3">
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Metric label={t("table.cpu")} value={st.cpu * 100} />
+                  <Metric label={t("table.ram")} value={percentage(st.memory.used, st.memory.total)} />
+                  <Metric label={t("hosts.rootfs")} value={percentage(st.rootfs?.used, st.rootfs?.total)} />
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                  <CpuTemp
+                    celsius={st.cpuTempC}
+                    hot={st.cpuTempHot}
+                    alertC={data?.cpuTempAlertC ?? 85}
+                    locale={locale}
+                  />
+                  <span className="text-muted-foreground">{t("guest.uptime", { time: formatUptime(st.uptime) })}</span>
+                </div>
               </CardContent>
-            ) : null}
+            ) : (
+              <CardContent>
+                <p className="text-sm text-destructive">{t("dashboard.unreachable")}</p>
+              </CardContent>
+            )}
           </Card>
         );
       })}
@@ -261,31 +283,27 @@ export default function HostDetailPage() {
 }
 
 function CpuTemp({
-  label,
   celsius,
   hot,
-  missing,
-  hotLabel,
+  alertC,
+  locale,
 }: {
-  label: string;
   celsius?: number | null;
   hot?: boolean;
-  missing: string;
-  hotLabel: string;
+  alertC: number;
+  locale: string;
 }) {
-  const text =
-    celsius == null ? "—" : `${celsius.toLocaleString("de-DE", { maximumFractionDigits: 1 })} °C`;
+  const { t } = useI18n();
+  const numberLocale = locale === "en" ? "en-GB" : "de-DE";
+  const value =
+    celsius == null
+      ? t("hosts.cpuTempNone")
+      : `${celsius.toLocaleString(numberLocale, { maximumFractionDigits: 1 })} °C${hot ? ` · ${t("hosts.cpuTempHotAt", { c: alertC })}` : ""}`;
   return (
-    <div>
-      <div className="mb-1 flex justify-between text-sm">
-        <span>{label}</span>
-        <span className={hot ? "font-medium text-destructive" : undefined} title={celsius == null ? missing : undefined}>
-          {text}
-          {hot ? ` · ${hotLabel}` : ""}
-        </span>
-      </div>
-      {celsius == null ? <p className="text-xs text-muted-foreground">{missing}</p> : <ProgressBar value={Math.min(100, celsius)} />}
-    </div>
+    <p>
+      <span className="text-muted-foreground">{t("hosts.cpuTemp")}</span>{" "}
+      <span className={hot && celsius != null ? "font-medium text-destructive" : undefined}>{value}</span>
+    </p>
   );
 }
 

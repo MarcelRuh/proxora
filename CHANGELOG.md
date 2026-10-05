@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.1.17] – 2026-10-05
+
+### Fixed
+
+- An offline node no longer shows utilization bars or “No sensors”. It shows the same unreachable line as the dashboard.
+- A failed package list keeps a link to that host’s updates and a retry.
+- A finished temperature read with no sensor stays “No sensors”. It no longer flips back to “Reading sensors” on the next poll.
+
+### Changed
+
+- Host temperature is a sentence under the three bars, with the hottest node and the alert threshold.
+- Checking updates on a filtered page checks only that host, and the button names it. Upgrade buttons appear only when a node has packages.
+- On a host, Terminal stays the primary action. Updates, backups, reboot, and shutdown sit under More.
+- A Proxora update is the sidebar version link. The dashboard shows a progress line only while an update is running.
+
 ## [2.1.16] – 2026-10-02
 
 ### Fixed

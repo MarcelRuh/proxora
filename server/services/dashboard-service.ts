@@ -7,6 +7,7 @@ import { canAccessGuest, filterGuestsForUser } from "@/server/auth/session-core"
 import { userHasPermission } from "@/lib/permissions";
 import { isClusterNodeOnline, minPositiveUptime, weightedCpuRatio } from "@/lib/cluster-metrics";
 import { CPU_TEMP_ALERT_CELSIUS } from "@/lib/cpu-temp";
+import { loadCpuTempSettings } from "@/server/services/cpu-temp-settings";
 import { peekNodeCpuTemp, readNodeCpuTemp } from "@/server/services/cpu-temp";
 import { withTimeoutFallback } from "@/lib/promise-timeout";
 import type { ConnectionState, Guest } from "@/lib/types";
@@ -25,6 +26,8 @@ export type HostOverview = {
   cpuCores?: number;
   cpuTempC?: number | null;
   cpuTempHot?: boolean;
+  cpuTempNode?: string | null;
+  cpuTempState?: "reading" | "none" | "value";
   memUsed?: number;
   memTotal?: number;
   diskUsed?: number;
@@ -123,6 +126,7 @@ async function snapshotHost(
   host: Awaited<ReturnType<typeof listHosts>>[number],
   user: SessionUser,
   mode: "overview" | "guests",
+  alertCelsius = CPU_TEMP_ALERT_CELSIUS,
 ): Promise<HostSnapshot> {
   const empty: HostSnapshot = { overview: hostShell(host), counts: guestCounts([], []), vms: [], containers: [] };
   if (host.connectionState === "OFFLINE" || host.connectionState === "MAINTENANCE") return empty;
@@ -138,10 +142,11 @@ async function snapshotHost(
       const onlineNodes = inv.nodes.filter((n) => isClusterNodeOnline(n.status)).length;
       const nodeNames = pool.map((n) => n.node).filter((name): name is string => Boolean(name));
       void Promise.all(nodeNames.map((name) => readNodeCpuTemp(client, name).catch(() => null)));
-      const temps = nodeNames
-        .map((name) => peekNodeCpuTemp(client, name))
-        .filter((reading): reading is NonNullable<typeof reading> => reading != null);
+      const peeks = nodeNames.map((name) => ({ name, reading: peekNodeCpuTemp(client, name) }));
+      const temps = peeks.flatMap((item) => (item.reading ? [{ name: item.name, celsius: item.reading.celsius }] : []));
       const hottest = temps.sort((a, b) => b.celsius - a.celsius)[0];
+      const stillReading = peeks.some((item) => item.reading === undefined);
+      const cpuTempState = hottest ? "value" : nodeNames.length > 0 && stillReading ? "reading" : "none";
       const filteredVms = filterGuestsForUser(user, host.id, "vm", inv.vms);
       const filteredLxc = filterGuestsForUser(user, host.id, "lxc", inv.containers);
       const overview = hostShell(host, {
@@ -157,7 +162,9 @@ async function snapshotHost(
         nodeCount: inv.nodes.length,
         onlineNodes,
         cpuTempC: hottest?.celsius ?? null,
-        cpuTempHot: hottest != null && hottest.celsius >= CPU_TEMP_ALERT_CELSIUS,
+        cpuTempHot: hottest != null && hottest.celsius >= alertCelsius,
+        cpuTempNode: hottest && nodeNames.length > 1 ? hottest.name : null,
+        cpuTempState,
       });
       if (mode === "overview") {
         return { overview, counts: guestCounts(filteredVms, filteredLxc), vms: [], containers: [] };
@@ -215,6 +222,7 @@ async function snapshotHostTimed(
   host: Awaited<ReturnType<typeof listHosts>>[number],
   user: SessionUser,
   mode: "overview" | "guests",
+  alertCelsius = CPU_TEMP_ALERT_CELSIUS,
 ): Promise<HostSnapshot> {
   const timedOut = (): HostSnapshot => ({
     overview: hostShell(host, {
@@ -226,7 +234,7 @@ async function snapshotHostTimed(
     containers: [],
   });
   try {
-    return await withTimeoutFallback(snapshotHost(host, user, mode), hostSnapshotTimeoutMs(host), timedOut);
+    return await withTimeoutFallback(snapshotHost(host, user, mode, alertCelsius), hostSnapshotTimeoutMs(host), timedOut);
   } catch (error) {
     return {
       overview: hostShell(host, {
@@ -242,8 +250,9 @@ async function snapshotHostTimed(
 
 export async function getDashboard(user: SessionUser) {
   const hosts = await listHosts(user);
-  const snapshots = await Promise.all(hosts.map((host) => snapshotHostTimed(host, user, "overview")));
-  return dashboardShell(snapshots);
+  const { alertCelsius } = await loadCpuTempSettings();
+  const snapshots = await Promise.all(hosts.map((host) => snapshotHostTimed(host, user, "overview", alertCelsius)));
+  return { ...dashboardShell(snapshots), cpuTempAlertC: alertCelsius };
 }
 
 export async function getDashboardGuests(user: SessionUser, kind: "vm" | "lxc" | "all" = "all") {

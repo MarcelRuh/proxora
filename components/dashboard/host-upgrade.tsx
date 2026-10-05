@@ -6,7 +6,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ConfirmAction } from "@/components/confirm-action";
 import { WebConsole } from "@/components/console/web-console";
 import { api } from "@/lib/api";
 import { peerHostAllowsPermission } from "@/lib/federation-access";
@@ -19,6 +18,11 @@ type NodeUpdates = { node: string; count: number };
 
 type Shell = { hostId: string; node: string; name: string };
 
+function packageLabel(count: number, one: string, many: (n: number) => string) {
+  if (count === 1) return one;
+  return many(count);
+}
+
 export function HostUpgrade({
   host,
   count,
@@ -29,20 +33,25 @@ export function HostUpgrade({
   const { t } = useI18n();
   const user = useSessionUser();
   const qc = useQueryClient();
+  const [pick, setPick] = useState(false);
+  const [node, setNode] = useState("");
   const [shell, setShell] = useState<Shell | null>(null);
+  const [starting, setStarting] = useState(false);
   const shellRef = useRef<Shell | null>(null);
   shellRef.current = shell;
+  const online = host.connectionState === "ONLINE";
   const canUpgrade =
-    userHasPermission(user, "updates.upgrade", host.id) && peerHostAllowsPermission(host, "updates.upgrade");
+    online && userHasPermission(user, "updates.upgrade", host.id) && peerHostAllowsPermission(host, "updates.upgrade");
   const canCheck = userHasPermission(user, "updates.check", host.id) && peerHostAllowsPermission(host, "updates.check");
-  const { data } = useQuery({
+  const { data, isFetching, isError, refetch } = useQuery({
     queryKey: ["update-details", host.id],
-    enabled: count > 0,
+    enabled: count > 0 && online,
     queryFn: () => api<{ updates: NodeUpdates[] }>(`/api/hosts/${host.id}/updates`),
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
-  const pending = (data?.updates ?? []).filter((node) => node.count > 0);
+  const pending = (data?.updates ?? []).filter((item) => item.count > 0);
+  const liveCount = pending.reduce((sum, item) => sum + item.count, 0);
 
   async function closeShell() {
     const current = shellRef.current;
@@ -65,60 +74,109 @@ export function HostUpgrade({
     void qc.invalidateQueries({ queryKey: ["update-details", current.hostId] });
   }
 
-  if (count <= 0) return null;
-  if (!data) {
-    return (
-      <div className="border-t border-border pt-3">
-        <Link href="/updates" className="text-sm text-warning">
-          {t("dashboard.updatesCount", { n: count })}
-        </Link>
-      </div>
-    );
+  async function startUpgrade() {
+    if (!node || starting) return;
+    setStarting(true);
+    try {
+      const result = await api<{ mode: "console"; node: string }>(`/api/hosts/${host.id}/updates`, {
+        method: "POST",
+        body: JSON.stringify({ action: "upgrade", node, confirm: true }),
+      });
+      setPick(false);
+      setShell({ hostId: host.id, node: result.node, name: host.name });
+      toast.success(t("updates.consoleOpened"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("common.failed"));
+    } finally {
+      setStarting(false);
+    }
   }
-  if (pending.length === 0) return null;
+
+  if (count <= 0) return null;
+
+  const stale = Boolean(data) && pending.length === 0;
+  const labelCount = liveCount || count;
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-      <Link href="/updates" className="text-sm text-warning">
-        {t("dashboard.updatesCount", { n: pending.reduce((sum, node) => sum + node.count, 0) })}
-      </Link>
-      {canUpgrade
-        ? pending.map((node) => (
-            <ConfirmAction
-              key={node.node || host.id}
-              title={t("updates.upgradeTitle", {
-                name: host.name,
-                node: node.node ? ` (${node.node})` : "",
-              })}
-              description={t("updates.upgradeBody")}
-              actionLabel={t("updates.upgradeStart")}
-              destructive
-              onConfirm={async () => {
-                const result = await api<{ mode: "console"; node: string }>(`/api/hosts/${host.id}/updates`, {
-                  method: "POST",
-                  body: JSON.stringify({
-                    action: "upgrade",
-                    node: node.node || undefined,
-                    confirm: true,
-                  }),
-                });
-                setShell({ hostId: host.id, node: result.node, name: host.name });
-                toast.success(t("updates.consoleOpened"));
-              }}
+      {isError ? (
+        <>
+          <span className="text-sm text-muted-foreground">{t("dashboard.updatesFailed")}</span>
+          <Link href={`/updates?host=${host.id}`} className="text-sm text-primary underline-offset-4 hover:underline">
+            {t("dashboard.toUpdates")}
+          </Link>
+          <Button size="sm" variant="outline" onClick={() => void refetch()}>
+            {t("common.retry")}
+          </Button>
+        </>
+      ) : (
+        <Link href={`/updates?host=${host.id}`} className="text-sm text-primary underline-offset-4 hover:underline">
+          {stale ? t("dashboard.updatesStale") : packageLabel(labelCount, t("dashboard.packageOne"), (n) => t("dashboard.packages", { n }))}
+        </Link>
+      )}
+      {canUpgrade && pending.length > 0 ? (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            setNode(pending[0]?.node ?? "");
+            setPick(true);
+          }}
+        >
+          {t("dashboard.upgrade")}
+        </Button>
+      ) : null}
+      {isFetching && !data && !isError ? <span className="text-xs text-muted-foreground">{t("updates.checkingList")}</span> : null}
+      <Dialog open={pick} onOpenChange={setPick}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {t("updates.upgradeTitle", { name: host.name, node: node ? ` (${node})` : "" })}
+            </DialogTitle>
+            <DialogDescription>{t("updates.upgradeBody")}</DialogDescription>
+          </DialogHeader>
+          {pending.length > 4 ? (
+            <select
+              className="h-9 w-full rounded-[var(--ui-radius)] border border-input bg-transparent px-2 text-sm"
+              value={node}
+              onChange={(event) => setNode(event.target.value)}
+              aria-label={t("dashboard.upgrade")}
             >
-              <Button size="sm">
-                {pending.length > 1 ? t("updates.upgrade", { node: node.node }) : t("updates.upgradeStart")}
-              </Button>
-            </ConfirmAction>
-          ))
-        : null}
+              {pending.map((item) => (
+                <option key={item.node} value={item.node}>
+                  {item.node} · {packageLabel(item.count, t("dashboard.packageOne"), (n) => t("dashboard.packages", { n }))}
+                </option>
+              ))}
+            </select>
+          ) : pending.length > 1 ? (
+            <div className="flex flex-wrap gap-2">
+              {pending.map((item) => (
+                <Button
+                  key={item.node}
+                  size="sm"
+                  variant={item.node === node ? "default" : "outline"}
+                  onClick={() => setNode(item.node)}
+                >
+                  {item.node} · {packageLabel(item.count, t("dashboard.packageOne"), (n) => t("dashboard.packages", { n }))}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setPick(false)} disabled={starting}>
+              {t("common.cancel")}
+            </Button>
+            <Button variant="destructive" disabled={!node || starting} onClick={() => void startUpgrade()}>
+              {starting ? t("common.loading") : t("updates.upgradeStart")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={Boolean(shell)} onOpenChange={(next) => { if (!next) void closeShell(); }}>
         <DialogContent instant className="flex max-h-[min(92dvh,52rem)] max-w-5xl flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>{shell ? t("updates.consoleTitle", { name: shell.name }) : t("updates.upgradeStart")}</DialogTitle>
-            <DialogDescription>
-              {shell ? t("updates.consoleBody", { node: shell.node }) : null}
-            </DialogDescription>
+            <DialogDescription>{shell ? t("updates.consoleBody", { node: shell.node }) : null}</DialogDescription>
           </DialogHeader>
           {shell ? (
             <div className="h-[min(68dvh,34rem)] min-h-[22rem]">

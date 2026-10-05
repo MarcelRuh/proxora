@@ -53,7 +53,7 @@ export default function DashboardPage() {
   const running = data.virtualization.running;
   const aptByHost = new Map((apt.data?.hosts ?? []).map((host) => [host.id, host.count]));
   const proxoraStatus = proxora.data;
-  const proxoraTarget = proxoraStatus?.targetVersion;
+  const alertC = data.cpuTempAlertC ?? 85;
 
   return (
     <div className="space-y-6">
@@ -68,21 +68,14 @@ export default function DashboardPage() {
       </div>
 
       {proxoraStatus?.updating ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--ui-radius)] border border-warning/40 bg-warning/10 px-4 py-3">
-          <p className="text-sm">{t("dashboard.proxoraUpdating")}</p>
-          <Button size="sm" variant="outline" asChild>
-            <Link href="/proxora">{t("dashboard.proxoraOpen")}</Link>
-          </Button>
-        </div>
-      ) : proxoraStatus?.updateAvailable && proxoraTarget ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--ui-radius)] border border-warning/40 bg-warning/10 px-4 py-3">
-          <p className="text-sm">
-            {t("dashboard.proxoraNotice", { from: proxoraStatus.currentVersion, to: proxoraTarget })}
-          </p>
-          <Button size="sm" variant="outline" asChild>
-            <Link href="/proxora">{t("dashboard.proxoraOpen")}</Link>
-          </Button>
-        </div>
+        <p className="text-sm">
+          {t("dashboard.proxoraUpdating")}
+          {proxoraStatus.progress?.percent != null ? ` · ${proxoraStatus.progress.percent} %` : ""}
+          {" · "}
+          <Link href="/proxora" className="text-primary">
+            {t("dashboard.proxoraOpen")}
+          </Link>
+        </p>
       ) : null}
 
       <p className="text-sm text-muted-foreground">
@@ -107,6 +100,7 @@ export default function DashboardPage() {
               host={host}
               updateCount={aptByHost.get(host.id) ?? 0}
               locale={locale}
+              alertC={alertC}
             />
           ))}
         </div>
@@ -119,10 +113,12 @@ function HostLoad({
   host,
   updateCount,
   locale,
+  alertC,
 }: {
   host: DashboardHost;
   updateCount: number;
   locale: string;
+  alertC: number;
 }) {
   const { t } = useI18n();
   const online = host.connectionState === "ONLINE";
@@ -167,19 +163,14 @@ function HostLoad({
             />
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-            <p>
-              <span className="text-muted-foreground">{t("hosts.cpuTemp")}</span>{" "}
-              {host.cpuTempC != null ? (
-                <span className={host.cpuTempHot ? "font-medium text-destructive" : undefined}>
-                  {host.cpuTempC.toLocaleString(numberLocale, { maximumFractionDigits: 1 })} °C
-                  {host.cpuTempHot ? ` · ${t("hosts.cpuTempHot")}` : ""}
-                </span>
-              ) : (
-                <span className="text-muted-foreground" title={t("hosts.cpuTempMissing")}>
-                  —
-                </span>
-              )}
-            </p>
+            <CpuTempLine
+              celsius={host.cpuTempC}
+              hot={host.cpuTempHot}
+              node={host.cpuTempNode}
+              state={host.cpuTempState}
+              alertC={alertC}
+              locale={numberLocale}
+            />
             {(host.nodeCount ?? 0) > 1 ? (
               <span className="text-muted-foreground">
                 {t("dashboard.nodesOnline", { online: host.onlineNodes ?? 0, total: host.nodeCount ?? 0 })}
@@ -200,6 +191,38 @@ function HostLoad({
 
       <HostUpgrade host={host} count={updateCount} />
     </section>
+  );
+}
+
+function CpuTempLine({
+  celsius,
+  hot,
+  node,
+  state,
+  alertC,
+  locale,
+}: {
+  celsius?: number | null;
+  hot?: boolean;
+  node?: string | null;
+  state?: "reading" | "none" | "value";
+  alertC: number;
+  locale: string;
+}) {
+  const { t } = useI18n();
+  let value = t("hosts.cpuTempNone");
+  if (celsius != null) {
+    const degrees = `${celsius.toLocaleString(locale, { maximumFractionDigits: 1 })} °C`;
+    const where = node ? ` · ${node}` : "";
+    value = hot ? `${degrees}${where} · ${t("hosts.cpuTempHotAt", { c: alertC })}` : `${degrees}${where}`;
+  } else if (state === "reading") {
+    value = t("hosts.cpuTempReading");
+  }
+  return (
+    <p>
+      <span className="text-muted-foreground">{t("hosts.cpuTemp")}</span>{" "}
+      <span className={hot && celsius != null ? "font-medium text-destructive" : undefined}>{value}</span>
+    </p>
   );
 }
 

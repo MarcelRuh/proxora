@@ -22,16 +22,15 @@ function missingSensor(error: unknown): boolean {
 }
 
 /**
- * Last temperature for this node. A stale reading is still returned so the UI
- * does not fall back to “—” while a refresh is running. `undefined` means no
- * read has finished yet. Does not start a new read.
+ * Last temperature for this node. A stale reading stays visible while a refresh
+ * runs. `null` means a finished read found no sensors and stays that way until a
+ * later read finds one. `undefined` means no read has finished yet.
+ * Does not start a new read.
  */
 export function peekNodeCpuTemp(client: ProxmoxClient, node: string): CpuTempReading | null | undefined {
   const hit = cache.get(cacheKey(client, node));
   if (!hit) return undefined;
-  if (hit.value) return hit.value;
-  if (Date.now() - hit.at < CACHE_MS) return null;
-  return undefined;
+  return hit.value;
 }
 
 async function readUncached(client: ProxmoxClient, node: string): Promise<CpuTempReading | null> {

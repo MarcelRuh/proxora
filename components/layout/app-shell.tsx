@@ -144,11 +144,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
                         : pathname === item.href || pathname.startsWith(`${item.href}/`)
                     }
                     badge={
-                      item.href === "/updates" && userHasPermission(user, "updates.view") ? (
-                        <UpdatesBadge />
-                      ) : item.href === "/proxora" ? (
-                        <ProxoraBadge />
-                      ) : undefined
+                      item.href === "/updates" && userHasPermission(user, "updates.view") ? <UpdatesBadge /> : undefined
                     }
                   />
                 ))}
@@ -239,21 +235,8 @@ function UpdatesBadge() {
   );
 }
 
-function ProxoraBadge() {
-  const { data } = useQuery({
-    queryKey: ["self-update"],
-    queryFn: () => api<SelfUpdateStatus>("/api/system/self-update"),
-    refetchInterval: (q) => (q.state.data?.updating ? 1500 : 60_000),
-  });
-  if (!data?.updateAvailable && !data?.updating) return null;
-  return (
-    <span className="rounded-full border border-warning/50 bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold text-warning">
-      {data.updating ? "…" : "1"}
-    </span>
-  );
-}
-
 function SidebarVersion() {
+  const { t } = useI18n();
   const { data: status } = useQuery({
     queryKey: ["self-update"],
     queryFn: () => api<SelfUpdateStatus>("/api/system/self-update"),
@@ -262,27 +245,29 @@ function SidebarVersion() {
   const current = status?.currentVersion ?? APP_VERSION;
   const target = status?.targetVersion ?? current;
   const updating = Boolean(status?.updating);
-  const percent = status?.progress?.percent ?? (updating ? 2 : status?.updateAvailable ? 8 : 100);
+  const percent = updating ? status?.progress?.percent : undefined;
   return (
     <Link href="/proxora" className="block rounded-[var(--ui-radius)] border border-[var(--ui-chrome-border)] px-2 py-2 hover:border-primary/50">
       <div className="flex items-center justify-between gap-2 text-[11px]">
         <span className="font-mono text-sidebar-foreground">
-          {status?.updateAvailable ? `${current} → ${target}` : `v${current}`}
+          {status?.updateAvailable || updating ? `${current} → ${target}` : `v${current}`}
         </span>
-        {status?.updateAvailable ? (
-          <span className="text-warning">Update</span>
+        {status?.updateAvailable || updating ? (
+          <span className="text-warning">{t("sidebar.update")}</span>
         ) : (
-          <span className="text-sidebar-muted">GitHub</span>
+          <span className="text-sidebar-muted">{t("sidebar.github")}</span>
         )}
       </div>
-      <div className="mt-1.5">
-        <ProgressBar
-          className="h-1"
-          value={percent}
-          autoTone={false}
-          tone={status?.progress?.step === "error" ? "danger" : "primary"}
-        />
-      </div>
+      {percent != null ? (
+        <div className="mt-1.5">
+          <ProgressBar
+            className="h-1"
+            value={percent}
+            autoTone={false}
+            tone={status?.progress?.step === "error" ? "danger" : "primary"}
+          />
+        </div>
+      ) : null}
     </Link>
   );
 }

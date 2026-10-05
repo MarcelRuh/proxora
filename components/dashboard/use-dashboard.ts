@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { Dashboard, DashboardGuests, Guest } from "@/lib/types";
@@ -41,21 +41,25 @@ export function useDashboard() {
     staleTime: 60_000,
     placeholderData: (previous) => previous,
   });
-  const attempts = useRef(0);
+  const [probes, setProbes] = useState(0);
   const { data, refetch } = query;
+  const tempMissing = Boolean(
+    data?.hosts.items.some((host) => host.connectionState === "ONLINE" && host.cpuTempState === "reading"),
+  );
   useEffect(() => {
     if (!data) return;
-    const missing = data.hosts.items.some((host) => host.connectionState === "ONLINE" && host.cpuTempC == null);
-    if (!missing) {
-      attempts.current = 0;
+    if (!tempMissing) {
+      setProbes(0);
       return;
     }
-    if (attempts.current >= 4) return;
-    attempts.current += 1;
-    const id = setTimeout(() => void refetch(), 8_000);
+    if (probes >= 4) return;
+    const id = setTimeout(() => {
+      setProbes((n) => n + 1);
+      void refetch();
+    }, 8_000);
     return () => clearTimeout(id);
-  }, [data, refetch]);
-  return query;
+  }, [data, refetch, tempMissing, probes]);
+  return { ...query, cpuTempReading: tempMissing && probes < 4 };
 }
 
 export function useDashboardGuests(kind: "vm" | "lxc" | "all" = "all") {
