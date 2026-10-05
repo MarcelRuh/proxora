@@ -25,6 +25,19 @@ describe("suite embed urls", () => {
     expect(readSuiteEmbeds(null)).toEqual({ apps: [] });
   });
 
+  it("keeps the certificate exception only for https", () => {
+    expect(
+      parseSuiteApps([{ id: "sambora", name: "Sambora", url: "https://sambora.lan", insecureTls: true }]),
+    ).toEqual([{ id: "sambora", name: "Sambora", url: "https://sambora.lan/", insecureTls: true }]);
+    expect(parseSuiteApps([{ name: "Dockora", url: "http://dockora.lan", insecureTls: true }])).toEqual([
+      { id: "dockora", name: "Dockora", url: "http://dockora.lan/" },
+    ]);
+    expect(
+      readSuiteEmbeds({ apps: [{ id: "sambora", name: "Sambora", url: "https://sambora.lan", insecureTls: true }] }).apps[0]
+        ?.insecureTls,
+    ).toBe(true);
+  });
+
   it("builds a stable id and skips empty rows", () => {
     const taken = new Set<string>();
     expect(suiteAppId("Mölla", taken)).toBe("molla");

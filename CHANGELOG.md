@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.7] – 2026-10-05
+
+### Fixed
+
+- An embedded Ora-Stack app can no longer call the Proxora API. Its browser policy only allows its own path. HTTPS apps are checked against their certificate unless Settings explicitly allows a self-signed one. The proxy sends the real host, and WebSocket connections use the app's own origin.
+- Reloading Proxora during an update still finishes on the new version instead of leaving the progress bar up.
+- A Proxora update reattaches WireGuard to the new container network, so the tunnel comes back with the app.
+
 ## [2.2.6] – 2026-10-05
 
 ### Changed

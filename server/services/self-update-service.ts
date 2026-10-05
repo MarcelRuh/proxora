@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { logger } from "@/lib/logger";
@@ -27,6 +27,7 @@ import {
 import {
   mergeProgress,
   parseUpdaterLogs,
+  PROGRESS_FILE,
   readComposeLogsFromDir,
   readProgressFromDir,
   REVISION_FILE,
@@ -223,10 +224,23 @@ async function withProgress(status: SelfUpdateStatus): Promise<SelfUpdateStatus>
   return { ...status, progress: status.updating || progress?.step === "error" ? progress : progress };
 }
 
+function clearStaleProgress() {
+  const dirs = [resolveUpdateSignalDir(), options().installDirMount];
+  for (const dir of dirs) {
+    if (!dir) continue;
+    try {
+      unlinkSync(path.join(dir, PROGRESS_FILE));
+    } catch {
+      /* missing */
+    }
+  }
+}
+
 export async function applySelfUpdate(): Promise<{ ok: boolean; message: string; mode: SelfUpdateMode }> {
   if (applyInFlight || isUpdaterRunning()) {
     return { ok: false, message: "Update already running", mode: "compose" };
   }
+  clearStaleProgress();
   const status = await getSelfUpdateStatus();
   if (!status.enabled) return { ok: false, message: status.message, mode: status.mode };
   if (!status.updateAvailable) {

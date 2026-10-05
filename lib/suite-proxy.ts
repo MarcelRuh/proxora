@@ -122,6 +122,109 @@ export function forwardCookie(header: string | undefined): string | undefined {
   return kept.length > 0 ? kept.join("; ") : undefined;
 }
 
+const HOP = new Set([
+  "host",
+  "connection",
+  "keep-alive",
+  "transfer-encoding",
+  "upgrade",
+  "proxy-connection",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "content-length",
+]);
+
+export function forwardedHost(hostHeader: string | undefined): string {
+  return (hostHeader ?? "").split(",")[0]?.trim() ?? "";
+}
+
+export function forwardedScheme(protoHeader: string | undefined): "http" | "https" {
+  const parts = (protoHeader ?? "")
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .filter((part): part is "http" | "https" => part === "http" || part === "https");
+  return parts.at(-1) ?? "http";
+}
+
+export function useInsecureTls(insecureTls: boolean | undefined, protocol: string): boolean {
+  return protocol === "https:" && insecureTls === true;
+}
+
+export function embedContentSecurityPolicy(origin: string, mount: string): string {
+  const base = origin.replace(/\/$/, "");
+  const root = `${base}${mount}/`;
+  const wsBase = base.startsWith("https://") ? `wss://${base.slice("https://".length)}` : `ws://${base.slice("http://".length)}`;
+  const ws = `${wsBase}${mount}/`;
+  return [
+    "default-src 'none'",
+    "base-uri 'none'",
+    `form-action ${root}`,
+    `connect-src ${root} ${ws}`,
+    `script-src ${root} 'unsafe-inline' 'unsafe-eval'`,
+    `style-src ${root} 'unsafe-inline'`,
+    `img-src ${root} data: blob:`,
+    `font-src ${root} data:`,
+    `media-src ${root} blob:`,
+    "worker-src blob:",
+    `frame-src ${root}`,
+    "frame-ancestors 'self'",
+    "object-src 'none'",
+  ].join("; ");
+}
+
+export function buildUpstreamHeaders(input: {
+  headers: Record<string, string | undefined>;
+  target: URL;
+  mount: string;
+  appUrl: string;
+  forwardedProto: string;
+  forwardedHost: string;
+  keepUpgrade?: boolean;
+}): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const cookie = headerOf(input.headers, "cookie");
+  const referer = headerOf(input.headers, "referer");
+  for (const [key, value] of Object.entries(input.headers)) {
+    if (!value) continue;
+    const lower = key.toLowerCase();
+    if (lower === "cookie" || lower === "origin" || lower === "referer") continue;
+    if (lower === "x-forwarded-host" || lower === "x-forwarded-proto") continue;
+    if (HOP.has(lower) && (!input.keepUpgrade || (lower !== "connection" && lower !== "upgrade"))) continue;
+    headers[lower] = value;
+  }
+  headers.host = input.target.host;
+  if (!input.keepUpgrade) headers["accept-encoding"] = "identity";
+  headers.origin = input.target.origin;
+  const forwarded = forwardCookie(cookie);
+  if (forwarded) headers.cookie = forwarded;
+  const nextReferer = rewriteReferer(referer ?? "", input.mount, input.appUrl);
+  if (nextReferer) headers.referer = nextReferer;
+  headers["x-forwarded-proto"] = input.forwardedProto === "https" ? "https" : "http";
+  headers["x-forwarded-host"] = input.forwardedHost;
+  return headers;
+}
+
+function headerOf(headers: Record<string, string | undefined>, name: string): string | undefined {
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === name) return value;
+  }
+  return undefined;
+}
+
+function rewriteReferer(referer: string, mount: string, base: string): string | undefined {
+  if (!referer) return undefined;
+  try {
+    const url = new URL(referer);
+    if (url.pathname !== mount && !url.pathname.startsWith(`${mount}/`)) return undefined;
+    const rest = url.pathname.slice(mount.length) || "/";
+    return upstreamTarget(base, rest, url.search).toString();
+  } catch {
+    return undefined;
+  }
+}
+
 export function targetsSelf(target: URL, requestHost: string, id: string): boolean {
   const host = requestHost.split(",")[0]?.trim().split(":")[0]?.toLowerCase() ?? "";
   if (!host || target.hostname.toLowerCase() !== host) return false;

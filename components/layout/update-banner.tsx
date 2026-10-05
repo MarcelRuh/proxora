@@ -7,6 +7,7 @@ import type { SelfUpdateStatus } from "@/components/settings/self-update-section
 import { api } from "@/lib/api";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { MessageKey } from "@/lib/i18n/messages";
+import { updateShouldReload } from "@/lib/self-update-reload";
 
 export const SELF_UPDATE_FLAG = "proxora-self-update";
 const SELF_UPDATE_EVENT = "proxora-update";
@@ -47,9 +48,11 @@ export function UpdateBanner() {
   const qc = useQueryClient();
   const [held, setHeld] = useState(false);
   const sawUpdate = useRef(false);
+  const resumed = useRef(false);
   const finishing = useRef(false);
 
   useEffect(() => {
+    resumed.current = sessionStorage.getItem(SELF_UPDATE_FLAG) === "1";
     const sync = () => setHeld(sessionStorage.getItem(SELF_UPDATE_FLAG) === "1");
     sync();
     window.addEventListener(SELF_UPDATE_EVENT, sync);
@@ -67,11 +70,17 @@ export function UpdateBanner() {
 
   useEffect(() => {
     if (data?.updating) sawUpdate.current = true;
-    if (!sawUpdate.current || finishing.current || !data || data.updating) return;
-    if (data.progress?.step === "error") {
+    const decision = updateShouldReload({
+      held,
+      sawUpdating: sawUpdate.current,
+      resumed: resumed.current,
+      status: data,
+    });
+    if (decision === "clear") {
       markSelfUpdateActive(false);
       return;
     }
+    if (decision !== "reload" || finishing.current) return;
     finishing.current = true;
     const started = Date.now();
     const finish = () => {
@@ -89,7 +98,7 @@ export function UpdateBanner() {
       });
     };
     finish();
-  }, [data]);
+  }, [data, held]);
 
   useEffect(() => {
     if (!held) return;

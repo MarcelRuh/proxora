@@ -7,7 +7,10 @@ import { Agent, request as undiciRequest } from "undici";
 import { SESSION_COOKIE } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import {
-  forwardCookie,
+  buildUpstreamHeaders,
+  embedContentSecurityPolicy,
+  forwardedHost,
+  forwardedScheme,
   parseSuiteProxyUrl,
   rewriteCookie,
   rewriteEmbedBody,
@@ -18,6 +21,7 @@ import {
   suiteProxyPrefix,
   targetsSelf,
   upstreamTarget,
+  useInsecureTls,
 } from "@/lib/suite-proxy";
 import { getSessionFromToken } from "@/server/auth/session-core";
 import { loadSuiteEmbeds } from "@/server/services/suite-embeds";
@@ -27,20 +31,6 @@ const insecureAgent = new Agent({
   headersTimeout: 60_000,
   bodyTimeout: 0,
 });
-
-const HOP = new Set([
-  "host",
-  "connection",
-  "keep-alive",
-  "transfer-encoding",
-  "upgrade",
-  "proxy-connection",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "content-length",
-]);
 
 const STRIP = new Set([
   "content-security-policy",
@@ -74,13 +64,24 @@ function headerText(value: string | string[] | undefined): string {
 }
 
 function requestHost(req: IncomingMessage): string {
-  return headerText(req.headers["x-forwarded-host"] || req.headers.host).split(",")[0]?.trim() ?? "";
+  return forwardedHost(headerText(req.headers.host));
 }
 
-function requestProto(req: IncomingMessage): string {
-  const forwarded = headerText(req.headers["x-forwarded-proto"]).split(",")[0]?.trim();
-  if (forwarded) return forwarded;
-  return "http";
+function requestProto(req: IncomingMessage): "http" | "https" {
+  return forwardedScheme(headerText(req.headers["x-forwarded-proto"]));
+}
+
+function publicOrigin(req: IncomingMessage): string {
+  return `${requestProto(req)}://${requestHost(req)}`;
+}
+
+function flatHeaders(req: IncomingMessage): Record<string, string | undefined> {
+  const headers: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value == null) continue;
+    headers[key] = headerText(value);
+  }
+  return headers;
 }
 
 async function findApp(id: string) {
@@ -89,18 +90,6 @@ async function findApp(id: string) {
     embedCache = { at: now, apps: (await loadSuiteEmbeds()).apps };
   }
   return embedCache.apps.find((app) => app.id === id) ?? null;
-}
-
-function rewriteReferer(referer: string, mount: string, base: string): string | undefined {
-  if (!referer) return undefined;
-  try {
-    const url = new URL(referer);
-    if (url.pathname !== mount && !url.pathname.startsWith(`${mount}/`)) return undefined;
-    const rest = url.pathname.slice(mount.length) || "/";
-    return upstreamTarget(base, rest, url.search).toString();
-  } catch {
-    return undefined;
-  }
 }
 
 function send(res: ServerResponse, status: number, body: string) {
@@ -136,14 +125,14 @@ export async function handleSuiteProxy(req: IncomingMessage, res: ServerResponse
       return true;
     }
     const method = (req.method ?? "GET").toUpperCase();
-    const headers = upstreamHeaders(req, target, mount, app.url);
+    const headers = upstreamHeaders(req, target, mount, app.url, false);
     const upstream = await undiciRequest(target, {
       method,
       headers,
       body: BODYLESS.has(method) ? undefined : req,
-      dispatcher: target.protocol === "https:" ? insecureAgent : undefined,
+      dispatcher: useInsecureTls(app.insecureTls, target.protocol) ? insecureAgent : undefined,
     });
-    await writeUpstream(req, res, upstream, target, mount);
+    await writeUpstream(req, res, upstream, target, mount, publicOrigin(req));
   } catch (error) {
     logger.warn({ err: error, id: parsed.id }, "Suite proxy failed");
     send(res, 502, "Die App ist nicht erreichbar");
@@ -161,16 +150,14 @@ export async function handleSuiteProxyUpgrade(req: IncomingMessage, socket: Dupl
       socket.destroy();
       return true;
     }
+    const mount = suiteProxyPrefix(parsed.id);
     const target = upstreamTarget(app.url, stripAssetBump(parsed.pathname), parsed.search);
     if (targetsSelf(target, requestHost(req), parsed.id)) {
       socket.destroy();
       return true;
     }
     const secure = target.protocol === "https:";
-    const headers: Record<string, string | string[] | undefined> = { ...req.headers, host: target.host };
-    const cookie = forwardCookie(headerText(req.headers.cookie) || undefined);
-    if (cookie) headers.cookie = cookie;
-    else delete headers.cookie;
+    const headers = upstreamHeaders(req, target, mount, app.url, true);
     const call = secure ? httpsRequest : httpRequest;
     const upstream = call({
       hostname: target.hostname,
@@ -178,7 +165,7 @@ export async function handleSuiteProxyUpgrade(req: IncomingMessage, socket: Dupl
       path: `${target.pathname}${target.search}`,
       method: "GET",
       headers,
-      rejectUnauthorized: false,
+      rejectUnauthorized: !useInsecureTls(app.insecureTls, target.protocol),
     });
     upstream.on("upgrade", (response, remote, remoteHead) => {
       const lines = [`HTTP/1.1 ${response.statusCode ?? 101} ${response.statusMessage || "Switching Protocols"}`];
@@ -205,23 +192,22 @@ export async function handleSuiteProxyUpgrade(req: IncomingMessage, socket: Dupl
   return true;
 }
 
-function upstreamHeaders(req: IncomingMessage, target: URL, mount: string, appUrl: string): Record<string, string> {
-  const headers: Record<string, string> = {};
-  for (const [key, value] of Object.entries(req.headers)) {
-    if (!value || HOP.has(key.toLowerCase())) continue;
-    if (key.toLowerCase() === "cookie" || key.toLowerCase() === "origin" || key.toLowerCase() === "referer") continue;
-    headers[key] = headerText(value);
-  }
-  headers.host = target.host;
-  headers["accept-encoding"] = "identity";
-  headers.origin = target.origin;
-  const cookie = forwardCookie(headerText(req.headers.cookie) || undefined);
-  if (cookie) headers.cookie = cookie;
-  const referer = rewriteReferer(headerText(req.headers.referer), mount, appUrl);
-  if (referer) headers.referer = referer;
-  headers["x-forwarded-proto"] = requestProto(req);
-  headers["x-forwarded-host"] = requestHost(req);
-  return headers;
+function upstreamHeaders(
+  req: IncomingMessage,
+  target: URL,
+  mount: string,
+  appUrl: string,
+  keepUpgrade: boolean,
+): Record<string, string> {
+  return buildUpstreamHeaders({
+    headers: flatHeaders(req),
+    target,
+    mount,
+    appUrl,
+    forwardedProto: requestProto(req),
+    forwardedHost: requestHost(req),
+    keepUpgrade,
+  });
 }
 
 async function writeUpstream(
@@ -230,11 +216,15 @@ async function writeUpstream(
   upstream: Awaited<ReturnType<typeof undiciRequest>>,
   target: URL,
   mount: string,
+  origin: string,
 ) {
   const contentType = headerText(upstream.headers["content-type"]);
   const kind = rewriteKind(contentType);
   const secure = requestProto(req) === "https";
-  const headers: Record<string, string | string[]> = { "Cache-Control": "no-store" };
+  const headers: Record<string, string | string[]> = {
+    "Cache-Control": "no-store",
+    "content-security-policy": embedContentSecurityPolicy(origin, mount),
+  };
   for (const [key, value] of Object.entries(upstream.headers)) {
     const lower = key.toLowerCase();
     if (!value || STRIP.has(lower) || lower === "set-cookie" || lower === "cache-control" || lower === "expires") continue;

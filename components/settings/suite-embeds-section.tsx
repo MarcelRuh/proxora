@@ -48,48 +48,67 @@ export function SuiteEmbedsSection() {
       <CardContent className="space-y-3 text-sm">
         <p className="text-muted-foreground">{t("settings.suiteBody")}</p>
         {apps.length === 0 ? <p className="text-muted-foreground">{t("settings.suiteEmpty")}</p> : null}
-        <div className="space-y-2">
+        <div className="space-y-3">
           {apps.map((app, index) => (
-            <div key={app.id || `new-${index}`} className="grid gap-2 sm:grid-cols-[minmax(0,12rem)_1fr_auto]">
-              <div className="space-y-1">
-                <Label htmlFor={`suite-name-${index}`}>{t("settings.suiteName")}</Label>
-                <Input
-                  id={`suite-name-${index}`}
-                  value={app.name}
-                  disabled={!canEdit}
-                  maxLength={48}
-                  onChange={(event) => {
-                    const next = [...apps];
-                    next[index] = { ...app, name: event.target.value };
-                    edit(next);
-                  }}
-                />
+            <div key={app.id || `new-${index}`} className="space-y-2">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,12rem)_1fr_auto]">
+                <div className="space-y-1">
+                  <Label htmlFor={`suite-name-${index}`}>{t("settings.suiteName")}</Label>
+                  <Input
+                    id={`suite-name-${index}`}
+                    value={app.name}
+                    disabled={!canEdit}
+                    maxLength={48}
+                    onChange={(event) => {
+                      const next = [...apps];
+                      next[index] = { ...app, name: event.target.value };
+                      edit(next);
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor={`suite-url-${index}`}>{t("settings.suiteAddress")}</Label>
+                  <Input
+                    id={`suite-url-${index}`}
+                    type="url"
+                    inputMode="url"
+                    placeholder="https://app.lan"
+                    disabled={!canEdit}
+                    value={app.url}
+                    onChange={(event) => {
+                      const next = [...apps];
+                      const url = event.target.value;
+                      next[index] = { ...app, url, insecureTls: url.trim().toLowerCase().startsWith("https:") ? app.insecureTls : undefined };
+                      edit(next);
+                    }}
+                  />
+                </div>
+                {canEdit ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="self-end"
+                    onClick={() => edit(apps.filter((_, item) => item !== index))}
+                  >
+                    {t("settings.remove")}
+                  </Button>
+                ) : null}
               </div>
-              <div className="space-y-1">
-                <Label htmlFor={`suite-url-${index}`}>{t("settings.suiteAddress")}</Label>
-                <Input
-                  id={`suite-url-${index}`}
-                  type="url"
-                  inputMode="url"
-                  placeholder="https://app.lan"
-                  disabled={!canEdit}
-                  value={app.url}
-                  onChange={(event) => {
-                    const next = [...apps];
-                    next[index] = { ...app, url: event.target.value };
-                    edit(next);
-                  }}
-                />
-              </div>
-              {canEdit ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="self-end"
-                  onClick={() => edit(apps.filter((_, item) => item !== index))}
-                >
-                  {t("settings.remove")}
-                </Button>
+              {app.url.trim().toLowerCase().startsWith("https:") ? (
+                <label className="flex items-center gap-2 text-sm" htmlFor={`suite-tls-${index}`}>
+                  <input
+                    id={`suite-tls-${index}`}
+                    type="checkbox"
+                    checked={app.insecureTls === true}
+                    disabled={!canEdit}
+                    onChange={(event) => {
+                      const next = [...apps];
+                      next[index] = { ...app, insecureTls: event.target.checked };
+                      edit(next);
+                    }}
+                  />
+                  {t("settings.suiteInsecure")}
+                </label>
               ) : null}
             </div>
           ))}

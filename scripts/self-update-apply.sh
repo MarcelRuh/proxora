@@ -384,7 +384,6 @@ else
   wait "$PWATCH" 2>/dev/null || true
   if [ "$PULL_RC" -eq 0 ]; then
     write_progress 82 pull "Image ready"
-    docker compose -f "$COMPOSE_FILE" up -d --build --no-deps proxora-wireguard >> "$TMP/compose.log" 2>&1 || true
     docker compose -f "$COMPOSE_FILE" up -d --no-build --remove-orphans >> "$TMP/compose.log" 2>&1 &
   else
     echo "==> Image pull failed, building locally" >> "$TMP/compose.log"
@@ -418,6 +417,9 @@ if [ "$COMPOSE_RC" -ne 0 ]; then
   echo "ERROR: compose rebuild failed (see ${COMPOSE_LOG_FILE})" >&2
   exit "$COMPOSE_RC"
 fi
+
+echo "==> Reattaching WireGuard to the new Proxora network"
+docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate proxora-wireguard >> "$TMP/compose.log" 2>&1 || true
 
 printf '%s\n' "$SHA" > "${INSTALL_DIR}/.proxora-revision"
 if [ -n "$SIGNAL_DIR" ] && [ -d "$SIGNAL_DIR" ]; then

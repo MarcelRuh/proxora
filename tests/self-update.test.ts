@@ -19,6 +19,7 @@ import {
   pickGithubReleaseApkUrl,
   pickLatestSemverTag,
 } from "@/server/services/github-revision";
+import { updateShouldReload } from "@/lib/self-update-reload";
 import { mergeProgress, parseProgressFile, parseUpdaterLogs } from "@/server/services/self-update-progress";
 
 describe("semver", () => {
@@ -143,6 +144,19 @@ describe("update signal files", () => {
     expect(readFileSync(path.join(dir, UPDATE_TARGET_FILE), "utf8")).toBe("v1.0.73\n");
     writeUpdateTarget(dir, null);
     expect(existsSync(path.join(dir, UPDATE_TARGET_FILE))).toBe(false);
+  });
+
+  it("reloads a resumed update once it is done", () => {
+    const done = { updating: false, progress: { step: "done" } };
+    expect(updateShouldReload({ held: true, sawUpdating: false, resumed: true, status: done })).toBe("reload");
+    expect(updateShouldReload({ held: true, sawUpdating: false, resumed: false, status: done })).toBe("wait");
+    expect(updateShouldReload({ held: true, sawUpdating: true, resumed: false, status: { updating: false, progress: null } })).toBe(
+      "reload",
+    );
+    expect(updateShouldReload({ held: true, sawUpdating: false, resumed: true, status: { updating: true } })).toBe("wait");
+    expect(
+      updateShouldReload({ held: true, sawUpdating: false, resumed: true, status: { updating: false, progress: { step: "error" } } }),
+    ).toBe("clear");
   });
 
   it("reads PROXORA_UPDATE_SIGNAL_DIR", () => {

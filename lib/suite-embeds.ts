@@ -8,6 +8,7 @@ export type SuiteApp = {
   id: string;
   name: string;
   url: string;
+  insecureTls?: boolean;
 };
 
 export type SuiteEmbeds = {
@@ -36,13 +37,18 @@ function legacyApp(id: string, name: string, url: unknown): SuiteApp | null {
   return safe ? { id, name, url: safe } : null;
 }
 
+function withInsecureTls(app: SuiteApp, flag: unknown): SuiteApp {
+  if (flag === true && app.url.startsWith("https:")) return { ...app, insecureTls: true };
+  return app;
+}
+
 function storedApp(value: unknown): SuiteApp | null {
   if (!value || typeof value !== "object") return null;
-  const raw = value as { id?: unknown; name?: unknown; url?: unknown };
+  const raw = value as { id?: unknown; name?: unknown; url?: unknown; insecureTls?: unknown };
   const url = safeUrl(raw.url);
   if (typeof raw.id !== "string" || !ID_RE.test(raw.id)) return null;
   if (typeof raw.name !== "string" || !raw.name.trim() || !url) return null;
-  return { id: raw.id, name: raw.name.trim(), url };
+  return withInsecureTls({ id: raw.id, name: raw.name.trim(), url }, raw.insecureTls);
 }
 
 export function readSuiteEmbeds(value: unknown): SuiteEmbeds {
@@ -114,7 +120,7 @@ export function parseSuiteApps(value: unknown): SuiteApp[] {
   const taken = new Set<string>();
   for (const item of value) {
     if (!item || typeof item !== "object") throw new ValidationError("Each app needs a name and an address");
-    const raw = item as { id?: unknown; name?: unknown; url?: unknown };
+    const raw = item as { id?: unknown; name?: unknown; url?: unknown; insecureTls?: unknown };
     const name = typeof raw.name === "string" ? raw.name.trim() : "";
     const urlText = typeof raw.url === "string" ? raw.url.trim() : "";
     if (!name && !urlText) continue;
@@ -125,7 +131,7 @@ export function parseSuiteApps(value: unknown): SuiteApp[] {
     if (given && (!ID_RE.test(given) || taken.has(given))) throw new ValidationError("Each app needs its own name");
     const id = given || suiteAppId(name, taken);
     if (given) taken.add(id);
-    apps.push({ id, name, url });
+    apps.push(withInsecureTls({ id, name, url }, raw.insecureTls));
   }
   return apps;
 }

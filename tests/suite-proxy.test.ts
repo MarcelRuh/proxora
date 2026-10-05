@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildUpstreamHeaders,
+  embedContentSecurityPolicy,
   forwardCookie,
+  forwardedScheme,
   parseSuiteProxyUrl,
   rewriteCookie,
   rewriteEmbedBody,
@@ -9,6 +12,7 @@ import {
   stripAssetBump,
   targetsSelf,
   upstreamTarget,
+  useInsecureTls,
 } from "@/lib/suite-proxy";
 
 const mount = "/ora/dockora";
@@ -82,5 +86,39 @@ describe("suite proxy rewriting", () => {
       "Path=/ora/sambora/",
     );
     expect(forwardCookie("pm_session=secret; session=abc")).toBe("session=abc");
+  });
+
+  it("limits the embedded app to its own path and rewrites the upstream origin", () => {
+    const policy = embedContentSecurityPolicy("https://proxora.example", "/ora/dockora");
+    expect(policy).toContain("connect-src https://proxora.example/ora/dockora/ wss://proxora.example/ora/dockora/");
+    expect(policy).not.toContain("connect-src https://proxora.example ");
+    expect(policy).toContain("frame-ancestors 'self'");
+    expect(forwardedScheme("http, https")).toBe("https");
+    expect(useInsecureTls(true, "https:")).toBe(true);
+    expect(useInsecureTls(true, "http:")).toBe(false);
+    expect(useInsecureTls(undefined, "https:")).toBe(false);
+    const headers = buildUpstreamHeaders({
+      headers: {
+        origin: "https://proxora.example",
+        "x-forwarded-host": "evil.example",
+        host: "proxora.example",
+        cookie: "pm_session=secret; dockora=abc",
+        upgrade: "websocket",
+        connection: "Upgrade",
+        "sec-websocket-key": "abc",
+      },
+      target: new URL("https://10.0.0.8:8443/"),
+      mount: "/ora/sambora",
+      appUrl: "https://10.0.0.8:8443/",
+      forwardedProto: "https",
+      forwardedHost: "proxora.example",
+      keepUpgrade: true,
+    });
+    expect(headers.origin).toBe("https://10.0.0.8:8443");
+    expect(headers["x-forwarded-host"]).toBe("proxora.example");
+    expect(headers["x-forwarded-proto"]).toBe("https");
+    expect(headers.cookie).toBe("dockora=abc");
+    expect(headers.upgrade).toBe("websocket");
+    expect(headers.host).toBe("10.0.0.8:8443");
   });
 });
