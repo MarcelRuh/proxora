@@ -7,6 +7,7 @@ import { logger } from "@/lib/logger";
 import { attachConsoleProxy } from "@/server/ws/console-proxy";
 import { attachGuestFileUpload } from "@/server/ws/guest-file-upload";
 import { handleNodeGuestFileTransfer } from "@/server/http/guest-file-node";
+import { handleSuiteProxy, handleSuiteProxyUpgrade } from "@/server/http/suite-proxy";
 import { GUEST_FILE_UPLOAD_WS_PATH } from "@/lib/guest-file-http";
 import { startAptRefreshScheduler } from "@/server/services/apt-refresh";
 import { startBackupWatchScheduler } from "@/server/services/backup-watch";
@@ -45,6 +46,16 @@ async function main() {
         }
         return;
       }
+      try {
+        if (await handleSuiteProxy(req, res)) return;
+      } catch (error) {
+        logger.error({ err: error }, "Suite proxy failed");
+        if (!res.headersSent) {
+          res.writeHead(502, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Die App ist nicht erreichbar");
+        }
+        return;
+      }
       handle(req, res, parse(req.url ?? "", true));
     })();
   });
@@ -64,6 +75,10 @@ async function main() {
       uploadWss.handleUpgrade(req, socket, head, (ws) => {
         uploadWss.emit("connection", ws, req);
       });
+      return;
+    }
+    if (pathname?.startsWith("/ora/")) {
+      void handleSuiteProxyUpgrade(req, socket, head);
       return;
     }
     if (pathname === "/ws/console" || pathname === "/ws/vnc" || pathname === "/api/federation/ws") {

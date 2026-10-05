@@ -35,7 +35,7 @@ export function SuiteFrame({ id }: { id: string }) {
           {t("suite.open")}
         </a>
       </div>
-      <iframe title={app.name} src={app.url} className="min-h-0 w-full flex-1 border-0 bg-background" />
+      <iframe title={app.name} src={`/ora/${app.id}/`} className="min-h-0 w-full flex-1 border-0 bg-background" />
     </div>
   );
 }

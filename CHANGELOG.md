@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.4] – 2026-10-05
+
+### Changed
+
+- Ora-Stack apps open through Proxora. The address in Settings stays the internal URL. Proxora fetches Dockora, Sambora and later apps itself, so the browser does not need a public name, a trusted certificate, or permission to be embedded.
+
 ## [2.2.3] – 2026-10-05
 
 ### Changed
