@@ -19,6 +19,16 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import { useSessionUser } from "@/components/auth/session-user";
 import { userHasPermission } from "@/lib/permissions";
 import { peerHostAllowsPermission } from "@/lib/federation-access";
+import type { MessageKey } from "@/lib/i18n/messages";
+
+const JOB_STATUS: Record<string, MessageKey> = {
+  PENDING: "updates.job.PENDING",
+  WAITING: "updates.job.WAITING",
+  RUNNING: "updates.job.RUNNING",
+  SUCCESS: "updates.job.SUCCESS",
+  FAILED: "updates.job.FAILED",
+  CANCELLED: "updates.job.CANCELLED",
+};
 
 type AptPackage = { Package: string; Version?: string; OldVersion?: string };
 type HostUpdates = {
@@ -216,6 +226,9 @@ export default function UpdatesPage() {
             const checkedAt = row.host.aptCheckedAt
               ? new Date(row.host.aptCheckedAt).toLocaleString(locale === "en" ? "en-GB" : "de-DE")
               : null;
+            const packages = row.updates.flatMap((n) => n.packages.map((p) => ({ node: n.node, pkg: p })));
+            const shown = packages.slice(0, 12);
+            const rest = packages.length - shown.length;
             return (
               <Card key={row.host.id}>
                 <CardHeader className="flex flex-row items-center justify-between">
@@ -231,15 +244,14 @@ export default function UpdatesPage() {
                   </p>
                   {row.error ? <p className="text-sm text-destructive">{row.error}</p> : null}
                   <ul className="max-h-32 overflow-auto text-xs text-muted-foreground">
-                    {row.updates.flatMap((n) =>
-                      n.packages.slice(0, 12).map((p) => (
-                        <li key={`${n.node}-${p.Package}`}>
-                          {p.Package} {p.OldVersion ? `${p.OldVersion} → ` : ""}
-                          {p.Version}
-                        </li>
-                      )),
-                    )}
+                    {shown.map((p) => (
+                      <li key={`${p.node}-${p.pkg.Package}`}>
+                        {p.pkg.Package} {p.pkg.OldVersion ? `${p.pkg.OldVersion} → ` : ""}
+                        {p.pkg.Version}
+                      </li>
+                    ))}
                   </ul>
+                  {rest > 0 ? <p className="text-xs text-muted-foreground">{t("updates.more", { n: rest })}</p> : null}
                   <div className="flex flex-wrap gap-2">
                     <Button
                       size="sm"
@@ -303,7 +315,7 @@ export default function UpdatesPage() {
                 <div className="flex items-center gap-2">
                   {j.error ? <span className="text-xs text-destructive">{j.error}</span> : null}
                   <Badge variant={j.status === "FAILED" ? "danger" : j.status === "SUCCESS" ? "success" : "warning"}>
-                    {j.status}
+                    {JOB_STATUS[j.status] ? t(JOB_STATUS[j.status]) : j.status}
                   </Badge>
                 </div>
               </div>

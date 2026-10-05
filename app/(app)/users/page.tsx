@@ -18,6 +18,12 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
 import type { PublicHost } from "@/lib/types";
 import type { GuestGrant } from "@/lib/guest-scope";
+import type { MessageKey } from "@/lib/i18n/messages";
+
+const USER_STATUS: Record<string, MessageKey> = {
+  ACTIVE: "users.status.ACTIVE",
+  DISABLED: "users.status.DISABLED",
+};
 
 type UserRow = {
   id: string;
@@ -131,7 +137,9 @@ export default function UsersPage() {
                   <td>{u.email}</td>
                   <td>{u.role.name}</td>
                   <td>
-                    <Badge variant={u.status === "ACTIVE" ? "success" : "muted"}>{u.status}</Badge>
+                    <Badge variant={u.status === "ACTIVE" ? "success" : "muted"}>
+                      {USER_STATUS[u.status] ? t(USER_STATUS[u.status]) : u.status}
+                    </Badge>
                   </td>
                   <td>{u.totpEnabled ? "on" : "off"}</td>
                   <td className="text-xs text-muted-foreground">
@@ -247,8 +255,8 @@ export default function UsersPage() {
                 value={editForm.status}
                 onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
               >
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="DISABLED">DISABLED</option>
+                <option value="ACTIVE">{t("users.status.ACTIVE")}</option>
+                <option value="DISABLED">{t("users.status.DISABLED")}</option>
               </select>
             </label>
             <UserScopeFields

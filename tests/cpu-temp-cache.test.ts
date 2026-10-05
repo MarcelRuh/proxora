@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProxmoxClient } from "@/server/proxmox/client";
-import { peekNodeCpuTemp, readNodeCpuTemp, retainCpuTemp } from "@/server/services/cpu-temp";
+import { mergeCpuTemp, peekNodeCpuTemp, peekNodeCpuTempOutcome, readNodeCpuTemp, retainCpuTemp } from "@/server/services/cpu-temp";
 
 function client(baseUrl: string, read: () => Promise<unknown>): ProxmoxClient {
   return {
@@ -42,7 +42,7 @@ describe("cpu temperature cache", () => {
     expect(peekNodeCpuTemp(api, "pve")).toEqual({ celsius: 51, label: "Package id 0" });
   });
 
-  it("keeps a finished empty read as no sensors", async () => {
+  it("keeps a thrown read as a failure, not as no sensors", async () => {
     const api = client("https://cache-empty.example", async () => {
       throw new Error("no sensors");
     });
@@ -50,6 +50,16 @@ describe("cpu temperature cache", () => {
     await expect(readNodeCpuTemp(api, "pve")).resolves.toBeNull();
     vi.spyOn(Date, "now").mockReturnValue(9_000 + 61_000);
     expect(peekNodeCpuTemp(api, "pve")).toBeNull();
+    expect(peekNodeCpuTempOutcome(api, "pve")).toBe("failed");
+  });
+
+  it("does not turn a finished empty read into a later failure", () => {
+    const none = mergeCpuTemp(undefined, { reading: null, outcome: "none" });
+    expect(mergeCpuTemp(none, { reading: null, outcome: "failed" })).toEqual({ value: null, outcome: "none" });
+    expect(mergeCpuTemp({ value: null, outcome: "failed" }, { reading: null, outcome: "none" })).toEqual({
+      value: null,
+      outcome: "none",
+    });
   });
 
   it("does not replace a reading when the sensor read throws", async () => {

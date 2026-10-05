@@ -37,6 +37,7 @@ type Status = {
       uptime: number;
       cpuTempC?: number | null;
       cpuTempHot?: boolean;
+      cpuTempState?: "reading" | "none" | "value" | "failed";
     } | null;
   }>;
   vms: Array<{ vmid: number; name: string; status: string; node: string }>;
@@ -147,7 +148,9 @@ export default function HostDetailPage() {
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
               <CardTitle>
                 {t("hosts.node")} {item.node}
-                <span className="ml-2 text-sm font-normal text-muted-foreground">{item.online}</span>
+                {item.online === "online" ? (
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">{t("cluster.online")}</span>
+                ) : null}
               </CardTitle>
               <div className="flex flex-wrap items-center gap-2">
                 {consoleDenied ? (
@@ -221,6 +224,7 @@ export default function HostDetailPage() {
                   <CpuTemp
                     celsius={st.cpuTempC}
                     hot={st.cpuTempHot}
+                    state={st.cpuTempState}
                     alertC={data?.cpuTempAlertC ?? 85}
                     locale={locale}
                   />
@@ -285,20 +289,26 @@ export default function HostDetailPage() {
 function CpuTemp({
   celsius,
   hot,
+  state,
   alertC,
   locale,
 }: {
   celsius?: number | null;
   hot?: boolean;
+  state?: "reading" | "none" | "value" | "failed";
   alertC: number;
   locale: string;
 }) {
   const { t } = useI18n();
   const numberLocale = locale === "en" ? "en-GB" : "de-DE";
   const value =
-    celsius == null
-      ? t("hosts.cpuTempNone")
-      : `${celsius.toLocaleString(numberLocale, { maximumFractionDigits: 1 })} °C${hot ? ` · ${t("hosts.cpuTempHotAt", { c: alertC })}` : ""}`;
+    celsius != null
+      ? `${celsius.toLocaleString(numberLocale, { maximumFractionDigits: 1 })} °C${hot ? ` · ${t("hosts.cpuTempHotAt", { c: alertC })}` : ""}`
+      : state === "reading"
+        ? t("hosts.cpuTempReading")
+        : state === "failed"
+          ? t("hosts.cpuTempFailed")
+          : t("hosts.cpuTempNone");
   return (
     <p>
       <span className="text-muted-foreground">{t("hosts.cpuTemp")}</span>{" "}

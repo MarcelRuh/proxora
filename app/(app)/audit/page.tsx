@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { QueryGate } from "@/components/layout/query-gate";
 import { EmptyState } from "@/components/ui/misc";
 import { useI18n } from "@/components/i18n/locale-provider";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 type Log = {
   id: string;
@@ -71,7 +72,11 @@ export default function AuditPage() {
                       <td>{l.action}</td>
                       <td>{l.target}</td>
                       <td>
-                        <Badge variant={l.result === "SUCCESS" ? "success" : "danger"}>{l.result}</Badge>
+                        <Badge variant={l.result === "SUCCESS" ? "success" : "danger"}>
+                          {l.result === "SUCCESS" || l.result === "FAILURE"
+                            ? t(`audit.result.${l.result}` as MessageKey)
+                            : l.result}
+                        </Badge>
                       </td>
                       <td>{l.ip}</td>
                     </tr>

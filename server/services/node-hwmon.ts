@@ -15,12 +15,24 @@ function stripAnsi(text: string): string {
  * Stock Proxmox has no temperature API. One node shell reads hwmon, then closes.
  * Needs the same console permission as the host terminal.
  */
-export function readNodeHwmon(client: ProxmoxClient, node: string): Promise<CpuTempReading | null> {
+export type HwmonRead =
+  | { outcome: "value"; reading: CpuTempReading }
+  | { outcome: "none" }
+  | { outcome: "failed" };
+
+function hwmonFromDump(text: string): HwmonRead {
+  const reading = cpuTempFromHwmonDump(text);
+  if (reading) return { outcome: "value", reading };
+  if (text.includes("PROXORA_TEMP_END")) return { outcome: "none" };
+  return { outcome: "failed" };
+}
+
+export function readNodeHwmon(client: ProxmoxClient, node: string): Promise<HwmonRead> {
   return new Promise((resolve) => {
     let socket: WebSocket | null = null;
     let settled = false;
     let buf = "";
-    const finish = (value: CpuTempReading | null) => {
+    const finish = (value: HwmonRead) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -31,7 +43,7 @@ export function readNodeHwmon(client: ProxmoxClient, node: string): Promise<CpuT
       }
       resolve(value);
     };
-    const timer = setTimeout(() => finish(cpuTempFromHwmonDump(stripAnsi(buf))), 8_000);
+    const timer = setTimeout(() => finish(hwmonFromDump(stripAnsi(buf))), 8_000);
 
     void (async () => {
       try {
@@ -57,7 +69,7 @@ export function readNodeHwmon(client: ProxmoxClient, node: string): Promise<CpuT
             buf += chunk;
             if (!buf.startsWith("OK") && buf.length < 8) return;
             if (!buf.startsWith("OK")) {
-              finish(null);
+              finish({ outcome: "failed" });
               return;
             }
             authed = true;
@@ -72,13 +84,13 @@ export function readNodeHwmon(client: ProxmoxClient, node: string): Promise<CpuT
           }
           buf += chunk;
           const plain = stripAnsi(buf);
-          if (plain.includes("PROXORA_TEMP_END")) finish(cpuTempFromHwmonDump(plain));
+          if (plain.includes("PROXORA_TEMP_END")) finish(hwmonFromDump(plain));
         });
-        ws.on("error", () => finish(null));
-        ws.on("close", () => finish(cpuTempFromHwmonDump(stripAnsi(buf))));
+        ws.on("error", () => finish({ outcome: "failed" }));
+        ws.on("close", () => finish(hwmonFromDump(stripAnsi(buf))));
       } catch (error) {
         logger.debug({ err: error instanceof Error ? error.message : error, node }, "CPU hwmon read failed");
-        finish(null);
+        finish({ outcome: "failed" });
       }
     })();
   });

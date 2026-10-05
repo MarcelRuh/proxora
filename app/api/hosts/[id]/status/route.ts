@@ -9,7 +9,7 @@ import { filterGuestsForUser } from "@/server/auth/session-core";
 import { userHasPermission } from "@/lib/permissions";
 import { ForbiddenError } from "@/lib/errors";
 import { loadHostInventory } from "@/server/services/inventory-cache";
-import { readNodeCpuTemp } from "@/server/services/cpu-temp";
+import { peekNodeCpuTempOutcome, readNodeCpuTemp } from "@/server/services/cpu-temp";
 import { loadCpuTempSettings } from "@/server/services/cpu-temp-settings";
 
 const actionSchema = z.object({
@@ -28,6 +28,7 @@ export const GET = apiRoute("hosts.view", async (_req, session, params) => {
         .map(async (n) => {
           const node = n.node as string;
           const reading = n.status === "offline" ? null : await readNodeCpuTemp(client, node).catch(() => null);
+          const outcome = n.status === "offline" ? undefined : peekNodeCpuTempOutcome(client, node);
           return {
             node,
             online: n.status ?? "unknown",
@@ -38,6 +39,16 @@ export const GET = apiRoute("hosts.view", async (_req, session, params) => {
               uptime: n.uptime ?? 0,
               cpuTempC: reading?.celsius ?? null,
               cpuTempHot: reading != null && reading.celsius >= tempSettings.alertCelsius,
+              cpuTempState:
+                n.status === "offline"
+                  ? "none"
+                  : reading
+                    ? "value"
+                    : outcome === "failed"
+                      ? "failed"
+                      : outcome === "none"
+                        ? "none"
+                        : "reading",
             },
           };
         }),

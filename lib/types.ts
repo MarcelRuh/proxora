@@ -69,7 +69,8 @@ export type DashboardHost = {
   cpuTempC?: number | null;
   cpuTempHot?: boolean;
   cpuTempNode?: string | null;
-  cpuTempState?: "reading" | "none" | "value";
+  cpuTempState?: "reading" | "none" | "value" | "failed";
+  cpuTempPending?: boolean;
   memUsed?: number;
   memTotal?: number;
   diskUsed?: number;

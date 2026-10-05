@@ -74,7 +74,13 @@ export default function HostConsolePage() {
                 {(data?.nodes ?? []).map((item) => (
                   <option key={item.node} value={item.node}>
                     {item.node}
-                    {item.online === "online" ? "" : ` (${item.online})`}
+                    {item.online === "offline"
+                      ? ` (${t("dashboard.unreachable")})`
+                      : item.online === "unknown"
+                        ? ` (${t("dashboard.unknown")})`
+                        : item.online === "online"
+                          ? ""
+                          : ` (${item.online})`}
                   </option>
                 ))}
               </select>

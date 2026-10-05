@@ -185,6 +185,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
           </Button>
           <BrandMark className="h-8 w-8" />
           <span className="proxora-logo min-w-0 flex-1 truncate text-sm">{APP_NAME.toUpperCase()}</span>
+          <MobileUpdateLink user={user} />
         </header>
         <main className="flex-1 p-3 md:p-6">
           <AndroidUpdateBanner />
@@ -235,6 +236,23 @@ function UpdatesBadge() {
   );
 }
 
+function MobileUpdateLink({ user }: { user: SessionUser }) {
+  const { t } = useI18n();
+  const allowed = userHasAnyPermission(user, ["proxora.update", "updates.view"]);
+  const { data: status } = useQuery({
+    queryKey: ["self-update"],
+    queryFn: () => api<SelfUpdateStatus>("/api/system/self-update"),
+    enabled: allowed,
+    refetchInterval: (q) => (q.state.data?.updating ? 1500 : 60_000),
+  });
+  if (!allowed || !(status?.updateAvailable || status?.updating)) return null;
+  return (
+    <Link href="/proxora" className="shrink-0 text-xs font-semibold text-warning">
+      {t("sidebar.update")}
+    </Link>
+  );
+}
+
 function SidebarVersion() {
   const { t } = useI18n();
   const { data: status } = useQuery({
@@ -252,11 +270,7 @@ function SidebarVersion() {
         <span className="font-mono text-sidebar-foreground">
           {status?.updateAvailable || updating ? `${current} → ${target}` : `v${current}`}
         </span>
-        {status?.updateAvailable || updating ? (
-          <span className="text-warning">{t("sidebar.update")}</span>
-        ) : (
-          <span className="text-sidebar-muted">{t("sidebar.github")}</span>
-        )}
+        {status?.updateAvailable || updating ? <span className="text-warning">{t("sidebar.update")}</span> : null}
       </div>
       {percent != null ? (
         <div className="mt-1.5">

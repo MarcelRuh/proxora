@@ -44,7 +44,9 @@ export function useDashboard() {
   const [probes, setProbes] = useState(0);
   const { data, refetch } = query;
   const tempMissing = Boolean(
-    data?.hosts.items.some((host) => host.connectionState === "ONLINE" && host.cpuTempState === "reading"),
+    data?.hosts.items.some(
+      (host) => host.connectionState === "ONLINE" && (host.cpuTempPending || host.cpuTempState === "reading"),
+    ),
   );
   useEffect(() => {
     if (!data) return;
@@ -59,7 +61,7 @@ export function useDashboard() {
     }, 8_000);
     return () => clearTimeout(id);
   }, [data, refetch, tempMissing, probes]);
-  return { ...query, cpuTempReading: tempMissing && probes < 4 };
+  return query;
 }
 
 export function useDashboardGuests(kind: "vm" | "lxc" | "all" = "all") {

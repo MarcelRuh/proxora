@@ -6,6 +6,7 @@ import { ConfirmAction } from "@/components/confirm-action";
 import { useCan } from "@/components/auth/session-user";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { api } from "@/lib/api";
+import { hostErrorText } from "@/lib/host-error-text";
 import type { PublicHost } from "@/lib/types";
 
 export function HostMaintenanceButton({
@@ -31,7 +32,7 @@ export function HostMaintenanceButton({
       body: JSON.stringify({ state }),
     });
     if (state === "ONLINE" && res.host.connectionState === "ERROR") {
-      toast.error(res.host.lastError || t("common.failed"));
+      toast.error(hostErrorText(res.host.lastError, t) || t("common.failed"));
     } else {
       toast.success(state === "MAINTENANCE" ? t("hosts.maintenanceSet") : t("hosts.maintenanceCleared"));
     }

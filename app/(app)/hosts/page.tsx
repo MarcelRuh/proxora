@@ -17,6 +17,7 @@ import { useCan, useSessionUser } from "@/components/auth/session-user";
 import { userHasPermission } from "@/lib/permissions";
 import { peerHostAllowsPermission } from "@/lib/federation-access";
 import { actionDeniedTitle } from "@/lib/action-lock";
+import { hostErrorText } from "@/lib/host-error-text";
 import { HostEditorDialog } from "@/components/hosts/host-editor";
 import { HostMaintenanceButton } from "@/components/hosts/host-maintenance";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
@@ -177,7 +178,7 @@ function HostSection({
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm">Proxmox VE {host.proxmoxVersion ?? "—"}</p>
-              {host.lastError ? <p className="text-sm text-destructive">{host.lastError}</p> : null}
+              {host.lastError ? <p className="text-sm text-destructive">{hostErrorText(host.lastError, t)}</p> : null}
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" asChild>
                   <Link href={`/hosts/${host.id}`}>{t("hosts.open")}</Link>

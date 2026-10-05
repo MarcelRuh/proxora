@@ -11,6 +11,7 @@ import { useDashboard } from "@/components/dashboard/use-dashboard";
 import { useCanAny } from "@/components/auth/session-user";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { api } from "@/lib/api";
+import { hostErrorText } from "@/lib/host-error-text";
 import { bytesToSize, formatUptime, percentage } from "@/lib/utils";
 import type { DashboardHost } from "@/lib/types";
 import type { SelfUpdateStatus } from "@/components/settings/self-update-section";
@@ -186,7 +187,7 @@ function HostLoad({
           </div>
         </>
       ) : (
-        <p className="text-sm text-destructive">{host.lastError ?? t("dashboard.unreachable")}</p>
+        <p className="text-sm text-destructive">{hostErrorText(host.lastError, t) ?? t("dashboard.unreachable")}</p>
       )}
 
       <HostUpgrade host={host} count={updateCount} />
@@ -205,7 +206,7 @@ function CpuTempLine({
   celsius?: number | null;
   hot?: boolean;
   node?: string | null;
-  state?: "reading" | "none" | "value";
+  state?: "reading" | "none" | "value" | "failed";
   alertC: number;
   locale: string;
 }) {
@@ -217,6 +218,8 @@ function CpuTempLine({
     value = hot ? `${degrees}${where} · ${t("hosts.cpuTempHotAt", { c: alertC })}` : `${degrees}${where}`;
   } else if (state === "reading") {
     value = t("hosts.cpuTempReading");
+  } else if (state === "failed") {
+    value = t("hosts.cpuTempFailed");
   }
   return (
     <p>

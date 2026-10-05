@@ -4,12 +4,27 @@ import type { ProxmoxClient } from "@/server/proxmox/client";
 import { readNodeHwmon } from "@/server/services/node-hwmon";
 
 const CACHE_MS = 60_000;
-const cache = new Map<string, { at: number; value: CpuTempReading | null }>();
+
+export type CpuTempOutcome = "value" | "none" | "failed";
+
+type CachedTemp = { at: number; value: CpuTempReading | null; outcome: CpuTempOutcome };
+
+const cache = new Map<string, CachedTemp>();
 const inflight = new Map<string, Promise<CpuTempReading | null>>();
 
 /** A failed refresh must not wipe a temperature that is already on screen. */
 export function retainCpuTemp(previous: CpuTempReading | null, next: CpuTempReading | null): CpuTempReading | null {
   return next ?? previous;
+}
+
+export function mergeCpuTemp(
+  previous: { value: CpuTempReading | null; outcome: CpuTempOutcome } | undefined,
+  next: { reading: CpuTempReading | null; outcome: CpuTempOutcome },
+): { value: CpuTempReading | null; outcome: CpuTempOutcome } {
+  const value = retainCpuTemp(previous?.value ?? null, next.reading);
+  if (value) return { value, outcome: "value" };
+  if (next.outcome === "none" || previous?.outcome === "none") return { value: null, outcome: "none" };
+  return { value: null, outcome: "failed" };
 }
 
 function cacheKey(client: ProxmoxClient, node: string): string {
@@ -33,22 +48,33 @@ export function peekNodeCpuTemp(client: ProxmoxClient, node: string): CpuTempRea
   return hit.value;
 }
 
-async function readUncached(client: ProxmoxClient, node: string): Promise<CpuTempReading | null> {
+/** `undefined` means no read has finished. `failed` is a read that did not reach the sensors. */
+export function peekNodeCpuTempOutcome(client: ProxmoxClient, node: string): CpuTempOutcome | undefined {
+  return cache.get(cacheKey(client, node))?.outcome;
+}
+
+async function readUncached(
+  client: ProxmoxClient,
+  node: string,
+): Promise<{ reading: CpuTempReading | null; outcome: CpuTempOutcome }> {
   try {
     const rows = await client.nodes.cpuTemperature(node);
     const fromApi = cpuTempFromSensorRows(rows) ?? cpuTempFromSensorsJson(rows);
-    if (fromApi) return fromApi;
+    if (fromApi) return { reading: fromApi, outcome: "value" };
   } catch (error) {
-    if (!missingSensor(error) && !(error instanceof ProxmoxApiError)) return null;
+    if (!missingSensor(error) && !(error instanceof ProxmoxApiError)) return { reading: null, outcome: "failed" };
   }
   try {
     const status = await client.nodes.status(node);
     const fromStatus = cpuTempFromNodeStatus(status);
-    if (fromStatus) return fromStatus;
+    if (fromStatus) return { reading: fromStatus, outcome: "value" };
   } catch (error) {
-    if (!missingSensor(error) && !(error instanceof ProxmoxApiError)) return null;
+    if (!missingSensor(error) && !(error instanceof ProxmoxApiError)) return { reading: null, outcome: "failed" };
   }
-  return readNodeHwmon(client, node);
+  const hwmon = await readNodeHwmon(client, node);
+  if (hwmon.outcome === "value") return { reading: hwmon.reading, outcome: "value" };
+  if (hwmon.outcome === "none") return { reading: null, outcome: "none" };
+  return { reading: null, outcome: "failed" };
 }
 
 /** Sensors API, then node status, then one hwmon read over the node shell. */
@@ -59,10 +85,10 @@ export function readNodeCpuTemp(client: ProxmoxClient, node: string): Promise<Cp
   const pending = inflight.get(key);
   if (pending) return pending;
   const job = readUncached(client, node)
-    .then((value) => {
-      const kept = retainCpuTemp(cache.get(key)?.value ?? null, value);
-      cache.set(key, { at: Date.now(), value: kept });
-      return kept;
+    .then((next) => {
+      const merged = mergeCpuTemp(cache.get(key), next);
+      cache.set(key, { at: Date.now(), ...merged });
+      return merged.value;
     })
     .finally(() => {
       inflight.delete(key);

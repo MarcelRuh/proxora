@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.0] – 2026-10-05
+
+### Fixed
+
+- A failed temperature read says the temperature could not be read. “No sensors” stays the case where the query finished and found none.
+- While one node already has a temperature, a slower node keeps being read instead of waiting for the next poll.
+- Connection, timeout, login, permission, and certificate errors from a host are shown in the UI language.
+
+### Changed
+
+- Cluster status, audit results, update jobs, and user accounts use the UI language.
+- The package list names how many packages were left out.
+- An offline node no longer repeats its raw status in the heading. The console picker uses the same words.
+- The sidebar no longer says GitHub. On a phone, an available Proxora update appears in the header.
+
 ## [2.1.17] – 2026-10-05
 
 ### Fixed
