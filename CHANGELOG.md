@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.11] – 2026-10-05
+
+### Changed
+
+- The dashboard lists your own hosts and shared hosts in separate sections. Shared hosts from more than one colleague are grouped by name.
+
 ## [2.2.10] – 2026-10-05
 
 ### Fixed

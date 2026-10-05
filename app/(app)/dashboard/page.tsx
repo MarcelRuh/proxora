@@ -11,6 +11,7 @@ import { useDashboard } from "@/components/dashboard/use-dashboard";
 import { useCanAny } from "@/components/auth/session-user";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { api } from "@/lib/api";
+import { groupSharedDashboardHosts, ownDashboardHosts, sharedDashboardHosts } from "@/lib/dashboard-hosts";
 import { hostErrorText } from "@/lib/host-error-text";
 import { bytesToSize, formatUptime, percentage } from "@/lib/utils";
 import type { DashboardHost } from "@/lib/types";
@@ -80,7 +81,7 @@ export default function DashboardPage() {
       ) : null}
 
       <p className="text-sm text-muted-foreground">
-        {data.hosts.online}/{data.hosts.total} {t("dashboard.hosts")} · {running}/{totalGuests} {t("dashboard.running")}
+        {running}/{totalGuests} {t("dashboard.running")}
       </p>
 
       {data.hosts.items.length === 0 ? (
@@ -94,18 +95,133 @@ export default function DashboardPage() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-2">
-          {data.hosts.items.map((host) => (
-            <HostLoad
-              key={host.id}
-              host={host}
-              updateCount={aptByHost.get(host.id) ?? 0}
-              locale={locale}
-              alertC={alertC}
-            />
-          ))}
-        </div>
+        <DashboardHosts
+          hosts={data.hosts.items}
+          aptByHost={aptByHost}
+          locale={locale}
+          alertC={alertC}
+        />
       )}
+    </div>
+  );
+}
+
+function DashboardHosts({
+  hosts,
+  aptByHost,
+  locale,
+  alertC,
+}: {
+  hosts: DashboardHost[];
+  aptByHost: Map<string, number>;
+  locale: string;
+  alertC: number;
+}) {
+  const { t } = useI18n();
+  const own = ownDashboardHosts(hosts);
+  const shared = sharedDashboardHosts(hosts);
+  const groups = groupSharedDashboardHosts(shared, t("peers.unknown"));
+
+  return (
+    <div className="space-y-8">
+      {own.length > 0 ? (
+        <HostGroup title={t("dashboard.own")} hosts={own} aptByHost={aptByHost} locale={locale} alertC={alertC} />
+      ) : (
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{t("dashboard.own")}</h2>
+          <div className="proxora-panel p-6">
+            <p className="text-sm text-muted-foreground">
+              {t("dashboard.noHosts")}{" "}
+              <Link className="text-primary" href="/hosts">
+                {t("dashboard.addHost")}
+              </Link>
+              .
+            </p>
+          </div>
+        </section>
+      )}
+      {shared.length > 0 ? (
+        <section className="space-y-6">
+          <HostGroupHeading title={t("dashboard.shared")} hosts={shared} />
+          {groups.map(([owner, group]) => (
+            <div key={owner} className="space-y-3">
+              {groups.length > 1 ? (
+                <h3 className="text-xs font-medium text-muted-foreground">{t("peers.sharedBy", { name: owner })}</h3>
+              ) : null}
+              <HostGrid
+                hosts={group}
+                aptByHost={aptByHost}
+                locale={locale}
+                alertC={alertC}
+                showOwner={groups.length === 1}
+              />
+            </div>
+          ))}
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function HostGroup({
+  title,
+  hosts,
+  aptByHost,
+  locale,
+  alertC,
+}: {
+  title: string;
+  hosts: DashboardHost[];
+  aptByHost: Map<string, number>;
+  locale: string;
+  alertC: number;
+}) {
+  return (
+    <section className="space-y-3">
+      <HostGroupHeading title={title} hosts={hosts} />
+      <HostGrid hosts={hosts} aptByHost={aptByHost} locale={locale} alertC={alertC} showOwner={false} />
+    </section>
+  );
+}
+
+function HostGroupHeading({ title, hosts }: { title: string; hosts: DashboardHost[] }) {
+  const { t } = useI18n();
+  const online = hosts.filter((host) => host.connectionState === "ONLINE").length;
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{title}</h2>
+      <p className="text-xs text-muted-foreground">
+        {online}/{hosts.length} {t("dashboard.online")}
+      </p>
+    </div>
+  );
+}
+
+function HostGrid({
+  hosts,
+  aptByHost,
+  locale,
+  alertC,
+  showOwner,
+}: {
+  hosts: DashboardHost[];
+  aptByHost: Map<string, number>;
+  locale: string;
+  alertC: number;
+  showOwner: boolean;
+}) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      {hosts.map((host) => (
+        <HostLoad
+          key={host.id}
+          host={host}
+          updateCount={aptByHost.get(host.id) ?? 0}
+          locale={locale}
+          alertC={alertC}
+          showOwner={showOwner}
+        />
+      ))}
     </div>
   );
 }
@@ -115,11 +231,13 @@ function HostLoad({
   updateCount,
   locale,
   alertC,
+  showOwner,
 }: {
   host: DashboardHost;
   updateCount: number;
   locale: string;
   alertC: number;
+  showOwner: boolean;
 }) {
   const { t } = useI18n();
   const online = host.connectionState === "ONLINE";
@@ -132,7 +250,7 @@ function HostLoad({
           <Link href={`/hosts/${host.id}`} className="font-medium hover:text-primary">
             {host.name}
           </Link>
-          {host.origin === "PEER" && host.peerName ? (
+          {showOwner && host.origin === "PEER" && host.peerName ? (
             <p className="text-xs text-muted-foreground">{t("peers.sharedBy", { name: host.peerName })}</p>
           ) : null}
           <p className="text-xs text-muted-foreground">Proxmox VE {host.proxmoxVersion ?? t("dashboard.unknown")}</p>
