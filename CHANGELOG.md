@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.1] – 2026-10-05
+
+### Added
+
+- Dockora and Sambora can be embedded from Settings. An empty address hides that entry. Each one opens in the page, with a link to a new tab.
+
+### Changed
+
+- The Proxmox upgrade console stays on the host card. It no longer opens a second window.
+
 ## [2.2.0] – 2026-10-05
 
 ### Fixed
