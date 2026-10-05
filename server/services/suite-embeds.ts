@@ -1,17 +1,13 @@
 import { prisma } from "@/lib/db";
-import { emptySuiteEmbeds, parseEmbedUrl, readSuiteEmbeds, SUITE_EMBEDS_KEY, type SuiteEmbeds } from "@/lib/suite-embeds";
+import { parseSuiteApps, readSuiteEmbeds, SUITE_EMBEDS_KEY, type SuiteEmbeds } from "@/lib/suite-embeds";
 
 export async function loadSuiteEmbeds(): Promise<SuiteEmbeds> {
   const row = await prisma.setting.findUnique({ where: { key: SUITE_EMBEDS_KEY } });
-  return row ? readSuiteEmbeds(row.value) : emptySuiteEmbeds();
+  return row ? readSuiteEmbeds(row.value) : { apps: [] };
 }
 
-export async function saveSuiteEmbeds(input: { dockora?: unknown; sambora?: unknown }): Promise<SuiteEmbeds> {
-  const current = await loadSuiteEmbeds();
-  const next: SuiteEmbeds = {
-    dockora: "dockora" in input ? parseEmbedUrl(input.dockora) : current.dockora,
-    sambora: "sambora" in input ? parseEmbedUrl(input.sambora) : current.sambora,
-  };
+export async function saveSuiteEmbeds(input: { apps?: unknown }): Promise<SuiteEmbeds> {
+  const next: SuiteEmbeds = { apps: parseSuiteApps(input.apps) };
   await prisma.setting.upsert({
     where: { key: SUITE_EMBEDS_KEY },
     update: { value: next },

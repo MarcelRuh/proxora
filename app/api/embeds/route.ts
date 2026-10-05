@@ -7,6 +7,6 @@ export const GET = apiRoute(null, async () => {
 });
 
 export const PATCH = apiRoute("settings.update", async (req) => {
-  const body = (await req.json()) as { dockora?: unknown; sambora?: unknown };
+  const body = (await req.json()) as { apps?: unknown };
   return json(await saveSuiteEmbeds(body));
 });

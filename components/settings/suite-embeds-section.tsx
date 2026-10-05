@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { api } from "@/lib/api";
-import type { SuiteEmbeds } from "@/lib/suite-embeds";
+import type { SuiteApp, SuiteEmbeds } from "@/lib/suite-embeds";
 import { useCan } from "@/components/auth/session-user";
 import { useI18n } from "@/components/i18n/locale-provider";
 
@@ -19,19 +19,20 @@ export function SuiteEmbedsSection() {
     queryKey: ["embeds"],
     queryFn: () => api<SuiteEmbeds>("/api/embeds"),
   });
-  const [dockora, setDockora] = useState<string>();
-  const [sambora, setSambora] = useState<string>();
-  const dockoraValue = dockora ?? data?.dockora ?? "";
-  const samboraValue = sambora ?? data?.sambora ?? "";
+  const [draft, setDraft] = useState<SuiteApp[] | null>(null);
+  const apps = draft ?? data?.apps ?? [];
+
+  function edit(next: SuiteApp[]) {
+    setDraft(next);
+  }
 
   async function save() {
     try {
       const next = await api<SuiteEmbeds>("/api/embeds", {
         method: "PATCH",
-        body: JSON.stringify({ dockora: dockoraValue, sambora: samboraValue }),
+        body: JSON.stringify({ apps }),
       });
-      setDockora(next.dockora ?? "");
-      setSambora(next.sambora ?? "");
+      setDraft(next.apps);
       await qc.invalidateQueries({ queryKey: ["embeds"] });
       toast.success(t("settings.suiteSaved"));
     } catch (error) {
@@ -46,36 +47,62 @@ export function SuiteEmbedsSection() {
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <p className="text-muted-foreground">{t("settings.suiteBody")}</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1">
-            <Label htmlFor="suite-dockora">{t("nav.dockora")}</Label>
-            <Input
-              id="suite-dockora"
-              type="url"
-              inputMode="url"
-              placeholder="https://dockora.lan:3000"
-              disabled={!canEdit}
-              value={dockoraValue}
-              onChange={(event) => setDockora(event.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="suite-sambora">{t("nav.sambora")}</Label>
-            <Input
-              id="suite-sambora"
-              type="url"
-              inputMode="url"
-              placeholder="https://sambora.lan"
-              disabled={!canEdit}
-              value={samboraValue}
-              onChange={(event) => setSambora(event.target.value)}
-            />
-          </div>
+        {apps.length === 0 ? <p className="text-muted-foreground">{t("settings.suiteEmpty")}</p> : null}
+        <div className="space-y-2">
+          {apps.map((app, index) => (
+            <div key={app.id || `new-${index}`} className="grid gap-2 sm:grid-cols-[minmax(0,12rem)_1fr_auto]">
+              <div className="space-y-1">
+                <Label htmlFor={`suite-name-${index}`}>{t("settings.suiteName")}</Label>
+                <Input
+                  id={`suite-name-${index}`}
+                  value={app.name}
+                  disabled={!canEdit}
+                  maxLength={48}
+                  onChange={(event) => {
+                    const next = [...apps];
+                    next[index] = { ...app, name: event.target.value };
+                    edit(next);
+                  }}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor={`suite-url-${index}`}>{t("settings.suiteAddress")}</Label>
+                <Input
+                  id={`suite-url-${index}`}
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://app.lan"
+                  disabled={!canEdit}
+                  value={app.url}
+                  onChange={(event) => {
+                    const next = [...apps];
+                    next[index] = { ...app, url: event.target.value };
+                    edit(next);
+                  }}
+                />
+              </div>
+              {canEdit ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="self-end"
+                  onClick={() => edit(apps.filter((_, item) => item !== index))}
+                >
+                  {t("settings.remove")}
+                </Button>
+              ) : null}
+            </div>
+          ))}
         </div>
         {canEdit ? (
-          <Button type="button" size="sm" onClick={() => void save()}>
-            {t("common.save")}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => edit([...apps, { id: "", name: "", url: "" }])}>
+              {t("settings.suiteAdd")}
+            </Button>
+            <Button type="button" size="sm" onClick={() => void save()}>
+              {t("common.save")}
+            </Button>
+          </div>
         ) : null}
       </CardContent>
     </Card>
