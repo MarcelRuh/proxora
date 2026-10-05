@@ -38,9 +38,9 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
   const [fontSize, setFontSize] = useState(14);
   const [nonce, setNonce] = useState(0);
   const [sshOn, setSshOn] = useState<boolean | null>(null);
-  const [commandOut, setCommandOut] = useState<string | null>(null);
   const sshBufRef = useRef("");
   const captureRef = useRef(false);
+  const sawOutputRef = useRef(false);
   fontSizeRef.current = fontSize;
 
   useEffect(() => {
@@ -66,13 +66,10 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
 
     const noteSsh = (chunk: string) => {
       if (kind !== "lxc") return;
+      if (captureRef.current) sawOutputRef.current = true;
       sshBufRef.current = (sshBufRef.current + chunk).slice(-800);
       const next = lxcSshStateFromOutput(sshBufRef.current);
       if (next != null) setSshOn(next);
-      if (captureRef.current) {
-        const plain = chunk.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "");
-        if (plain) setCommandOut((prev) => ((prev ?? "") + plain).slice(-8000));
-      }
     };
 
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
@@ -159,9 +156,14 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
     const onResize = () => fit.fit();
     window.addEventListener("resize", onResize);
     const probeTimer = setInterval(() => {
-      if (kind !== "lxc" || ws.readyState !== WebSocket.OPEN || captureRef.current) return;
+      if (kind !== "lxc" || ws.readyState !== WebSocket.OPEN) return;
       const buffer = term.buffer.active;
       const row = buffer.getLine(buffer.baseY + buffer.cursorY)?.translateToString(true) ?? "";
+      if (captureRef.current) {
+        if (!sawOutputRef.current || !lxcShellPrompt(row)) return;
+        captureRef.current = false;
+        sawOutputRef.current = false;
+      }
       if (!lxcShellPrompt(row)) return;
       ws.send(JSON.stringify({ type: "input", data: lxcSshProbeInput() }));
       clearInterval(probeTimer);
@@ -179,6 +181,7 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
       termRef.current = null;
       fitRef.current = null;
       captureRef.current = false;
+      sawOutputRef.current = false;
     };
   }, [hostId, node, kind, vmid, cmd, nonce]);
 
@@ -203,7 +206,7 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
     if (!shellReady()) return false;
     captureRef.current = true;
-    setCommandOut((current) => current ?? "");
+    sawOutputRef.current = false;
     ws.send(JSON.stringify({ type: "input", data }));
     return true;
   }
@@ -292,24 +295,6 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
           </Button>
         </div>
       </div>
-      {commandOut != null ? (
-        <div className="border-b border-border bg-card px-3 py-2 text-xs text-foreground">
-          <div className="mb-1 flex items-center justify-between">
-            <span>{t("guest.consoleOutput")}</span>
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                captureRef.current = false;
-                setCommandOut(null);
-              }}
-            >
-              {t("common.close")}
-            </button>
-          </div>
-          <pre className="max-h-40 overflow-auto whitespace-pre-wrap">{commandOut || "…"}</pre>
-        </div>
-      ) : null}
       <div ref={containerRef} className="min-h-0 flex-1" />
     </div>
   );

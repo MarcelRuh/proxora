@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.13] – 2026-10-05
+
+### Fixed
+
+- The LXC console no longer opens a second output pane when APT or SSH runs. The terminal is the only view.
+
 ## [2.2.12] – 2026-10-05
 
 ### Fixed
