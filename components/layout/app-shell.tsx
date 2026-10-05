@@ -8,6 +8,8 @@ import {
   Box,
   Boxes,
   ClipboardList,
+  Container,
+  FolderOpen,
   HardDrive,
   LayoutDashboard,
   LogOut,
@@ -44,6 +46,7 @@ import { AndroidUpdateBanner } from "@/components/layout/android-update-banner";
 import { AndroidSessionTtl } from "@/components/layout/android-session-ttl";
 import { PageSkeleton } from "@/components/layout/page-skeleton";
 import type { MessageKey } from "@/lib/i18n/messages";
+import type { SuiteEmbeds } from "@/lib/suite-embeds";
 
 const NAV: Array<{
   href: string;
@@ -81,6 +84,12 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const { data: embeds } = useQuery({
+    queryKey: ["embeds"],
+    queryFn: () => api<SuiteEmbeds>("/api/embeds"),
+    staleTime: 60_000,
+  });
+  const framePage = pathname === "/dockora" || pathname === "/sambora";
   const [shortcut, setShortcut] = useState("Ctrl+K");
   useEffect(() => {
     if (/Mac|iPhone|iPad/.test(navigator.platform)) setShortcut("⌘K");
@@ -128,7 +137,8 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
           {NAV_GROUPS.map((group) => {
             const items = NAV.filter((item) => item.group === group.id && navItemVisible(user, item.href, item.anyOf));
-            if (!items.length) return null;
+            const suite = group.id === "operate" && (embeds?.dockora || embeds?.sambora);
+            if (!items.length && !suite) return null;
             return (
               <div key={group.id} className="mb-2">
                 <p className="px-3 pb-1 pt-3 text-[11px] text-sidebar-muted">{t(group.labelKey)}</p>
@@ -148,6 +158,12 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
                     }
                   />
                 ))}
+                {group.id === "operate" && embeds?.dockora ? (
+                  <NavLink href="/dockora" label={t("nav.dockora")} icon={Container} active={pathname === "/dockora"} />
+                ) : null}
+                {group.id === "operate" && embeds?.sambora ? (
+                  <NavLink href="/sambora" label={t("nav.sambora")} icon={FolderOpen} active={pathname === "/sambora"} />
+                ) : null}
               </div>
             );
           })}
@@ -187,7 +203,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
           <span className="proxora-logo min-w-0 flex-1 truncate text-sm">{APP_NAME.toUpperCase()}</span>
           <MobileUpdateLink user={user} />
         </header>
-        <main className="flex-1 p-3 md:p-6">
+        <main className={cn("flex min-h-0 flex-1 flex-col", framePage ? "overflow-hidden p-0" : "p-3 md:p-6")}>
           <AndroidUpdateBanner />
           <AndroidSessionTtl />
           <Suspense fallback={<PageSkeleton />}>{children}</Suspense>

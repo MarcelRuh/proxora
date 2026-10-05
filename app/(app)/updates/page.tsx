@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmAction } from "@/components/confirm-action";
 import { WebConsole } from "@/components/console/web-console";
@@ -173,37 +173,6 @@ export default function UpdatesPage() {
         }
       />
 
-      {shell ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("updates.consoleTitle", { name: shell.name })}</CardTitle>
-            <CardDescription>{t("updates.consoleBody", { node: shell.node })}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <WebConsole
-              hostId={shell.hostId}
-              node={shell.node}
-              kind="node"
-              cmd="upgrade"
-              onDisconnected={() => recheckHost(shell.hostId, shell.node, 4_000)}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={checkOne.isPending}
-              onClick={() => {
-                const hostId = shell.hostId;
-                const node = shell.node;
-                setShell(null);
-                recheckHost(hostId, node);
-              }}
-            >
-              {checkOne.isPending ? t("updates.checkingList") : t("updates.closeConsole")}
-            </Button>
-          </CardContent>
-        </Card>
-      ) : null}
-
       <QueryGate isLoading={false} error={hostsError} onRetry={() => void refetchHosts()}>
         {hostFilter ? (
           <p className="mb-3 text-sm">
@@ -252,6 +221,34 @@ export default function UpdatesPage() {
                     ))}
                   </ul>
                   {rest > 0 ? <p className="text-xs text-muted-foreground">{t("updates.more", { n: rest })}</p> : null}
+                  {shell?.hostId === row.host.id ? (
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">{t("updates.consoleBody", { node: shell.node })}</p>
+                      <div className="h-[min(28rem,60dvh)] min-h-[18rem]">
+                        <WebConsole
+                          hostId={shell.hostId}
+                          node={shell.node}
+                          kind="node"
+                          cmd="upgrade"
+                          fill
+                          onDisconnected={() => recheckHost(shell.hostId, shell.node, 4_000)}
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={checkOne.isPending}
+                        onClick={() => {
+                          const hostId = shell.hostId;
+                          const node = shell.node;
+                          setShell(null);
+                          recheckHost(hostId, node);
+                        }}
+                      >
+                        {checkOne.isPending ? t("updates.checkingList") : t("updates.closeConsole")}
+                      </Button>
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
                     <Button
                       size="sm"
@@ -284,7 +281,6 @@ export default function UpdatesPage() {
                               }),
                             });
                             setShell({ hostId: row.host.id, node: r.node, name: row.host.name });
-                            toast.success(t("updates.consoleOpened"));
                           }}
                         >
                           <Button size="sm">{label}</Button>

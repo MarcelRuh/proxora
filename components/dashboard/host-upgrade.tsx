@@ -84,7 +84,6 @@ export function HostUpgrade({
       });
       setPick(false);
       setShell({ hostId: host.id, node: result.node, name: host.name });
-      toast.success(t("updates.consoleOpened"));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("common.failed"));
     } finally {
@@ -172,24 +171,17 @@ export function HostUpgrade({
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog open={Boolean(shell)} onOpenChange={(next) => { if (!next) void closeShell(); }}>
-        <DialogContent instant className="flex max-h-[min(92dvh,52rem)] max-w-5xl flex-col overflow-hidden">
-          <DialogHeader>
-            <DialogTitle>{shell ? t("updates.consoleTitle", { name: shell.name }) : t("updates.upgradeStart")}</DialogTitle>
-            <DialogDescription>{shell ? t("updates.consoleBody", { node: shell.node }) : null}</DialogDescription>
-          </DialogHeader>
-          {shell ? (
-            <div className="h-[min(68dvh,34rem)] min-h-[22rem]">
-              <WebConsole hostId={shell.hostId} node={shell.node} kind="node" cmd="upgrade" fill />
-            </div>
-          ) : null}
-          <div className="mt-3">
-            <Button variant="outline" size="sm" onClick={() => void closeShell()}>
-              {t("updates.closeConsole")}
-            </Button>
+      {shell ? (
+        <div className="basis-full space-y-2">
+          <p className="text-sm text-muted-foreground">{t("updates.consoleBody", { node: shell.node })}</p>
+          <div className="h-[min(28rem,60dvh)] min-h-[18rem]">
+            <WebConsole hostId={shell.hostId} node={shell.node} kind="node" cmd="upgrade" fill />
           </div>
-        </DialogContent>
-      </Dialog>
+          <Button variant="outline" size="sm" onClick={() => void closeShell()}>
+            {t("updates.closeConsole")}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

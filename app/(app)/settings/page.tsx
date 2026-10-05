@@ -9,6 +9,7 @@ import { NotificationsSection } from "@/components/settings/notifications-sectio
 import { CpuTempSection } from "@/components/settings/cpu-temp-section";
 import { DiskAlertsSection } from "@/components/settings/disk-alerts-section";
 import { AppearanceSection } from "@/components/settings/appearance-section";
+import { SuiteEmbedsSection } from "@/components/settings/suite-embeds-section";
 import { useI18n } from "@/components/i18n/locale-provider";
 
 export default function SettingsPage() {
@@ -27,6 +28,7 @@ export default function SettingsPage() {
             ["disk", "settings.diskTitle"],
             ["cpu", "settings.cpuTempTitle"],
             ["webhooks", "settings.notifications"],
+            ["suite", "settings.suiteTitle"],
           ] as const
         ).map(([id, key]) => (
           <a key={id} href={`#${id}`} className="rounded-[4px] border border-border px-2 py-1 text-muted-foreground hover:text-foreground">
@@ -44,6 +46,9 @@ export default function SettingsPage() {
       <div id="webhooks" className="space-y-3">
         <h2 className="proxora-title text-2xl">{t("settings.notifications")}</h2>
         <NotificationsSection />
+      </div>
+      <div id="suite">
+        <SuiteEmbedsSection />
       </div>
     </div>
   );
