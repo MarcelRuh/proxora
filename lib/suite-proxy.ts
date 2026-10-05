@@ -1,7 +1,8 @@
 const ID = "([a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?)";
 const PROXY_PATH = new RegExp(`^/ora/${ID}(/.*)?$`);
 
-const ROOTS = ["/_next/", "/api/", "/static/", "/assets/", "/favicon", "/icon-"];
+const STATIC_ROOTS = ["/_next/", "/static/", "/assets/", "/favicon", "/icon-"];
+const API_ROOTS = ["/api/"];
 
 export type SuiteProxyTarget = {
   id: string;
@@ -14,6 +15,17 @@ export type RewriteKind = "html" | "css" | "js";
 
 export function suiteProxyPrefix(id: string): string {
   return `/ora/${id}`;
+}
+
+export function suiteAssetPath(mount: string, path: string): string {
+  if (STATIC_ROOTS.some((root) => path.startsWith(root))) return `${mount}/r${path}`;
+  return `${mount}${path}`;
+}
+
+export function stripAssetBump(pathname: string): string {
+  if (pathname === "/r") return "/";
+  if (pathname.startsWith("/r/")) return pathname.slice(2);
+  return pathname;
 }
 
 export function parseSuiteProxyUrl(raw: string): SuiteProxyTarget | null {
@@ -64,14 +76,14 @@ export function rewriteEmbedBody(body: string, kind: RewriteKind, mount: string)
 export function rewriteLocation(location: string, upstream: URL, mount: string): string {
   if (location.startsWith("/") && !location.startsWith("//")) {
     if (location === mount || location.startsWith(`${mount}/`) || location.startsWith(`${mount}?`)) return location;
-    return `${mount}${location}`;
+    return suiteAssetPath(mount, location);
   }
   try {
     const absolute = new URL(location, upstream);
     if (absolute.origin !== upstream.origin) return location;
     const path = `${absolute.pathname}${absolute.search}${absolute.hash}`;
     if (path === mount || path.startsWith(`${mount}/`)) return path;
-    return `${mount}${path.startsWith("/") ? path : `/${path}`}`;
+    return suiteAssetPath(mount, path);
   } catch {
     return location;
   }
@@ -80,7 +92,7 @@ export function rewriteLocation(location: string, upstream: URL, mount: string):
 export function rewriteLinkHeader(value: string, mount: string): string {
   return value.replace(/<(\/(?!\/)[^>]*)>/g, (full, path: string) => {
     if (path === mount || path.startsWith(`${mount}/`)) return full;
-    return `<${mount}${path}>`;
+    return `<${suiteAssetPath(mount, path)}>`;
   });
 }
 
@@ -122,7 +134,7 @@ function rewriteHtmlAttributes(body: string, mount: string): string {
     /\b(href|src|action|poster|formaction|data-src)\s*=\s*(["'])(\/(?!\/)[^"']*)\2/gi,
     (full, name: string, quote: string, path: string) => {
       if (path === mount || path.startsWith(`${mount}/`) || path.startsWith(`${mount}?`)) return full;
-      return `${name}=${quote}${mount}${path}${quote}`;
+      return `${name}=${quote}${suiteAssetPath(mount, path)}${quote}`;
     },
   );
 }
@@ -152,10 +164,11 @@ function rewriteJsHrefs(body: string, mount: string): string {
 
 function rewriteRoots(body: string, mount: string): string {
   let out = body;
-  for (const root of ROOTS) {
-    out = spliceOnce(out, `"${root}`, `"${mount}${root}`);
-    out = spliceOnce(out, `'${root}`, `'${mount}${root}`);
-    out = spliceOnce(out, `\\"${root}`, `\\"${mount}${root}`);
+  for (const root of [...STATIC_ROOTS, ...API_ROOTS]) {
+    const next = suiteAssetPath(mount, root);
+    out = spliceOnce(out, `"${root}`, `"${next}`);
+    out = spliceOnce(out, `'${root}`, `'${next}`);
+    out = spliceOnce(out, `\\"${root}`, `\\"${next}`);
   }
   return out;
 }
@@ -168,6 +181,6 @@ function spliceOnce(body: string, token: string, replacement: string): string {
 function rewriteCssUrls(body: string, mount: string): string {
   return body.replace(/url\(\s*(['"]?)(\/(?!\/)[^)'"]*)/g, (full, quote: string, path: string) => {
     if (path === mount || path.startsWith(`${mount}/`)) return full;
-    return `url(${quote}${mount}${path}`;
+    return `url(${quote}${suiteAssetPath(mount, path)}`;
   });
 }

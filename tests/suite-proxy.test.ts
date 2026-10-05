@@ -6,6 +6,7 @@ import {
   rewriteEmbedBody,
   rewriteLinkHeader,
   rewriteLocation,
+  stripAssetBump,
   targetsSelf,
   upstreamTarget,
 } from "@/lib/suite-proxy";
@@ -44,6 +45,7 @@ describe("suite proxy rewriting", () => {
   it("prefixes a page once and leaves concatenated api suffixes alone", () => {
     const source = 'fetch("".concat("/api/v1").concat(e));if("/auth/status"!==e);let h=[{href:"/containers"}]';
     const out = rewriteEmbedBody(source, "js", mount);
+    expect(stripAssetBump("/r/_next/static/a.js")).toBe("/_next/static/a.js");
     expect(out).toContain('"/ora/dockora/api/v1"');
     expect(out).toContain('"/auth/status"');
     expect(out).not.toContain("/ora/dockora/auth");
@@ -56,15 +58,15 @@ describe("suite proxy rewriting", () => {
       '<meta charset="utf-8"/><link href="/static/css/style.css"><form action="/login"><img src="/static/img/logo.jpg">';
     const out = rewriteEmbedBody(source, "html", "/ora/sambora");
     expect(out).toContain('charset="utf-8"/>');
-    expect(out).toContain('href="/ora/sambora/static/css/style.css"');
+    expect(out).toContain('href="/ora/sambora/r/static/css/style.css"');
     expect(out).toContain('action="/ora/sambora/login"');
-    expect(out).toContain('src="/ora/sambora/static/img/logo.jpg"');
+    expect(out).toContain('src="/ora/sambora/r/static/img/logo.jpg"');
   });
 
   it("prefixes css roots and keeps relative fonts", () => {
     const source = "url(/_next/static/a.css);url(../fonts/a.woff2)";
     const out = rewriteEmbedBody(source, "css", mount);
-    expect(out).toContain("url(/ora/dockora/_next/static/a.css)");
+    expect(out).toContain("url(/ora/dockora/r/_next/static/a.css)");
     expect(out).toContain("url(../fonts/a.woff2)");
   });
 
@@ -74,7 +76,7 @@ describe("suite proxy rewriting", () => {
     expect(rewriteLocation("https://10.0.0.9:8443/shares", upstream, "/ora/sambora")).toBe("/ora/sambora/shares");
     expect(rewriteLocation("https://other.example/x", upstream, "/ora/sambora")).toBe("https://other.example/x");
     expect(rewriteLinkHeader("</_next/static/a.css>; rel=preload", mount)).toBe(
-      "</ora/dockora/_next/static/a.css>; rel=preload",
+      "</ora/dockora/r/_next/static/a.css>; rel=preload",
     );
     expect(rewriteCookie("session=abc; Path=/; Secure; HttpOnly; SameSite=Strict", "/ora/sambora", true)).toContain(
       "Path=/ora/sambora/",

@@ -14,6 +14,7 @@ import {
   rewriteKind,
   rewriteLinkHeader,
   rewriteLocation,
+  stripAssetBump,
   suiteProxyPrefix,
   targetsSelf,
   upstreamTarget,
@@ -129,7 +130,7 @@ export async function handleSuiteProxy(req: IncomingMessage, res: ServerResponse
       send(res, 404, "App nicht gefunden");
       return true;
     }
-    const target = upstreamTarget(app.url, parsed.pathname, parsed.search);
+    const target = upstreamTarget(app.url, stripAssetBump(parsed.pathname), parsed.search);
     if (targetsSelf(target, requestHost(req), parsed.id)) {
       send(res, 508, "Die Adresse zeigt auf Proxora selbst");
       return true;
@@ -160,7 +161,7 @@ export async function handleSuiteProxyUpgrade(req: IncomingMessage, socket: Dupl
       socket.destroy();
       return true;
     }
-    const target = upstreamTarget(app.url, parsed.pathname, parsed.search);
+    const target = upstreamTarget(app.url, stripAssetBump(parsed.pathname), parsed.search);
     if (targetsSelf(target, requestHost(req), parsed.id)) {
       socket.destroy();
       return true;

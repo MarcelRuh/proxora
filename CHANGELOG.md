@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.5] – 2026-10-05
+
+### Fixed
+
+- Embedded Ora-Stack pages load their scripts from a fresh address, so an older cached file cannot send API calls to the wrong path.
+
 ## [2.2.4] – 2026-10-05
 
 ### Changed
