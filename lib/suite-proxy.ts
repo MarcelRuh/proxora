@@ -164,7 +164,7 @@ export function embedContentSecurityPolicy(origin: string, mount: string): strin
     `connect-src ${root} ${ws}`,
     `script-src ${root} 'unsafe-inline' 'unsafe-eval'`,
     `style-src ${root} 'unsafe-inline'`,
-    `img-src ${root} data: blob:`,
+    `img-src ${root} data: blob: https: http:`,
     `font-src ${root} data:`,
     `media-src ${root} blob:`,
     "worker-src blob:",

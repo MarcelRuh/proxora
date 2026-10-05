@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.10] – 2026-10-05
+
+### Fixed
+
+- Embedded Ora-Stack apps can load images from other sites again, such as Dockora app icons. Scripts in the frame still cannot call the Proxora API.
+
 ## [2.2.9] – 2026-10-05
 
 ### Fixed

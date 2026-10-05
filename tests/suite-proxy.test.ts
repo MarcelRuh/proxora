@@ -91,6 +91,7 @@ describe("suite proxy rewriting", () => {
   it("limits the embedded app to its own path and rewrites the upstream origin", () => {
     const policy = embedContentSecurityPolicy("https://proxora.example", "/ora/dockora");
     expect(policy).toContain("connect-src https://proxora.example/ora/dockora/ wss://proxora.example/ora/dockora/");
+    expect(policy).toContain("img-src https://proxora.example/ora/dockora/ data: blob: https: http:");
     expect(policy).not.toContain("connect-src https://proxora.example ");
     expect(policy).toContain("frame-ancestors 'self'");
     expect(forwardedScheme("http, https")).toBe("https");
