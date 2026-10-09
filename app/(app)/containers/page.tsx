@@ -32,7 +32,7 @@ export default function ContainersPage() {
           )
         }
       />
-      <QueryGate isLoading={false} error={error} onRetry={() => void refetch()}>
+      <QueryGate isLoading={false} error={error} hasData={Boolean(data)} onRetry={() => void refetch()}>
         <GuestTable kind="lxc" items={dashboardGuests(data, "lxc")} loading={isLoading} />
       </QueryGate>
     </div>

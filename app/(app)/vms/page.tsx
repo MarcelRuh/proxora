@@ -32,7 +32,7 @@ export default function VmsPage() {
           )
         }
       />
-      <QueryGate isLoading={false} error={error} onRetry={() => void refetch()}>
+      <QueryGate isLoading={false} error={error} hasData={Boolean(data)} onRetry={() => void refetch()}>
         <GuestTable kind="vm" items={dashboardGuests(data, "vm")} loading={isLoading} />
       </QueryGate>
     </div>

@@ -185,9 +185,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   const running = runState === "running";
   const paused = runState === "paused";
   const stopped = !running && !paused;
-  useEffect(() => {
-    if (pending && runState !== pending.from) setPending(null);
-  }, [runState, pending]);
+  if (pending && runState !== pending.from) setPending(null);
   const pendingLabel =
     pending?.action === "start"
       ? t("guest.pendingStart")
@@ -243,13 +241,15 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
   };
   const showMigrate = Boolean(isCluster);
 
-  if (isLoading) return <PageSkeleton />;
-  if (error) {
+  if (isLoading && !data) return <PageSkeleton />;
+  if (error && !data) {
     return <QueryGate isLoading={false} error={error} onRetry={() => void refetch()}>{null}</QueryGate>;
   }
+  if (!data) return <PageSkeleton />;
 
   return (
     <div className="space-y-4">
+      {error ? <QueryGate isLoading={false} error={error} hasData onRetry={() => void refetch()}>{null}</QueryGate> : null}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="proxora-section">{kindLabel}</p>
@@ -279,7 +279,7 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
 
       <div className="flex flex-wrap items-center gap-2">
         <Button
-          disabled={Boolean(deny(can.start, share.start)) || !stopped}
+          disabled={Boolean(deny(can.start, share.start)) || !stopped || Boolean(pending)}
           title={deny(can.start, share.start)}
           onClick={() => runAction("start")}
         >
@@ -311,10 +311,10 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           title={t("guest.shutdownTitle")}
           description={t("guest.shutdownBody", { id: params.vmid, name })}
           actionLabel={t("guest.shutdown")}
-          disabled={Boolean(deny(can.shutdown, share.shutdown))}
+          disabled={Boolean(deny(can.shutdown, share.shutdown)) || Boolean(pending)}
           onConfirm={() => action("shutdown")}
         >
-          <Button variant="outline" className="w-full" disabled={Boolean(deny(can.shutdown, share.shutdown))} title={deny(can.shutdown, share.shutdown)}>
+          <Button variant="outline" className="w-full" disabled={Boolean(deny(can.shutdown, share.shutdown)) || Boolean(pending)} title={deny(can.shutdown, share.shutdown)}>
             {t("guest.shutdown")}
           </Button>
         </ConfirmAction>
@@ -324,10 +324,10 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           title={t("guest.rebootTitle")}
           description={t("guest.rebootBody", { id: params.vmid, name })}
           actionLabel={t("guest.reboot")}
-          disabled={Boolean(deny(can.reboot, share.reboot))}
+          disabled={Boolean(deny(can.reboot, share.reboot)) || Boolean(pending)}
           onConfirm={() => action("reboot")}
         >
-          <Button variant="outline" className="w-full" disabled={Boolean(deny(can.reboot, share.reboot))} title={deny(can.reboot, share.reboot)}>
+          <Button variant="outline" className="w-full" disabled={Boolean(deny(can.reboot, share.reboot)) || Boolean(pending)} title={deny(can.reboot, share.reboot)}>
             {t("guest.reboot")}
           </Button>
         </ConfirmAction>
@@ -358,10 +358,10 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
           description={t("guest.stopBody", { id: params.vmid, name })}
           actionLabel={t("guest.stop")}
           destructive
-          disabled={Boolean(deny(can.stop, share.stop))}
+          disabled={Boolean(deny(can.stop, share.stop)) || Boolean(pending)}
           onConfirm={() => action("stop")}
         >
-          <Button variant="destructive" className="w-full" disabled={Boolean(deny(can.stop, share.stop))} title={deny(can.stop, share.stop)}>
+          <Button variant="destructive" className="w-full" disabled={Boolean(deny(can.stop, share.stop)) || Boolean(pending)} title={deny(can.stop, share.stop)}>
             {t("guest.stop")}
           </Button>
         </ConfirmAction>

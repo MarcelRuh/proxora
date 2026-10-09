@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ConfirmAction } from "@/components/confirm-action";
@@ -25,18 +26,28 @@ export function HostMaintenanceButton({
   const blocked = Boolean(disabled) || !canEdit;
   const title = disabledReason ?? (!canEdit ? t("common.noPermission") : undefined);
   const inMaintenance = host.connectionState === "MAINTENANCE";
+  const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
 
   async function apply(state: "MAINTENANCE" | "ONLINE") {
-    const res = await api<{ host: PublicHost }>(`/api/hosts/${host.id}/state`, {
-      method: "POST",
-      body: JSON.stringify({ state }),
-    });
-    if (state === "ONLINE" && res.host.connectionState === "ERROR") {
-      toast.error(hostErrorText(res.host.lastError, t) || t("common.failed"));
-    } else {
-      toast.success(state === "MAINTENANCE" ? t("hosts.maintenanceSet") : t("hosts.maintenanceCleared"));
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    try {
+      const res = await api<{ host: PublicHost }>(`/api/hosts/${host.id}/state`, {
+        method: "POST",
+        body: JSON.stringify({ state }),
+      });
+      if (state === "ONLINE" && res.host.connectionState === "ERROR") {
+        toast.error(hostErrorText(res.host.lastError, t) || t("common.failed"));
+      } else {
+        toast.success(state === "MAINTENANCE" ? t("hosts.maintenanceSet") : t("hosts.maintenanceCleared"));
+      }
+      onDone();
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
     }
-    onDone();
   }
 
   if (blocked) {
@@ -49,8 +60,13 @@ export function HostMaintenanceButton({
 
   if (inMaintenance) {
     return (
-      <Button size="sm" variant="outline" onClick={() => void apply("ONLINE").catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")))}>
-        {t("hosts.maintenanceOff")}
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy}
+        onClick={() => void apply("ONLINE").catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")))}
+      >
+        {busy ? t("common.loading") : t("hosts.maintenanceOff")}
       </Button>
     );
   }
@@ -60,9 +76,10 @@ export function HostMaintenanceButton({
       title={t("hosts.maintenanceTitle", { name: host.name })}
       description={t("hosts.maintenanceBody")}
       actionLabel={t("hosts.maintenanceOn")}
+      disabled={busy}
       onConfirm={() => apply("MAINTENANCE")}
     >
-      <Button size="sm" variant="outline">
+      <Button size="sm" variant="outline" disabled={busy}>
         {t("hosts.maintenanceOn")}
       </Button>
     </ConfirmAction>

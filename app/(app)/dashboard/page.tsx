@@ -10,7 +10,7 @@ import { useAptSummary } from "@/components/layout/apt-update-alert";
 import { useDashboard } from "@/components/dashboard/use-dashboard";
 import { useCanAny } from "@/components/auth/session-user";
 import { useI18n } from "@/components/i18n/locale-provider";
-import { api } from "@/lib/api";
+import { api, isNetworkFetchError } from "@/lib/api";
 import { groupSharedDashboardHosts, ownDashboardHosts, sharedDashboardHosts } from "@/lib/dashboard-hosts";
 import { hostErrorText } from "@/lib/host-error-text";
 import { bytesToSize, formatUptime, percentage } from "@/lib/utils";
@@ -39,11 +39,17 @@ export default function DashboardPage() {
       </div>
     );
   }
-  if (error || !data) {
+  if (!data) {
     return (
       <div className="proxora-panel p-6">
         <p className="font-medium">{t("dashboard.loadError")}</p>
-        <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : t("guest.status.unknown")}</p>
+        <p className="text-sm text-muted-foreground">
+          {isNetworkFetchError(error)
+            ? t("common.networkFailed")
+            : error instanceof Error
+              ? error.message
+              : t("common.pageErrorBody")}
+        </p>
         <button className="mt-3 text-sm text-primary" onClick={() => void refetch()}>
           {t("common.retry")}
         </button>
@@ -68,6 +74,21 @@ export default function DashboardPage() {
           {t("common.refresh")}
         </Button>
       </div>
+
+      {error ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--ui-radius)] border border-warning/40 bg-warning/10 px-3 py-2 text-sm">
+          <p className="text-muted-foreground">
+            {isNetworkFetchError(error)
+              ? t("common.networkFailed")
+              : error instanceof Error
+                ? error.message
+                : t("common.pageErrorBody")}
+          </p>
+          <Button size="sm" variant="outline" onClick={() => void refetch()}>
+            {t("common.retry")}
+          </Button>
+        </div>
+      ) : null}
 
       {proxoraStatus?.updating ? (
         <p className="text-sm">

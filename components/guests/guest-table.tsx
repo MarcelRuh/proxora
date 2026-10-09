@@ -55,7 +55,7 @@ export const GuestTable = memo(function GuestTable({
     for (const host of hostData?.hosts ?? []) map.set(host.id, host);
     return map;
   }, [hostData]);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busyIds, setBusyIds] = useState<Record<string, true>>({});
   const [pendingFrom, setPendingFrom] = useState<Record<string, { from: string; action: string }>>({});
   const pendingGen = useRef<Record<string, number>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -130,6 +130,8 @@ export const GuestTable = memo(function GuestTable({
     ? windowRows(filtered, scrollTop, viewH, rowH)
     : { start: 0, end: filtered.length, padTop: 0, padBottom: 0, slice: filtered };
 
+  const firstVisibleKey = win.slice[0] ? rowKey(win.slice[0]) : "";
+
   useEffect(() => {
     const el = firstRowRef.current;
     if (!el || !virtualize) return;
@@ -139,7 +141,7 @@ export const GuestTable = memo(function GuestTable({
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [virtualize, win.slice[0], rowH]);
+  }, [virtualize, firstVisibleKey, rowH]);
 
   const hydrateKey = win.slice
     .filter((g) => g.status === "running" && !g.template && !(g.ips && g.ips.length) && g.node && g.vmid)
@@ -147,18 +149,25 @@ export const GuestTable = memo(function GuestTable({
     .join(",");
 
   useEffect(() => {
+    // Throttle IP hydration requests per visible guest.
+    // eslint-disable-next-line react-hooks/purity -- effect body, not render
     const now = Date.now();
-    const pending = win.slice.flatMap((g) => {
-      if (g.status !== "running" || g.template || (g.ips && g.ips.length) || !g.node || !g.vmid) return [];
-      const hid = g.hostId ?? hostId ?? "";
-      if (!hid) return [];
-      const row = rowKind(g);
-      const key = `${hid}:${row}:${g.vmid}`;
-      const asked = askedIpsAt.current.get(key) ?? 0;
-      if (now - asked < 20_000) return [];
-      askedIpsAt.current.set(key, now);
-      return [{ hostId: hid, node: g.node, vmid: g.vmid, kind: row }];
-    });
+    const pending = hydrateKey
+      ? hydrateKey.split(",").flatMap((entry) => {
+          const [hid = "", row = "", vmidRaw = ""] = entry.split(":");
+          const vmid = Number(vmidRaw);
+          if (!hid || (row !== "vm" && row !== "lxc") || !Number.isInteger(vmid)) return [];
+          const guest = items.find(
+            (g) => (g.hostId ?? hostId) === hid && (g.kind === row || (!g.kind && (kind === "lxc" ? "lxc" : "vm") === row)) && g.vmid === vmid,
+          );
+          if (!guest?.node) return [];
+          const key = `${hid}:${row}:${vmid}`;
+          const asked = askedIpsAt.current.get(key) ?? 0;
+          if (now - asked < 20_000) return [];
+          askedIpsAt.current.set(key, now);
+          return [{ hostId: hid, node: guest.node, vmid, kind: row as "vm" | "lxc" }];
+        })
+      : [];
     if (!pending.length) return;
     void api<{ ips: Array<{ hostId: string; kind: "vm" | "lxc"; vmid: number; ips: string[] }> }>("/api/dashboard/guest-ips", {
       method: "POST",
@@ -172,22 +181,20 @@ export const GuestTable = memo(function GuestTable({
         applyGuestIpsToCache(qc, res.ips ?? []);
       })
       .catch(() => undefined);
-  }, [hydrateKey, hostId, qc, win.slice]);
+  }, [hydrateKey, hostId, items, kind, qc]);
 
-  useEffect(() => {
-    setPendingFrom((current) => {
-      let changed = false;
-      const next = { ...current };
-      for (const [key, pending] of Object.entries(current)) {
-        const guest = items.find((item) => rowKey(item) === key);
-        if (guest && guest.status !== pending.from) {
-          delete next[key];
-          changed = true;
-        }
+  const pendingEntries = Object.entries(pendingFrom);
+  if (pendingEntries.length) {
+    let next: Record<string, { from: string; action: string }> | null = null;
+    for (const [key, pending] of pendingEntries) {
+      const guest = items.find((item) => guestRowKey({ ...item, hostId: item.hostId ?? hostId }, rowKind(item)) === key);
+      if (!guest || guest.status !== pending.from) {
+        if (!next) next = { ...pendingFrom };
+        delete next[key];
       }
-      return changed ? next : current;
-    });
-  }, [items]);
+    }
+    if (next) setPendingFrom(next);
+  }
 
   const visibleKeys = filtered.map((g) => rowKey(g));
   const selectedVisible = visibleKeys.filter((key) => selected.has(key));
@@ -217,7 +224,7 @@ export const GuestTable = memo(function GuestTable({
       setPendingFrom((current) => ({ ...current, [key]: { from: guest.status, action } }));
       window.setTimeout(() => clearPending(key, gen), 45_000);
     }
-    setBusyId(id);
+    setBusyIds((prev) => ({ ...prev, [id]: true }));
     try {
       await api(`/api/hosts/${hid}/${permPath}/${node}/${vmid}`, {
         method: "POST",
@@ -244,7 +251,12 @@ export const GuestTable = memo(function GuestTable({
       if (action === "start") toast.error(err instanceof Error ? err.message : t("common.failed"));
       throw err;
     } finally {
-      setBusyId(null);
+      setBusyIds((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
     }
   }
 
@@ -274,7 +286,7 @@ export const GuestTable = memo(function GuestTable({
       toast.error(t("table.bulkNone"));
       return;
     }
-    setBusyId("bulk");
+    setBusyIds((prev) => ({ ...prev, bulk: true }));
     let ok = 0;
     let fail = 0;
     const queue = [...targets];
@@ -297,14 +309,19 @@ export const GuestTable = memo(function GuestTable({
       }
     }
     await Promise.all(Array.from({ length: Math.min(4, targets.length) }, () => worker()));
-    setBusyId(null);
+    setBusyIds((prev) => {
+      if (!("bulk" in prev)) return prev;
+      const next = { ...prev };
+      delete next.bulk;
+      return next;
+    });
     setSelected(new Set());
     toast.success(t("table.bulkDone", { ok, fail }));
     await invalidateDashboardQueries(qc);
   }
 
   const colCount = compact ? 4 + (mixed ? 1 : 0) : (mixed ? 12 : 11) - (showHost ? 0 : 1);
-  const bulkBusy = busyId === "bulk";
+  const bulkBusy = Boolean(busyIds.bulk);
   const selectedGuests = filtered.filter((g) => selected.has(rowKey(g)));
   const shareBlocked = t("peers.shareBlocked");
   const noPerm = t("common.noPermission");
@@ -522,7 +539,8 @@ export const GuestTable = memo(function GuestTable({
                 const running = g.status === "running";
                 const stopped = g.status === "stopped";
                 const key = rowKey(g);
-                const rowBusy = busyId === `${hid}:${g.vmid}` || bulkBusy;
+                const rowBusy = Boolean(busyIds[`${hid}:${g.vmid}`]) || bulkBusy;
+                const powerPending = Boolean(pendingFrom[key]);
                 const ips = uniqueGuestIps(g.ips);
                 const ipLabel = ips.join(", ");
                 return (
@@ -620,6 +638,7 @@ export const GuestTable = memo(function GuestTable({
                         row={row}
                         kindLabel={kindLabel}
                         rowBusy={rowBusy}
+                        powerPending={powerPending}
                         running={running}
                         stopped={stopped}
                         perms={perms}
@@ -659,7 +678,8 @@ export const GuestTable = memo(function GuestTable({
             const running = g.status === "running";
             const stopped = g.status === "stopped";
             const key = rowKey(g);
-            const rowBusy = busyId === `${hid}:${g.vmid}` || bulkBusy;
+            const rowBusy = Boolean(busyIds[`${hid}:${g.vmid}`]) || bulkBusy;
+            const powerPending = Boolean(pendingFrom[key]);
             const ips = uniqueGuestIps(g.ips);
             const canConsole = userHasPermission(user, `${prefix}.console` as Permission, hid, guest);
             const canStart = userHasPermission(user, `${prefix}.start` as Permission, hid, guest);
@@ -728,6 +748,7 @@ export const GuestTable = memo(function GuestTable({
                         row={row}
                         kindLabel={kindLabel}
                         rowBusy={rowBusy}
+                        powerPending={powerPending}
                         running={running}
                         stopped={stopped}
                         perms={{
@@ -778,6 +799,7 @@ function GuestRowActions({
   row,
   kindLabel,
   rowBusy,
+  powerPending,
   running,
   stopped,
   perms,
@@ -793,6 +815,7 @@ function GuestRowActions({
   row: "vm" | "lxc";
   kindLabel: string;
   rowBusy: boolean;
+  powerPending: boolean;
   running: boolean;
   stopped: boolean;
   perms: Record<"start" | "shutdown" | "reboot" | "stop" | "console" | "files" | "snapshot" | "delete", boolean>;
@@ -837,7 +860,7 @@ function GuestRowActions({
         size="sm"
         variant="outline"
         title={menuLock(perms.start, share.start, t("guest.start"), blocked, noPerm)}
-        disabled={!stopped || rowBusy || !perms.start || !share.start}
+        disabled={!stopped || rowBusy || powerPending || !perms.start || !share.start}
         onClick={() => void onAction("start")}
       >
         {t("guest.start")}
@@ -874,10 +897,10 @@ function GuestRowActions({
             title={t("guest.shutdownTitle")}
             description={t("guest.shutdownBody", { id: vmid, name })}
             actionLabel={t("guest.shutdown")}
-            disabled={!running || rowBusy || !perms.shutdown || !share.shutdown}
+            disabled={!running || rowBusy || powerPending || !perms.shutdown || !share.shutdown}
             onConfirm={() => onAction("shutdown")}
           >
-            <button type="button" role="menuitem" className={item} disabled={!running || rowBusy || !perms.shutdown || !share.shutdown} title={menuLock(perms.shutdown, share.shutdown, t("guest.shutdown"), blocked, noPerm)}>
+            <button type="button" role="menuitem" className={item} disabled={!running || rowBusy || powerPending || !perms.shutdown || !share.shutdown} title={menuLock(perms.shutdown, share.shutdown, t("guest.shutdown"), blocked, noPerm)}>
               {t("guest.shutdown")}
             </button>
           </ConfirmAction>
@@ -885,10 +908,10 @@ function GuestRowActions({
             title={t("guest.rebootTitle")}
             description={t("guest.rebootBody", { id: vmid, name })}
             actionLabel={t("guest.reboot")}
-            disabled={!running || rowBusy || !perms.reboot || !share.reboot}
+            disabled={!running || rowBusy || powerPending || !perms.reboot || !share.reboot}
             onConfirm={() => onAction("reboot")}
           >
-            <button type="button" role="menuitem" className={item} disabled={!running || rowBusy || !perms.reboot || !share.reboot}>
+            <button type="button" role="menuitem" className={item} disabled={!running || rowBusy || powerPending || !perms.reboot || !share.reboot}>
               {t("guest.reboot")}
             </button>
           </ConfirmAction>
@@ -897,10 +920,10 @@ function GuestRowActions({
             description={t("guest.stopBody", { id: vmid, name })}
             actionLabel={t("guest.stop")}
             destructive
-            disabled={stopped || rowBusy || !perms.stop || !share.stop}
+            disabled={stopped || rowBusy || powerPending || !perms.stop || !share.stop}
             onConfirm={() => onAction("stop")}
           >
-            <button type="button" role="menuitem" className={`${item} text-destructive`} disabled={stopped || rowBusy || !perms.stop || !share.stop}>
+            <button type="button" role="menuitem" className={`${item} text-destructive`} disabled={stopped || rowBusy || powerPending || !perms.stop || !share.stop}>
               {t("guest.stop")}
             </button>
           </ConfirmAction>

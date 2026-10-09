@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.15] – 2026-10-09
+
+### Fixed
+
+- Dashboard, hosts, VMs, containers, and guest detail keep their data when a poll fails and show a soft retry banner instead of wiping the page.
+- Guest power actions track busy rows per guest (no cross-clear race) and stay disabled while a start/shutdown/reboot/stop is pending.
+- Host “Test” and maintenance “End” block double clicks. Network errors use the localized message. Empty VM/CT/storage sections on a host show a short empty state.
+
 ## [2.2.14] – 2026-10-09
 
 ### Fixed

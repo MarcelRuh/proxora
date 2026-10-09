@@ -2241,6 +2241,11 @@ export const messages = {
 
 export type MessageKey = keyof typeof messages.de;
 
+type ExactKeys<A, B> = keyof A extends keyof B ? (keyof B extends keyof A ? true : never) : never;
+type _EnMessageParity = ExactKeys<typeof messages.de, typeof messages.en>;
+const _enMessageParity: _EnMessageParity = true;
+void _enMessageParity;
+
 export function interpolate(template: string, vars?: Record<string, string | number>): string {
   if (!vars) return template;
   return template.replace(/\{(\w+)\}/g, (_, key: string) =>

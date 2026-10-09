@@ -56,8 +56,8 @@ export default function HostsPage() {
           )
         }
       />
-      <QueryGate isLoading={false} error={error} onRetry={() => void refetch()}>
-        {isLoading ? (
+      <QueryGate isLoading={false} error={error} hasData={Boolean(data)} onRetry={() => void refetch()}>
+        {isLoading && !data ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-40" />
@@ -138,6 +138,7 @@ function HostSection({
 }) {
   const { t } = useI18n();
   const user = useSessionUser();
+  const [testingId, setTestingId] = useState<string | null>(null);
   if (!hosts.length) return null;
   return (
     <div className="space-y-3">
@@ -204,17 +205,22 @@ function HostSection({
                 <Button
                   size="sm"
                   variant="outline"
+                  disabled={testingId === host.id}
                   onClick={async () => {
+                    if (testingId) return;
+                    setTestingId(host.id);
                     try {
                       await api(`/api/hosts/${host.id}/test`, { method: "POST" });
                       toast.success(t("hosts.testOk"));
                       onRefresh();
                     } catch (e) {
                       toast.error(e instanceof Error ? e.message : t("common.failed"));
+                    } finally {
+                      setTestingId((current) => (current === host.id ? null : current));
                     }
                   }}
                 >
-                  {t("hosts.test")}
+                  {testingId === host.id ? t("common.loading") : t("hosts.test")}
                 </Button>
                 <HostMaintenanceButton
                   host={host}

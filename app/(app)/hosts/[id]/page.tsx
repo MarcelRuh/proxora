@@ -66,7 +66,7 @@ export default function HostDetailPage() {
     queryFn: () => api<{ host: PublicHost }>(`/api/hosts/${params.id}`),
   });
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="proxora-panel p-6">
         <p className="font-medium">{t("hosts.connectionFailed")}</p>
@@ -137,7 +137,7 @@ export default function HostDetailPage() {
           </div>
         }
       />
-      <QueryGate isLoading={isPending && !data} error={null} onRetry={() => void refetch()}>
+      <QueryGate isLoading={isPending && !data} error={error} hasData={Boolean(data)} onRetry={() => void refetch()}>
       {meta?.host ? (
         <HostClusterCard hostId={params.id} isClusterMember={meta.host.isClusterMember} />
       ) : null}
@@ -240,34 +240,46 @@ export default function HostDetailPage() {
         );
       })}
       <Section title={t("nav.vms")} href="/vms" viewAll={t("hosts.viewAll")}>
-        {(data?.vms ?? []).map((vm) => (
-          <Row
-            key={`${vm.node}-${vm.vmid}`}
-            href={`/vms/${params.id}/${vm.node}/${vm.vmid}`}
-            id={vm.vmid}
-            name={`${vm.name} · ${vm.node}`}
-            status={vm.status}
-          />
-        ))}
+        {(data?.vms ?? []).length ? (
+          (data?.vms ?? []).map((vm) => (
+            <Row
+              key={`${vm.node}-${vm.vmid}`}
+              href={`/vms/${params.id}/${vm.node}/${vm.vmid}`}
+              id={vm.vmid}
+              name={`${vm.name} · ${vm.node}`}
+              status={vm.status}
+            />
+          ))
+        ) : (
+          <p className="py-2 text-sm text-muted-foreground">{t("dashboard.noGuests")}</p>
+        )}
       </Section>
       <Section title={t("nav.containers")} href="/containers" viewAll={t("hosts.viewAll")}>
-        {(data?.containers ?? []).map((ct) => (
-          <Row
-            key={`${ct.node}-${ct.vmid}`}
-            href={`/containers/${params.id}/${ct.node}/${ct.vmid}`}
-            id={ct.vmid}
-            name={`${ct.name} · ${ct.node}`}
-            status={ct.status}
-          />
-        ))}
+        {(data?.containers ?? []).length ? (
+          (data?.containers ?? []).map((ct) => (
+            <Row
+              key={`${ct.node}-${ct.vmid}`}
+              href={`/containers/${params.id}/${ct.node}/${ct.vmid}`}
+              id={ct.vmid}
+              name={`${ct.name} · ${ct.node}`}
+              status={ct.status}
+            />
+          ))
+        ) : (
+          <p className="py-2 text-sm text-muted-foreground">{t("dashboard.noGuests")}</p>
+        )}
       </Section>
       <Section title={t("nav.storage")} href="/storage" viewAll={t("hosts.viewAll")}>
-        {(data?.storage ?? []).map((s) => (
-          <div key={`${s.node ?? ""}-${s.storage}`} className="flex items-center justify-between border-t border-border py-2 text-sm">
-            <span>{s.storage}</span>
-            <span className="text-muted-foreground">{s.type}</span>
-          </div>
-        ))}
+        {(data?.storage ?? []).length ? (
+          (data?.storage ?? []).map((s) => (
+            <div key={`${s.node ?? ""}-${s.storage}`} className="flex items-center justify-between border-t border-border py-2 text-sm">
+              <span>{s.storage}</span>
+              <span className="text-muted-foreground">{s.type}</span>
+            </div>
+          ))
+        ) : (
+          <p className="py-2 text-sm text-muted-foreground">{t("storage.empty")}</p>
+        )}
       </Section>
       </QueryGate>
       {meta?.host ? (
