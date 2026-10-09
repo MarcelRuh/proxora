@@ -9,7 +9,7 @@ import { filterGuestsForUser } from "@/server/auth/session-core";
 import { userHasPermission } from "@/lib/permissions";
 import { ForbiddenError } from "@/lib/errors";
 import { loadHostInventory } from "@/server/services/inventory-cache";
-import { peekNodeCpuTempOutcome, readNodeCpuTemp } from "@/server/services/cpu-temp";
+import { peekNodeCpuTemp, peekNodeCpuTempOutcome, readNodeCpuTemp } from "@/server/services/cpu-temp";
 import { loadCpuTempSettings } from "@/server/services/cpu-temp-settings";
 
 const actionSchema = z.object({
@@ -22,37 +22,38 @@ export const GET = apiRoute("hosts.view", async (_req, session, params) => {
   const data = await withHostClient(params.id, session.user, async (client, host) => {
     const inv = await loadHostInventory(client, params.id);
     const tempSettings = await loadCpuTempSettings();
-    const details = await Promise.all(
-      inv.nodes
-        .filter((n) => n.node)
-        .map(async (n) => {
-          const node = n.node as string;
-          const reading = n.status === "offline" ? null : await readNodeCpuTemp(client, node).catch(() => null);
-          const outcome = n.status === "offline" ? undefined : peekNodeCpuTempOutcome(client, node);
-          return {
-            node,
-            online: n.status ?? "unknown",
-            status: {
-              cpu: n.cpu ?? 0,
-              memory: { used: n.mem ?? 0, total: n.maxmem ?? 0 },
-              rootfs: { used: n.disk ?? 0, total: n.maxdisk ?? 0 },
-              uptime: n.uptime ?? 0,
-              cpuTempC: reading?.celsius ?? null,
-              cpuTempHot: reading != null && reading.celsius >= tempSettings.alertCelsius,
-              cpuTempState:
-                n.status === "offline"
-                  ? "none"
-                  : reading
-                    ? "value"
-                    : outcome === "failed"
-                      ? "failed"
-                      : outcome === "none"
-                        ? "none"
-                        : "reading",
-            },
-          };
-        }),
-    );
+    const liveNodes = inv.nodes.filter((n) => n.node && n.status !== "offline").map((n) => n.node as string);
+    void Promise.all(liveNodes.map((node) => readNodeCpuTemp(client, node).catch(() => null)));
+    const details = inv.nodes
+      .filter((n) => n.node)
+      .map((n) => {
+        const node = n.node as string;
+        const offline = n.status === "offline";
+        const reading = offline ? null : peekNodeCpuTemp(client, node);
+        const outcome = offline ? undefined : peekNodeCpuTempOutcome(client, node);
+        const celsius = reading?.celsius ?? null;
+        return {
+          node,
+          online: n.status ?? "unknown",
+          status: {
+            cpu: n.cpu ?? 0,
+            memory: { used: n.mem ?? 0, total: n.maxmem ?? 0 },
+            rootfs: { used: n.disk ?? 0, total: n.maxdisk ?? 0 },
+            uptime: n.uptime ?? 0,
+            cpuTempC: celsius,
+            cpuTempHot: celsius != null && celsius >= tempSettings.alertCelsius,
+            cpuTempState: offline
+              ? ("none" as const)
+              : reading
+                ? ("value" as const)
+                : outcome === "failed"
+                  ? ("failed" as const)
+                  : outcome === "none"
+                    ? ("none" as const)
+                    : ("reading" as const),
+          },
+        };
+      });
     return {
       host: host.name,
       cpuTempAlertC: tempSettings.alertCelsius,

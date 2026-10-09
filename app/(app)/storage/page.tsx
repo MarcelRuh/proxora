@@ -93,7 +93,12 @@ export default function StoragePage() {
         title={t("storage.title")}
         description={t("storage.description")}
       />
-      <QueryGate isLoading={hostsPending || (hasHosts && isPending)} error={hostsError} onRetry={() => void refetchHosts()}>
+      <QueryGate
+        isLoading={(hostsPending && !hosts) || (hasHosts && isPending && !data)}
+        error={hostsError}
+        hasData={Boolean(data) || Boolean(hosts)}
+        onRetry={() => void refetchHosts()}
+      >
         {!hasHosts ? (
           <EmptyState title={t("storage.empty")} description={t("storage.emptyBody")} />
         ) : (

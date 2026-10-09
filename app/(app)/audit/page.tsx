@@ -40,7 +40,7 @@ export default function AuditPage() {
         title={t("audit.title")}
         description={t("audit.description")}
       />
-      <QueryGate isLoading={isLoading} error={error} onRetry={() => void refetch()}>
+      <QueryGate isLoading={isLoading && !data} error={error} hasData={Boolean(data)} onRetry={() => void refetch()}>
         {logs.length === 0 ? (
           <EmptyState title={t("audit.empty")} />
         ) : (

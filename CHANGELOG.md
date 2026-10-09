@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.17] – 2026-10-09
+
+### Fixed
+
+- Host detail no longer waits on CPU temperature shell reads; it shows the cache and refreshes in the background. Failed or empty sensor reads stay cached for five minutes.
+- Disk watch reuses guest-agent disk cache, caps agent scans, and uses lower concurrency.
+- Suite proxy rejects oversized rewrite bodies from Content-Length before buffering them. Tasks, storage, updates, and audit keep their lists when a poll fails.
+
 ## [2.2.16] – 2026-10-09
 
 ### Fixed

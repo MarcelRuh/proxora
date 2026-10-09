@@ -176,7 +176,7 @@ export default function UpdatesPage() {
         }
       />
 
-      <QueryGate isLoading={false} error={hostsError} onRetry={() => void refetchHosts()}>
+      <QueryGate isLoading={false} error={hostsError} hasData={Boolean(hosts)} onRetry={() => void refetchHosts()}>
         {hostFilter ? (
           <p className="mb-3 text-sm">
             {t("updates.filtered", { name: hosts?.hosts.find((h) => h.id === hostFilter)?.name ?? hostFilter })}

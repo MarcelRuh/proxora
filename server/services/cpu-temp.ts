@@ -4,6 +4,8 @@ import type { ProxmoxClient } from "@/server/proxmox/client";
 import { readNodeHwmon } from "@/server/services/node-hwmon";
 
 const CACHE_MS = 60_000;
+/** Keep “no sensors” / failed reads longer so host pages do not reopen termproxy often. */
+const CACHE_NEGATIVE_MS = 5 * 60_000;
 
 export type CpuTempOutcome = "value" | "none" | "failed";
 
@@ -81,7 +83,8 @@ async function readUncached(
 export function readNodeCpuTemp(client: ProxmoxClient, node: string): Promise<CpuTempReading | null> {
   const key = cacheKey(client, node);
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_MS) return Promise.resolve(hit.value);
+  const ttl = hit?.outcome === "value" ? CACHE_MS : CACHE_NEGATIVE_MS;
+  if (hit && Date.now() - hit.at < ttl) return Promise.resolve(hit.value);
   const pending = inflight.get(key);
   if (pending) return pending;
   const job = readUncached(client, node)

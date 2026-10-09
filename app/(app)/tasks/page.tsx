@@ -58,7 +58,7 @@ export default function TasksPage() {
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
   });
   const hasHosts = Boolean(hosts?.hosts.length);
-  const { data, isPending } = useQuery({
+  const { data, isPending, error: tasksError, refetch: refetchTasks } = useQuery({
     queryKey: ["tasks", hosts?.hosts.map((h) => h.id)],
     enabled: Boolean(hosts),
     queryFn: async () => {
@@ -136,7 +136,15 @@ export default function TasksPage() {
   return (
     <div className="space-y-4">
       <PageHeader kicker={t("page.ops")} title={t("tasks.title")} description={t("tasks.description")} />
-      <QueryGate isLoading={hostsPending || (hasHosts && isPending)} error={hostsError} onRetry={() => void refetchHosts()}>
+      <QueryGate
+        isLoading={(hostsPending && !hosts) || (hasHosts && isPending && !data)}
+        error={hostsError ?? tasksError}
+        hasData={Boolean(data) || Boolean(hosts)}
+        onRetry={() => {
+          void refetchHosts();
+          void refetchTasks();
+        }}
+      >
         {!hasHosts ? (
           <EmptyState title={t("hosts.empty")} description={t("hosts.emptyBody")} />
         ) : (

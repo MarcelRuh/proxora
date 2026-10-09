@@ -348,6 +348,13 @@ async function writeUpstream(
     return;
   }
 
+  const declared = Number(headerText(upstream.headers["content-length"]));
+  if (Number.isFinite(declared) && declared > TEXT_LIMIT) {
+    upstream.body.destroy();
+    send(res, 502, "Antwort der App ist zu groß");
+    return;
+  }
+
   const payload = await readText(upstream.body);
   if (payload.length > TEXT_LIMIT) {
     send(res, 502, "Antwort der App ist zu groß");
