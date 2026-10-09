@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/misc";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { mapPool } from "@/lib/async-pool";
 import { bytesToSize, percentage } from "@/lib/utils";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
@@ -32,6 +33,8 @@ type StorageResp = {
 
 type OpenStorage = { hostId: string; node: string; storage: string };
 
+const STORAGE_HOST_CONCURRENCY = 2;
+
 export default function StoragePage() {
   const { t } = useI18n();
   const [open, setOpen] = useState<OpenStorage | null>(null);
@@ -45,26 +48,23 @@ export default function StoragePage() {
     queryKey: ["storage", hostIds],
     enabled: Boolean(hosts),
     queryFn: async () => {
-      const rows = await Promise.all(
-        (hosts?.hosts ?? []).map(async (h) => {
-          try {
-            const r = await api<StorageResp>(`/api/hosts/${h.id}/storage`);
-            return { host: h, ...r };
-          } catch {
-            return { host: h, storage: [] as StorageResp["storage"], error: true };
-          }
-        }),
-      );
-      return rows;
+      return mapPool(hosts?.hosts ?? [], STORAGE_HOST_CONCURRENCY, async (h) => {
+        try {
+          const r = await api<StorageResp>(`/api/hosts/${h.id}/storage`);
+          return { host: h, ...r };
+        } catch {
+          return { host: h, storage: [] as StorageResp["storage"], error: true };
+        }
+      });
     },
-    refetchInterval: 60_000,
-    staleTime: 20_000,
+    refetchInterval: 90_000,
+    staleTime: 45_000,
     placeholderData: (previous) => previous,
   });
   const { data: diskAlerts } = useQuery({
     queryKey: ["disk-alerts"],
     queryFn: () => api<{ alertPercent: number }>("/api/disk-alerts"),
-    refetchInterval: 60_000,
+    refetchInterval: 90_000,
     retry: false,
   });
   const alertAt = diskAlerts?.alertPercent ?? 90;
@@ -72,20 +72,17 @@ export default function StoragePage() {
     queryKey: ["zfs", hostIds],
     enabled: Boolean(hosts),
     queryFn: async () => {
-      const rows = await Promise.all(
-        (hosts?.hosts ?? []).map(async (h) => {
-          try {
-            const r = await api<{ zfs: ZfsHostBlock["zfs"] }>(`/api/hosts/${h.id}/zfs`);
-            return { hostId: h.id, ...r } satisfies { hostId: string } & ZfsHostBlock;
-          } catch {
-            return { hostId: h.id, zfs: [], error: true };
-          }
-        }),
-      );
-      return rows;
+      return mapPool(hosts?.hosts ?? [], STORAGE_HOST_CONCURRENCY, async (h) => {
+        try {
+          const r = await api<{ zfs: ZfsHostBlock["zfs"] }>(`/api/hosts/${h.id}/zfs`);
+          return { hostId: h.id, ...r } satisfies { hostId: string } & ZfsHostBlock;
+        } catch {
+          return { hostId: h.id, zfs: [], error: true };
+        }
+      });
     },
-    refetchInterval: 60_000,
-    staleTime: 20_000,
+    refetchInterval: 90_000,
+    staleTime: 45_000,
     placeholderData: (previous) => previous,
   });
 

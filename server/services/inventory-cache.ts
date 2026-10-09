@@ -1,6 +1,6 @@
 import type { ClusterInventory, ProxmoxClient } from "@/server/proxmox/client";
 
-export const INVENTORY_TTL_MS = 15_000;
+export const INVENTORY_TTL_MS = 60_000;
 
 type CachedInventory = ClusterInventory & { at: number };
 

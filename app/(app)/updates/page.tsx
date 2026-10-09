@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmAction } from "@/components/confirm-action";
 import { WebConsole } from "@/components/console/web-console";
 import { api } from "@/lib/api";
+import { mapPool } from "@/lib/async-pool";
 import { mergeHostUpdateDetails } from "@/lib/apt-updates";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
@@ -29,6 +30,8 @@ const JOB_STATUS: Record<string, MessageKey> = {
   FAILED: "updates.job.FAILED",
   CANCELLED: "updates.job.CANCELLED",
 };
+
+const UPDATE_HOST_CONCURRENCY = 2;
 
 type AptPackage = { Package: string; Version?: string; OldVersion?: string };
 type HostUpdates = {
@@ -64,23 +67,21 @@ export default function UpdatesPage() {
     queryKey: ["update-details", hosts?.hosts.map((h) => h.id)],
     enabled: Boolean(hosts),
     queryFn: async () => {
-      return Promise.all(
-        (hosts?.hosts ?? []).map(async (h) => {
-          try {
-            const r = await api<{ version: string | null; updates: HostUpdates["updates"] }>(
-              `/api/hosts/${h.id}/updates`,
-            );
-            return { host: h, ...r, error: null as string | null };
-          } catch (e) {
-            return {
-              host: h,
-              version: h.proxmoxVersion,
-              updates: [],
-              error: e instanceof Error ? e.message : t("updates.listFailed"),
-            };
-          }
-        }),
-      );
+      return mapPool(hosts?.hosts ?? [], UPDATE_HOST_CONCURRENCY, async (h) => {
+        try {
+          const r = await api<{ version: string | null; updates: HostUpdates["updates"] }>(
+            `/api/hosts/${h.id}/updates`,
+          );
+          return { host: h, ...r, error: null as string | null };
+        } catch (e) {
+          return {
+            host: h,
+            version: h.proxmoxVersion,
+            updates: [],
+            error: e instanceof Error ? e.message : t("updates.listFailed"),
+          };
+        }
+      });
     },
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -128,8 +129,8 @@ export default function UpdatesPage() {
         .filter((h) => !hostFilter || h.id === hostFilter)
         .filter((h) => userHasPermission(user, "updates.check", h.id) && peerHostAllowsPermission(h, "updates.check"))
         .map((h) => h.id);
-      const results = await Promise.allSettled(
-        ids.map(async (id) => {
+      const results = await mapPool(ids, UPDATE_HOST_CONCURRENCY, async (id) => {
+        try {
           const data = await api<{ version: string | null; updates: HostUpdates["updates"] }>(
             `/api/hosts/${id}/updates`,
             {
@@ -137,11 +138,13 @@ export default function UpdatesPage() {
               body: JSON.stringify({ action: "check" }),
             },
           );
-          return { id, data };
-        }),
-      );
-      const ok = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
-      const failed = results.filter((r) => r.status === "rejected").length;
+          return { id, data, ok: true as const };
+        } catch {
+          return { id, ok: false as const };
+        }
+      });
+      const ok = results.flatMap((r) => (r.ok ? [{ id: r.id, data: r.data }] : []));
+      const failed = results.filter((r) => !r.ok).length;
       return { ok, failed };
     },
     onSuccess: ({ ok, failed }) => {

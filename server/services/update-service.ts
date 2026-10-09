@@ -1,9 +1,12 @@
+import { mapPool } from "@/lib/async-pool";
 import { prisma } from "@/lib/db";
 import type { SessionUser } from "@/server/auth/session";
 import { notifyAptUpdates, persistAptSnapshot } from "@/server/services/apt-refresh";
 import { withHostClient } from "@/server/services/host-service";
 import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
 import type { ProxmoxClient } from "@/server/proxmox/client";
+
+const UPDATE_NODE_CONCURRENCY = 2;
 
 export type NodeUpdates = {
   node: string;
@@ -34,12 +37,10 @@ async function storeSnapshot(
 export async function listHostUpdates(hostId: string, user: SessionUser, node?: string) {
   return withHostClient(hostId, user, async (client, host) => {
     const nodes = await nodesFor(client, hostId, node);
-    const updates: NodeUpdates[] = await Promise.all(
-      nodes.map(async (n) => {
-        const packages = await client.updates.list(n.node);
-        return { node: n.node, packages, count: packages.length };
-      }),
-    );
+    const updates: NodeUpdates[] = await mapPool(nodes, UPDATE_NODE_CONCURRENCY, async (n) => {
+      const packages = await client.updates.list(n.node);
+      return { node: n.node, packages, count: packages.length };
+    });
     return { version: host.proxmoxVersion, updates };
   });
 }

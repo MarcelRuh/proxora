@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { QueryGate } from "@/components/layout/query-gate";
 import { EmptyState } from "@/components/ui/misc";
 import { api } from "@/lib/api";
+import { mapPool } from "@/lib/async-pool";
 import { normalizeProxmoxTaskLog } from "@/lib/backup";
 import type { PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
@@ -30,6 +31,7 @@ import {
 } from "@/lib/proxmox-tasks";
 
 const selectClass = "h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm";
+const TASK_HOST_CONCURRENCY = 2;
 
 type Task = {
   upid: string;
@@ -60,16 +62,14 @@ export default function TasksPage() {
     queryKey: ["tasks", hosts?.hosts.map((h) => h.id)],
     enabled: Boolean(hosts),
     queryFn: async () => {
-      const rows = await Promise.all(
-        (hosts?.hosts ?? []).map(async (h) => {
-          try {
-            const r = await api<{ tasks: Task[] }>(`/api/hosts/${h.id}/tasks`);
-            return r.tasks.map((row) => ({ ...row, hostId: h.id, hostName: h.name }));
-          } catch {
-            return [];
-          }
-        }),
-      );
+      const rows = await mapPool(hosts?.hosts ?? [], TASK_HOST_CONCURRENCY, async (h) => {
+        try {
+          const r = await api<{ tasks: Task[] }>(`/api/hosts/${h.id}/tasks`);
+          return r.tasks.map((row) => ({ ...row, hostId: h.id, hostName: h.name }));
+        } catch {
+          return [] as Row[];
+        }
+      });
       return rows.flat().sort((a, b) => b.starttime - a.starttime);
     },
     refetchInterval: (q) => tasksPollIntervalMs(q.state.data),

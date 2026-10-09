@@ -18,7 +18,12 @@ import { guestHasTag, parseGuestTags, uniqueGuestTags } from "@/lib/guest-tags";
 import { bulkActionFits, guestRowKey, type BulkGuestAction } from "@/lib/guest-bulk";
 import { uniqueGuestIps } from "@/lib/guest-ip-display";
 import { formatUptime } from "@/lib/utils";
-import { GUEST_ROW_ESTIMATE_PX, GUEST_TABLE_VIRTUALIZE_AFTER, windowRows } from "@/lib/table-window";
+import {
+  GUEST_CARD_ESTIMATE_PX,
+  GUEST_ROW_ESTIMATE_PX,
+  GUEST_TABLE_VIRTUALIZE_AFTER,
+  windowRows,
+} from "@/lib/table-window";
 import type { Guest, PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useSessionUser } from "@/components/auth/session-user";
@@ -103,10 +108,13 @@ export const GuestTable = memo(function GuestTable({
   }, [items, q, status, tag, hostFilter, hostId, sort, showHost]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const mobileScrollRef = useRef<HTMLDivElement>(null);
   const firstRowRef = useRef<HTMLTableRowElement>(null);
   const askedIpsAt = useRef(new Map<string, number>());
   const [scrollTop, setScrollTop] = useState(0);
   const [viewH, setViewH] = useState(560);
+  const [mobileScrollTop, setMobileScrollTop] = useState(0);
+  const [mobileViewH, setMobileViewH] = useState(560);
   const [rowH, setRowH] = useState(GUEST_ROW_ESTIMATE_PX);
   const virtualize = filtered.length > GUEST_TABLE_VIRTUALIZE_AFTER;
 
@@ -126,8 +134,27 @@ export const GuestTable = memo(function GuestTable({
     };
   }, [virtualize]);
 
+  useEffect(() => {
+    if (!virtualize) return;
+    const el = mobileScrollRef.current;
+    if (!el) return;
+    const onScroll = () => setMobileScrollTop(el.scrollTop);
+    const ro = new ResizeObserver(() => setMobileViewH(el.clientHeight));
+    el.addEventListener("scroll", onScroll, { passive: true });
+    ro.observe(el);
+    setMobileViewH(el.clientHeight);
+    setMobileScrollTop(el.scrollTop);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+    };
+  }, [virtualize]);
+
   const win = virtualize
     ? windowRows(filtered, scrollTop, viewH, rowH)
+    : { start: 0, end: filtered.length, padTop: 0, padBottom: 0, slice: filtered };
+  const mobileWin = virtualize
+    ? windowRows(filtered, mobileScrollTop, mobileViewH, GUEST_CARD_ESTIMATE_PX)
     : { start: 0, end: filtered.length, padTop: 0, padBottom: 0, slice: filtered };
 
   const firstVisibleKey = win.slice[0] ? rowKey(win.slice[0]) : "";
@@ -660,7 +687,14 @@ export const GuestTable = memo(function GuestTable({
           </tbody>
         </table>
       </div>
-      <div className="grid gap-2 md:hidden">
+      <div
+        ref={mobileScrollRef}
+        className={
+          virtualize
+            ? "grid max-h-[min(70vh,720px)] gap-2 overflow-auto md:hidden"
+            : "grid gap-2 md:hidden"
+        }
+      >
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 w-full" />)
         ) : filtered.length === 0 ? (
@@ -668,7 +702,9 @@ export const GuestTable = memo(function GuestTable({
             {items.length === 0 ? (noGrants ? t("guests.noGrants") : t("dashboard.noGuests")) : t("table.noMatches")}
           </p>
         ) : (
-          filtered.map((g) => {
+          <>
+          {mobileWin.padTop > 0 ? <div aria-hidden style={{ height: mobileWin.padTop }} /> : null}
+          {mobileWin.slice.map((g) => {
             const hid = g.hostId ?? hostId ?? "";
             const row = rowKind(g);
             const prefix = row === "vm" ? "vm" : "lxc";
@@ -779,7 +815,9 @@ export const GuestTable = memo(function GuestTable({
                 </div>
               </article>
             );
-          })
+          })}
+          {mobileWin.padBottom > 0 ? <div aria-hidden style={{ height: mobileWin.padBottom }} /> : null}
+          </>
         )}
       </div>
     </div>

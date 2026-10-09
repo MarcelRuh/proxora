@@ -1,4 +1,5 @@
 export const GUEST_ROW_ESTIMATE_PX = 56;
+export const GUEST_CARD_ESTIMATE_PX = 132;
 export const GUEST_TABLE_VIRTUALIZE_AFTER = 48;
 export const GUEST_TABLE_OVERSCAN = 8;
 

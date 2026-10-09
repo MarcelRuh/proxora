@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import type { Dashboard, DashboardGuests, Guest } from "@/lib/types";
 
 export const DASHBOARD_OVERVIEW_POLL_MS = 90_000;
-export const DASHBOARD_GUESTS_POLL_MS = 45_000;
+export const DASHBOARD_GUESTS_POLL_MS = 60_000;
 export const DASHBOARD_POLL_MS = DASHBOARD_GUESTS_POLL_MS;
 
 export function invalidateDashboardQueries(qc: QueryClient) {

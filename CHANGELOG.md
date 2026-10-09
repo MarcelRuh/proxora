@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.16] – 2026-10-09
+
+### Fixed
+
+- Tasks, updates, and storage no longer hit every host and node at once. Polling while tasks run is slower (8s), and inventory caches last a minute so guest lists refresh less often against Proxmox.
+- Creating a guest with a static IP caps config lookups and scans hosts with limited concurrency.
+- The mobile guest list uses the same windowing as the desktop table once there are many rows.
+
 ## [2.2.15] – 2026-10-09
 
 ### Fixed

@@ -6,7 +6,10 @@ import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
+import { mapPool } from "@/lib/async-pool";
 import { taskGuestLabel, taskTypeLabel } from "@/lib/proxmox-tasks";
+
+const TASK_NODE_CONCURRENCY = 2;
 
 export const GET = apiRoute("tasks.view", async (req, session, params) => {
   const url = new URL(req.url);
@@ -14,7 +17,9 @@ export const GET = apiRoute("tasks.view", async (req, session, params) => {
   const data = await withHostClient(params.id, session.user, async (client) => {
     const inv = await loadHostInventory(client, params.id).catch(() => ({ vms: [], containers: [], nodes: [] }));
     const nodes = node ? [{ node }] : inventoryNodeNames(inv).map((name) => ({ node: name }));
-    const taskLists = await Promise.all(nodes.map((n) => client.tasks.list(n.node, { source: "all", limit: 80 })));
+    const taskLists = await mapPool(nodes, TASK_NODE_CONCURRENCY, (n) =>
+      client.tasks.list(n.node, { source: "all", limit: 50 }),
+    );
     const names = new Map<string, { name: string; kind: "vm" | "lxc" }>();
     for (const guest of inv.vms) names.set(String(guest.vmid), { name: guest.name, kind: "vm" });
     for (const guest of inv.containers) names.set(String(guest.vmid), { name: guest.name, kind: "lxc" });

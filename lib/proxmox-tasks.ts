@@ -103,8 +103,8 @@ export function taskRunState(task: TaskLike): TaskRunState {
   return "failed";
 }
 
-export const TASKS_POLL_IDLE_MS = 30_000;
-export const TASKS_POLL_ACTIVE_MS = 3_000;
+export const TASKS_POLL_IDLE_MS = 45_000;
+export const TASKS_POLL_ACTIVE_MS = 8_000;
 
 export function tasksPollIntervalMs(tasks: TaskLike[] | undefined): number {
   if (!tasks?.length) return TASKS_POLL_IDLE_MS;

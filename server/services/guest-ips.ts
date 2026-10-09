@@ -1,3 +1,4 @@
+import { mapPool } from "@/lib/async-pool";
 import { parseGuestConfigIps } from "@/lib/create-ip";
 import { peekGuestIpCache, rememberGuestIpCache } from "@/server/services/guest-ip-cache";
 import { hostsInGuestIdentityScope, identityConflict } from "@/lib/guest-identity";
@@ -10,6 +11,11 @@ import type { GuestListItem } from "@/server/proxmox/types";
 import { clientForHost } from "@/server/services/host-service";
 import { loadHostInventory } from "@/server/services/inventory-cache";
 import { HostOrigin, type Host } from "@prisma/client";
+
+/** Cap on-demand config reads so opening Create with static IP cannot fan out forever. */
+export const GUEST_IP_CONFIG_CONCURRENCY = 2;
+export const GUEST_IP_CONFIG_LIMIT = 60;
+export const GUEST_IP_HOST_CONCURRENCY = 2;
 
 async function listedGuests(client: ProxmoxClient, hostId: string) {
   const guests = await loadHostInventory(client, hostId).catch(() => ({
@@ -48,22 +54,18 @@ export async function collectUsedGuestIps(
     }
   }
 
-  let i = 0;
-  const workers = Array.from({ length: Math.min(4, missing.length) }, async () => {
-    while (i < missing.length) {
-      const g = missing[i++];
-      if (!g?.node || !g.vmid) continue;
-      const cfg =
-        g.kind === "vm"
-          ? await client.vms.config(g.node, g.vmid).catch(() => null)
-          : await client.lxc.config(g.node, g.vmid).catch(() => null);
-      if (!cfg) continue;
-      const found = parseGuestConfigIps(cfg);
-      rememberGuestIpCache(client, g.kind, g.node, g.vmid, found);
-      for (const ip of found) ips.add(ip);
-    }
+  const toFetch = missing.slice(0, GUEST_IP_CONFIG_LIMIT);
+  await mapPool(toFetch, GUEST_IP_CONFIG_CONCURRENCY, async (g) => {
+    if (!g.node || !g.vmid) return;
+    const cfg =
+      g.kind === "vm"
+        ? await client.vms.config(g.node, g.vmid).catch(() => null)
+        : await client.lxc.config(g.node, g.vmid).catch(() => null);
+    if (!cfg) return;
+    const found = parseGuestConfigIps(cfg);
+    rememberGuestIpCache(client, g.kind, g.node, g.vmid, found);
+    for (const ip of found) ips.add(ip);
   });
-  await Promise.all(workers);
   return { vmids, ips: [...ips] };
 }
 
@@ -80,20 +82,18 @@ async function forEachHostInScope<T>(
     ).map((h) => h.id),
   );
   const hosts = all.filter((h) => scopedIds.has(h.id));
-  return Promise.all(
-    hosts.map(async (host) => {
-      try {
-        const client = await clientForHost(host);
-        return await fn(client, host.id);
-      } catch (error) {
-        logger.warn(
-          { host: host.name, err: error instanceof Error ? error.message : String(error) },
-          "Skipping host while collecting used guest IDs",
-        );
-        return empty;
-      }
-    }),
-  );
+  return mapPool(hosts, GUEST_IP_HOST_CONCURRENCY, async (host) => {
+    try {
+      const client = await clientForHost(host);
+      return await fn(client, host.id);
+    } catch (error) {
+      logger.warn(
+        { host: host.name, err: error instanceof Error ? error.message : String(error) },
+        "Skipping host while collecting used guest IDs",
+      );
+      return empty;
+    }
+  });
 }
 
 export async function collectUsedVmidsForHost(target: Host): Promise<number[]> {
