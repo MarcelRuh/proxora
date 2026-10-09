@@ -31,7 +31,12 @@ export function SuiteFrame({ id }: { id: string }) {
     <div className="flex h-[calc(100dvh-3.25rem)] min-h-0 flex-col lg:h-dvh">
       <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
         <p className="text-sm font-medium">{app.name}</p>
-        <a href={app.url} target="_blank" rel="noreferrer" className="text-sm text-primary underline-offset-4 hover:underline">
+        <a
+          href={`/ora/${app.id}/`}
+          target="_blank"
+          rel="noreferrer"
+          className="text-sm text-primary underline-offset-4 hover:underline"
+        >
           {t("suite.open")}
         </a>
       </div>

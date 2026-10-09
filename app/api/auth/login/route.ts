@@ -34,6 +34,10 @@ export async function POST(request: NextRequest) {
       return json({ error: "Too many login attempts", code: "RATE_LIMITED" }, 429);
     }
     const body = loginSchema.parse(await request.json());
+    const usernameKey = body.username?.trim().toLowerCase();
+    if (usernameKey && !rateLimit(`login-user:${usernameKey}`, 12, 15 * 60 * 1000)) {
+      return json({ error: "Too many login attempts", code: "RATE_LIMITED" }, 429);
+    }
 
     if (body.ticket && body.totp) {
       const ticket = readTotpTicket(body.ticket);

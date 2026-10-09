@@ -13,7 +13,7 @@ import { clientForHost } from "@/server/services/host-service";
 import { handleFederationWebsocket } from "@/server/ws/federation-ws";
 import { consumeProxmoxVncHandshake, wsPayloadToBuffer } from "@/lib/vnc-handshake";
 import { rfbPasswordFromVncProxy } from "@/lib/vnc-password";
-import { isTermproxySerialError, vmHasGraphics, vmHasSerialSocket, vmHasTablet } from "@/lib/guest-console";
+import { isTermproxySerialError, vmHasGraphics, vmHasSerialSocket } from "@/lib/guest-console";
 
 function cookieValue(req: IncomingMessage, name: string): string | undefined {
   const header = req.headers.cookie;
@@ -45,7 +45,12 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
   }
   const hostId = url.searchParams.get("hostId") ?? "";
   const node = url.searchParams.get("node") ?? "";
-  const kind = (url.searchParams.get("kind") ?? "node") as ConsoleKind;
+  const kindRaw = url.searchParams.get("kind") ?? "node";
+  if (kindRaw !== "node" && kindRaw !== "vm" && kindRaw !== "lxc") {
+    browser.close(4400, "Invalid console kind");
+    return;
+  }
+  const kind = kindRaw as ConsoleKind;
   const vmid = url.searchParams.get("vmid");
   const cols = Number(url.searchParams.get("cols") ?? 80);
   const rows = Number(url.searchParams.get("rows") ?? 24);
@@ -57,6 +62,10 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
   }
   if (display === "vga" && kind !== "vm") {
     browser.close(4400, "VGA console is only available for VMs");
+    return;
+  }
+  if ((kind === "vm" || kind === "lxc") && !(vmid && Number.isInteger(Number(vmid)) && Number(vmid) >= 1)) {
+    browser.close(4400, "Invalid vmid");
     return;
   }
 
@@ -112,21 +121,28 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
 
     const proxmox = await clientForHost(host);
     if (kind === "vm" && vmid) {
+      let cfg: Awaited<ReturnType<typeof proxmox.vms.config>>;
       try {
-        const cfg = await proxmox.vms.config(node, Number(vmid));
-        if (display === "vga" && !vmHasGraphics(cfg.vga)) {
-          sendBrowserError(browser, "This VM has no display (vga=none). Use serial or set VGA in the config.", "no-vga");
-          browser.close(4400, "VM has no VGA");
-          return;
-        }
-        if (display === "serial") {
-          await ensureVmSerialSocket(proxmox, node, Number(vmid), cfg.serial0);
-        }
-        if (display === "vga") {
-          await ensureVmTablet(proxmox, node, Number(vmid), cfg.tablet);
-        }
+        cfg = await proxmox.vms.config(node, Number(vmid));
       } catch (error) {
         logger.warn({ err: error instanceof Error ? error.message : error }, "VM console config check failed");
+        sendBrowserError(browser, "Could not read VM config for the console.", "config");
+        browser.close(1011, "VM config unavailable");
+        return;
+      }
+      if (display === "vga" && !vmHasGraphics(cfg.vga)) {
+        sendBrowserError(browser, "This VM has no display (vga=none). Use serial or set VGA in the config.", "no-vga");
+        browser.close(4400, "VM has no VGA");
+        return;
+      }
+      if (display === "serial" && !vmHasSerialSocket(cfg.serial0)) {
+        sendBrowserError(
+          browser,
+          "This VM has no serial socket (serial0=socket). Add it in the VM config, then open serial again.",
+          "no-serial",
+        );
+        browser.close(4400, "No serial interface");
+        return;
       }
     }
 
@@ -211,26 +227,6 @@ function sendBrowserError(browser: WebSocket, message: string, code?: string) {
   }
 }
 
-async function ensureVmSerialSocket(
-  proxmox: Awaited<ReturnType<typeof clientForHost>>,
-  node: string,
-  vmid: number,
-  serial0: unknown,
-) {
-  if (vmHasSerialSocket(serial0)) return;
-  await proxmox.vms.updateConfig(node, vmid, { serial0: "socket" });
-}
-
-async function ensureVmTablet(
-  proxmox: Awaited<ReturnType<typeof clientForHost>>,
-  node: string,
-  vmid: number,
-  tablet: unknown,
-) {
-  if (vmHasTablet(tablet)) return;
-  await proxmox.vms.updateConfig(node, vmid, { tablet: 1 });
-}
-
 function pipeTerm(
   browser: WebSocket,
   remote: WebSocket,
@@ -239,12 +235,22 @@ function pipeTerm(
   rows: number,
   closeBoth: (code?: number, reason?: string) => void,
 ) {
+  let handshake = true;
+  let handshakeBuf = Buffer.alloc(0);
+  const finish = (code?: number, reason?: string) => {
+    clearTimeout(handshakeTimer);
+    closeBoth(code, reason);
+  };
+  const handshakeTimer = setTimeout(() => {
+    if (!handshake) return;
+    sendBrowserError(browser, "Console handshake timed out.", "timeout");
+    finish(1011, "Console handshake timeout");
+  }, 15_000);
+
   remote.on("open", () => {
     remote.send(`${term.user}:${term.ticket}\n`);
   });
 
-  let handshake = true;
-  let handshakeBuf = Buffer.alloc(0);
   remote.on("message", (data) => {
     const chunk = asBuffer(data);
     if (handshake) {
@@ -252,13 +258,14 @@ function pipeTerm(
       const text = handshakeBuf.toString("latin1");
       if (!text.startsWith("OK") && handshakeBuf.length < 2) return;
       handshake = false;
+      clearTimeout(handshakeTimer);
       if (browser.readyState === WebSocket.OPEN) {
         browser.send(JSON.stringify({ type: "status", status: "connected" }));
       }
       const rest = text.replace(/^OK\r?\n?/, "");
       if (isTermproxySerialError(text)) {
         sendBrowserError(browser, "unable to find a serial interface", "no-serial");
-        closeBoth(1011, "No serial interface");
+        finish(1011, "No serial interface");
         return;
       }
       if (rest && browser.readyState === WebSocket.OPEN) browser.send(Buffer.from(rest, "latin1"));
@@ -269,7 +276,7 @@ function pipeTerm(
     }
     if (isTermproxySerialError(chunk.toString("latin1"))) {
       sendBrowserError(browser, "unable to find a serial interface", "no-serial");
-      closeBoth(1011, "No serial interface");
+      finish(1011, "No serial interface");
       return;
     }
     if (browser.readyState === WebSocket.OPEN) browser.send(data);
@@ -301,13 +308,13 @@ function pipeTerm(
     }
   });
 
-  remote.on("close", () => closeBoth());
-  browser.on("close", () => closeBoth());
+  remote.on("close", () => finish());
+  browser.on("close", () => finish());
   remote.on("error", (err) => {
     logger.warn({ err: err.message }, "Console upstream error");
-    closeBoth(1011, "Upstream error");
+    finish(1011, "Upstream error");
   });
-  browser.on("error", () => closeBoth());
+  browser.on("error", () => finish());
 }
 
 async function openVmVncProxy(

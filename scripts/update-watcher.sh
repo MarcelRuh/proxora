@@ -14,6 +14,7 @@ SIGNAL_VOLUME="${PROXORA_SIGNAL_VOLUME:-proxora_update_signal}"
 APPLY="${INSTALL_DIR}/scripts/self-update-apply.sh"
 REQUEST="${SIGNAL_DIR}/request"
 LOCK="${SIGNAL_DIR}/.proxora-update.lock"
+APPLY_LOCK="${INSTALL_DIR}/.proxora-update.lock"
 
 if ! echo "$REPO" | grep -Eq '^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$'; then
   echo "ERROR: invalid PROXORA_REPO" >&2
@@ -32,9 +33,13 @@ updater_running() {
   docker ps --filter "name=^${UPDATER_NAME}$" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -qx "$UPDATER_NAME"
 }
 
+apply_busy() {
+  updater_running || [ -d "$APPLY_LOCK" ]
+}
+
 sync_lock() {
-  if updater_running; then
-    touch "$LOCK"
+  if apply_busy; then
+    : > "$LOCK"
   else
     rm -f "$LOCK"
   fi
@@ -72,13 +77,15 @@ sync_lock
 
 while true; do
   if [ -f "$REQUEST" ]; then
-    rm -f "$REQUEST"
-    if updater_running; then
+    if apply_busy; then
       echo "==> Update already running"
+      rm -f "$REQUEST"
     else
       echo "==> Update requested"
-      touch "$LOCK"
-      if ! start_updater; then
+      : > "$LOCK"
+      if start_updater; then
+        rm -f "$REQUEST"
+      else
         echo "==> Failed to start updater" >&2
         rm -f "$LOCK"
       fi

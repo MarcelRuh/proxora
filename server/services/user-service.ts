@@ -166,7 +166,7 @@ export async function updateUser(id: string, input: z.infer<typeof updateUserSch
     where: { id },
     data,
   });
-  if (input.password) await destroyUserSessions(id);
+  if (input.password || input.status === "DISABLED") await destroyUserSessions(id);
   if (input.hosts || input.hostIds) {
     const hostRows = hostRowsFromInput(input.hosts, input.hostIds);
     await prisma.userHostAccess.deleteMany({ where: { userId: id } });

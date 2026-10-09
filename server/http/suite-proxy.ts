@@ -12,7 +12,7 @@ import {
   embedContentSecurityPolicy,
   forwardedHost,
   forwardedScheme,
-  externalImageTarget,
+  resolveExternalImageTarget,
   isExternalImagePath,
   isProxyImageType,
   parseSuiteProxyUrl,
@@ -26,8 +26,13 @@ import {
   targetsSelf,
   upstreamTarget,
 } from "@/lib/suite-proxy";
+import { INVENTORY_VIEW_PERMISSIONS, userHasAnyPermission, userHasPermission } from "@/lib/permissions";
 import { getSessionFromToken } from "@/server/auth/session-core";
 import { loadSuiteEmbeds } from "@/server/services/suite-embeds";
+
+function canUseSuite(user: Parameters<typeof userHasPermission>[0]) {
+  return userHasAnyPermission(user, INVENTORY_VIEW_PERMISSIONS) || userHasPermission(user, "settings.view");
+}
 
 const insecureAgent = new Agent({
   connect: { rejectUnauthorized: false },
@@ -99,7 +104,7 @@ const IMAGE_BYTES = 2_000_000;
 
 async function writeExternalImage(res: ServerResponse, search: string) {
   const raw = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search).get("u") ?? "";
-  let current = externalImageTarget(raw);
+  let current = await resolveExternalImageTarget(raw);
   if (!current) {
     send(res, 400, "Bildadresse ungültig");
     return;
@@ -113,7 +118,10 @@ async function writeExternalImage(res: ServerResponse, search: string) {
       bodyTimeout: 10_000,
     });
     if (upstream.statusCode >= 300 && upstream.statusCode < 400) {
-      const next = externalImageTarget(new URL(headerText(upstream.headers.location), current).toString(), true);
+      const next = await resolveExternalImageTarget(
+        new URL(headerText(upstream.headers.location), current).toString(),
+        true,
+      );
       upstream.body.destroy();
       if (!next) {
         send(res, 502, "Bildadresse ungültig");
@@ -184,6 +192,10 @@ export async function handleSuiteProxy(req: IncomingMessage, res: ServerResponse
       res.end();
       return true;
     }
+    if (!canUseSuite(session.user)) {
+      send(res, 403, "Keine Berechtigung");
+      return true;
+    }
     if (parsed.bare) {
       res.writeHead(308, { Location: `${mount}/${parsed.search}`, "Cache-Control": "no-store" });
       res.end();
@@ -224,7 +236,7 @@ export async function handleSuiteProxyUpgrade(req: IncomingMessage, socket: Dupl
   if (!parsed) return false;
   try {
     const session = await getSessionFromToken(cookieValue(req, SESSION_COOKIE));
-    const app = session ? await findApp(parsed.id) : null;
+    const app = session && canUseSuite(session.user) ? await findApp(parsed.id) : null;
     if (!session || !app) {
       socket.destroy();
       return true;
@@ -337,7 +349,11 @@ async function writeUpstream(
   }
 
   const payload = await readText(upstream.body);
-  const rewritten = payload.length > TEXT_LIMIT ? payload : rewriteEmbedBody(payload, kind, mount);
+  if (payload.length > TEXT_LIMIT) {
+    send(res, 502, "Antwort der App ist zu groß");
+    return;
+  }
+  const rewritten = rewriteEmbedBody(payload, kind, mount);
   delete headers["content-length"];
   res.writeHead(upstream.statusCode, headers);
   res.end(rewritten);

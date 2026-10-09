@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.14] – 2026-10-09
+
+### Fixed
+
+- Self-update no longer clears a live lock, so two updates cannot run at once. The watcher keeps the busy flag until the apply lock is gone and only drops the request after the updater starts. An explicit release pin from the UI wins over “latest”.
+- Ora-Stack embeds need inventory or settings view rights. The image proxy blocks IPv6 link-local and IPv4-mapped loopback/metadata addresses and checks DNS before fetch. Large unrewritable responses return 502 instead of broken HTML. “Open in new tab” stays on the Proxora path.
+- The VM console no longer writes `tablet` or `serial0`. Missing serial is a clear error. Termproxy handshakes time out like VNC. Invalid kind/vmid is rejected early.
+- Login rate limits prefer `X-Real-IP` / the rightmost forwarded hop and also limit by username. Disabling a user ends their sessions immediately.
+- The sidebar shortcut and mobile drawer close without effect-driven setState churn.
+
 ## [2.2.13] – 2026-10-05
 
 ### Fixed

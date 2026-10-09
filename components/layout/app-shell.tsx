@@ -23,7 +23,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useState, Suspense, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, Suspense, type ComponentType, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
@@ -32,7 +32,7 @@ import { useAptSummary } from "@/components/layout/apt-update-alert";
 import { UiAtmosphere } from "@/components/layout/ui-atmosphere";
 import { BrandMark } from "@/components/layout/brand-mark";
 import type { SessionUser } from "@/lib/types";
-import { userHasAnyPermission, userHasPermission } from "@/lib/permissions";
+import { INVENTORY_VIEW_PERMISSIONS, userHasAnyPermission, userHasPermission } from "@/lib/permissions";
 import type { Permission } from "@/lib/permissions";
 import { navItemVisible } from "@/lib/home-path";
 import { APP_NAME, APP_VERSION } from "@/lib/version";
@@ -83,7 +83,12 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [navPath, setNavPath] = useState(pathname);
   const [searchOpen, setSearchOpen] = useState(false);
+  if (pathname !== navPath) {
+    setNavPath(pathname);
+    setOpen(false);
+  }
   const { data: embeds } = useQuery({
     queryKey: ["embeds"],
     queryFn: () => api<SuiteEmbeds>("/api/embeds"),
@@ -91,14 +96,11 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
   });
   const stackApps = embeds?.apps ?? [];
   const framePage = pathname.startsWith("/stack/");
-  const [shortcut, setShortcut] = useState("Ctrl+K");
-  useEffect(() => {
-    if (/Mac|iPhone|iPad/.test(navigator.platform)) setShortcut("⌘K");
-  }, []);
-
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+  const shortcut = useSyncExternalStore(
+    () => () => {},
+    () => (/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl+K"),
+    () => "Ctrl+K",
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -138,7 +140,9 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
           {NAV_GROUPS.map((group) => {
             const items = NAV.filter((item) => item.group === group.id && navItemVisible(user, item.href, item.anyOf));
-            const suite = group.id === "ora" && stackApps.length > 0;
+            const canSuite =
+              userHasAnyPermission(user, INVENTORY_VIEW_PERMISSIONS) || userHasPermission(user, "settings.view");
+            const suite = group.id === "ora" && canSuite && stackApps.length > 0;
             if (!items.length && !suite) return null;
             return (
               <div key={group.id} className="mb-2">
@@ -159,7 +163,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
                     }
                   />
                 ))}
-                {group.id === "ora"
+                {suite
                   ? stackApps.map((app) => (
                       <NavLink
                         key={app.id}

@@ -22,11 +22,28 @@ mirror_progress() {
   fi
 }
 
-if [ -d "$LOCK_DIR" ]; then
-  echo "==> Clearing leftover update lock"
+# Exclusive lock via mkdir. Clear only when the recorded pid is gone.
+acquire_update_lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    printf '%s\n' "$$" > "${LOCK_DIR}/pid"
+    return 0
+  fi
+  old_pid=""
+  if [ -f "${LOCK_DIR}/pid" ]; then
+    old_pid="$(tr -d '[:space:]' < "${LOCK_DIR}/pid" 2>/dev/null || true)"
+  fi
+  if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+    return 1
+  fi
+  echo "==> Clearing stale update lock"
   rm -rf "$LOCK_DIR"
-fi
-if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    printf '%s\n' "$$" > "${LOCK_DIR}/pid"
+    return 0
+  fi
+  return 1
+}
+if ! acquire_update_lock; then
   echo "ERROR: another Proxora update is already running" >&2
   printf 'percent=%s\nstep=%s\ndetail=%s\n' 0 error "Update already running" > "$PROGRESS_FILE"
   mirror_progress
@@ -148,9 +165,13 @@ github_api_latest_tag() {
   fi 2>/dev/null | tr ',' '\n' | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1
 }
 
-# Highest semver among github.com + git tags. HTML /releases/latest can lag;
-# api.github.com can 403. Leftover target is last-resort only.
+# Prefer an explicit pin from the UI/watcher, then the highest remote semver.
 resolve_release_tag() {
+  if valid_release_tag "$RELEASE_TAG"; then echo "$RELEASE_TAG"; return 0; fi
+  if [ -n "$SIGNAL_DIR" ] && [ -f "${SIGNAL_DIR}/target" ]; then
+    best="$(tr -d '[:space:]' < "${SIGNAL_DIR}/target")"
+    if valid_release_tag "$best"; then echo "$best"; return 0; fi
+  fi
   best="$(
     printf '%s\n' \
       "$(github_html_latest_tag || true)" \
@@ -160,11 +181,6 @@ resolve_release_tag() {
   if valid_release_tag "$best"; then echo "$best"; return 0; fi
   best="$(github_api_latest_tag || true)"
   if valid_release_tag "$best"; then echo "$best"; return 0; fi
-  if valid_release_tag "$RELEASE_TAG"; then echo "$RELEASE_TAG"; return 0; fi
-  if [ -n "$SIGNAL_DIR" ] && [ -f "${SIGNAL_DIR}/target" ]; then
-    best="$(tr -d '[:space:]' < "${SIGNAL_DIR}/target")"
-    if valid_release_tag "$best"; then echo "$best"; return 0; fi
-  fi
   return 1
 }
 

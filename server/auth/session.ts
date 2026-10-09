@@ -45,7 +45,13 @@ export async function requirePermission(permission: Permission): Promise<AuthSes
 
 export async function clientIp(): Promise<string | undefined> {
   const h = await headers();
-  return h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? h.get("x-real-ip") ?? undefined;
+  const real = h.get("x-real-ip")?.trim();
+  if (real) return real;
+  const forwarded = h.get("x-forwarded-for");
+  if (!forwarded) return undefined;
+  // Rightmost hop is set by the nearest reverse proxy; left entries are client-spoofable.
+  const parts = forwarded.split(",").map((part) => part.trim()).filter(Boolean);
+  return parts.at(-1);
 }
 
 export async function clientUserAgent(): Promise<string | undefined> {

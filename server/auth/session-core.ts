@@ -129,7 +129,10 @@ export async function getSessionFromToken(token: string | undefined | null): Pro
     }
     return null;
   }
-  if (record.user.status !== "ACTIVE") return null;
+  if (record.user.status !== "ACTIVE") {
+    await prisma.session.deleteMany({ where: { userId: record.userId } }).catch(() => undefined);
+    return null;
+  }
 
   return {
     id: record.id,

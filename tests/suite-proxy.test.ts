@@ -14,7 +14,9 @@ import {
   upstreamTarget,
   allowsInsecureTls,
   externalImageTarget,
+  isBlockedImageHost,
   isProxyImageType,
+  resolveExternalImageTarget,
 } from "@/lib/suite-proxy";
 
 const mount = "/ora/dockora";
@@ -132,11 +134,27 @@ describe("suite proxy rewriting", () => {
     expect(externalImageTarget("http://127.0.0.1/icon.png")).toBeNull();
     expect(externalImageTarget("http://169.254.169.254/latest")).toBeNull();
     expect(externalImageTarget("http://user:secret@10.0.0.8/icon.png")).toBeNull();
+    expect(externalImageTarget("http://[fe80::1]/icon.png")).toBeNull();
+    expect(externalImageTarget("http://[::ffff:127.0.0.1]/icon.png")).toBeNull();
+    expect(externalImageTarget("http://[::ffff:7f00:1]/icon.png")).toBeNull();
+    expect(isBlockedImageHost("fe80::1")).toBe(true);
+    expect(isBlockedImageHost("::ffff:a9fe:a9fe")).toBe(true);
+    expect(isBlockedImageHost("10.0.0.8")).toBe(false);
     expect(isProxyImageType("image/png; charset=binary")).toBe(true);
     expect(isProxyImageType("text/html")).toBe(false);
     const html = rewriteEmbedBody("<html><head><meta charset=\"utf-8\"/></head><body></body></html>", "html", mount);
     expect(html.indexOf("<script>")).toBeLessThan(html.indexOf("</head>"));
     expect(html).toContain('m="/ora/dockora"');
     expect(html).toContain("/ext-img?u=");
+    expect(html).toContain('hook("srcset"');
+  });
+
+  it("rejects image hosts that resolve to loopback", async () => {
+    await expect(
+      resolveExternalImageTarget("http://icons.lab/logo.png", false, async () => "127.0.0.1"),
+    ).resolves.toBeNull();
+    await expect(
+      resolveExternalImageTarget("http://icons.lab/logo.png", false, async () => "192.168.178.20"),
+    ).resolves.toMatchObject({ hostname: "icons.lab" });
   });
 });

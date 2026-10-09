@@ -1,3 +1,5 @@
+import { lookup as dnsLookup } from "node:dns/promises";
+
 const ID = "([a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?)";
 const PROXY_PATH = new RegExp(`^/ora/${ID}(/.*)?$`);
 
@@ -92,6 +94,25 @@ export function externalImageTarget(raw: string, allowHttps = false): URL | null
   return url;
 }
 
+/** Resolves DNS and rejects hosts that point at loopback or link-local addresses. */
+export async function resolveExternalImageTarget(
+  raw: string,
+  allowHttps = false,
+  lookup: (host: string) => Promise<string> = defaultImageLookup,
+): Promise<URL | null> {
+  const url = externalImageTarget(raw, allowHttps);
+  if (!url) return null;
+  const host = normalizeImageHost(url.hostname);
+  if (isImageIpLiteral(host)) return url;
+  try {
+    const address = await lookup(host);
+    if (isBlockedImageHost(address)) return null;
+  } catch {
+    return null;
+  }
+  return url;
+}
+
 export function isProxyImageType(contentType: string): boolean {
   const type = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
   return (
@@ -117,20 +138,59 @@ function injectImageProxy(html: string, mount: string): string {
 
 function imageProxyBootstrap(mount: string): string {
   const prefix = JSON.stringify(mount);
-  return `<script>(function(){var m=${prefix};function r(v){if(typeof v!=="string"||v.slice(0,5)!=="http:")return v;try{var u=new URL(v);if(u.protocol!=="http:"||u.username||u.password)return v;return m+"/ext-img?u="+encodeURIComponent(u.href)}catch(e){return v}}var d=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,"src");if(d&&d.set&&d.get){var set=d.set;Object.defineProperty(HTMLImageElement.prototype,"src",{configurable:!0,enumerable:d.enumerable,get:d.get,set:function(v){set.call(this,r(String(v)))}})}var raw=Element.prototype.setAttribute;Element.prototype.setAttribute=function(n,v){if(this.tagName==="IMG"&&String(n).toLowerCase()==="src")v=r(String(v));return raw.call(this,n,v)}})()</script>`;
+  return `<script>(function(){var m=${prefix};function r(v){if(typeof v!=="string"||v.slice(0,5)!=="http:")return v;try{var u=new URL(v);if(u.protocol!=="http:"||u.username||u.password)return v;return m+"/ext-img?u="+encodeURIComponent(u.href)}catch(e){return v}}function rs(v){if(typeof v!=="string"||!v)return v;return v.split(",").map(function(part){var bits=part.trim().split(/\\s+/);if(!bits[0])return part.trim();bits[0]=r(bits[0]);return bits.join(" ")}).join(", ")}function hook(name,fn){var d=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,name);if(d&&d.set&&d.get){var set=d.set;Object.defineProperty(HTMLImageElement.prototype,name,{configurable:!0,enumerable:d.enumerable,get:d.get,set:function(v){set.call(this,fn(String(v)))}})}}hook("src",r);hook("srcset",rs);var raw=Element.prototype.setAttribute;Element.prototype.setAttribute=function(n,v){var key=String(n).toLowerCase();if(this.tagName==="IMG"&&key==="src")v=r(String(v));if(this.tagName==="IMG"&&key==="srcset")v=rs(String(v));return raw.call(this,n,v)}})()</script>`;
 }
 
-function isBlockedImageHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+function normalizeImageHost(hostname: string): string {
+  return hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/%.+$/, "").replace(/\.+$/, "");
+}
+
+function ipv4Octets(host: string): number[] | null {
+  const parts = host.split(".").map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return null;
+  }
+  return parts;
+}
+
+function ipv4MappedOctets(host: string): number[] | null {
+  const dotted = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(host);
+  if (dotted?.[1]) return ipv4Octets(dotted[1]);
+  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(host);
+  if (!hex) return null;
+  const hi = Number.parseInt(hex[1] ?? "", 16);
+  const lo = Number.parseInt(hex[2] ?? "", 16);
+  if (!Number.isFinite(hi) || !Number.isFinite(lo)) return null;
+  return [(hi >> 8) & 255, hi & 255, (lo >> 8) & 255, lo & 255];
+}
+
+function isBlockedIpv4(parts: number[]): boolean {
+  const a = parts[0] ?? 0;
+  const b = parts[1] ?? 0;
+  if (a === 0 || a === 127 || a >= 224) return true;
+  if (a === 169 && b === 254) return true;
+  return false;
+}
+
+function isImageIpLiteral(host: string): boolean {
+  return Boolean(ipv4Octets(host) || host.includes(":"));
+}
+
+async function defaultImageLookup(host: string): Promise<string> {
+  const { address } = await dnsLookup(host, { verbatim: true });
+  return address;
+}
+
+export function isBlockedImageHost(hostname: string): boolean {
+  const host = normalizeImageHost(hostname);
+  if (!host) return true;
   if (host === "localhost" || host.endsWith(".localhost") || host === "0.0.0.0" || host === "::1") return true;
   if (host === "metadata.google.internal") return true;
-  const parts = host.split(".").map((part) => Number(part));
-  if (parts.length === 4 && parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
-    const a = parts[0] ?? 0;
-    const b = parts[1] ?? 0;
-    if (a === 0 || a === 127 || a >= 224) return true;
-    if (a === 169 && b === 254) return true;
-  }
+  if (host.startsWith("fe80:")) return true;
+  const mapped = ipv4MappedOctets(host);
+  if (mapped && isBlockedIpv4(mapped)) return true;
+  const parts = ipv4Octets(host);
+  if (parts && isBlockedIpv4(parts)) return true;
   return false;
 }
 

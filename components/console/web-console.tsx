@@ -25,9 +25,7 @@ type Props = {
 export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected }: Props) {
   const { t } = useI18n();
   const tRef = useRef(t);
-  tRef.current = t;
   const onDisconnectedRef = useRef(onDisconnected);
-  onDisconnectedRef.current = onDisconnected;
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -41,7 +39,12 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
   const sshBufRef = useRef("");
   const captureRef = useRef(false);
   const sawOutputRef = useRef(false);
-  fontSizeRef.current = fontSize;
+
+  useEffect(() => {
+    tRef.current = t;
+    onDisconnectedRef.current = onDisconnected;
+    fontSizeRef.current = fontSize;
+  });
 
   useEffect(() => {
     if (!containerRef.current) return;
