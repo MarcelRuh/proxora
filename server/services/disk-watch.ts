@@ -1,3 +1,4 @@
+import { HostOrigin } from "@prisma/client";
 import { mapPool } from "@/lib/async-pool";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
@@ -25,6 +26,18 @@ export const DISK_AGENT_LIMIT = 40;
 let scheduled = false;
 let running = false;
 let timer: ReturnType<typeof setTimeout> | null = null;
+/** Round-robin offset per host so agent caps do not starve the same VMs every cycle. */
+const agentOffsets = new Map<string, number>();
+
+function takeRotated<T>(items: T[], offset: number, limit: number): { picked: T[]; nextOffset: number } {
+  if (items.length === 0) return { picked: [], nextOffset: 0 };
+  if (items.length <= limit) return { picked: items, nextOffset: 0 };
+  const picked: T[] = [];
+  for (let i = 0; i < limit; i += 1) {
+    picked.push(items[(offset + i) % items.length]!);
+  }
+  return { picked, nextOffset: (offset + limit) % items.length };
+}
 
 async function remember(samples: DiskSample[], alertPercent: number, clearPercent: number): Promise<number> {
   const state = await loadDiskWatchState();
@@ -65,7 +78,10 @@ export async function scanDiskUsage(): Promise<number> {
   const samples: DiskSample[] = [];
 
   for (const host of hosts) {
-    if (host.connectionState === "OFFLINE" || host.connectionState === "MAINTENANCE") continue;
+    if (host.origin !== HostOrigin.LOCAL) continue;
+    if (host.connectionState === "OFFLINE" || host.connectionState === "MAINTENANCE" || host.connectionState === "ERROR") {
+      continue;
+    }
     try {
       const client = await clientForHost(host);
       const inv = await loadHostInventory(client, host.id);
@@ -94,31 +110,33 @@ export async function scanDiskUsage(): Promise<number> {
       const needAgent: typeof runningVms = [];
       for (const guest of runningVms) {
         if (!guest.node || !guest.vmid) continue;
+        // Cluster disk for QEMU is not guest filesystem usage — only agent/cache.
         const cached = peekVmDiskCache(client, guest.node, guest.vmid);
-        const usage = cached ?? null;
-        const clusterPercent = guestClusterDiskPercent(guest.disk, guest.maxdisk);
-        const percent = usage
-          ? diskUsagePercent(usage.used, usage.total)
-          : clusterPercent;
-        if (percent != null) {
-          const sample: DiskSample = {
-            key: guestDiskKey(host.id, "vm", guest.vmid),
-            kind: "guest",
-            guestKind: "vm",
-            name: guest.name || `VM ${guest.vmid}`,
-            percent,
-            hostId: host.id,
-            hostName: host.name,
-            node: guest.node,
-            id: String(guest.vmid),
-          };
-          sample.href = diskSampleHref(sample);
-          samples.push(sample);
-          continue;
+        if (cached) {
+          const percent = diskUsagePercent(cached.used, cached.total);
+          if (percent != null) {
+            const sample: DiskSample = {
+              key: guestDiskKey(host.id, "vm", guest.vmid),
+              kind: "guest",
+              guestKind: "vm",
+              name: guest.name || `VM ${guest.vmid}`,
+              percent,
+              hostId: host.id,
+              hostName: host.name,
+              node: guest.node,
+              id: String(guest.vmid),
+            };
+            sample.href = diskSampleHref(sample);
+            samples.push(sample);
+            continue;
+          }
         }
         needAgent.push(guest);
       }
-      const agentHits = await mapPool(needAgent.slice(0, DISK_AGENT_LIMIT), DISK_AGENT_CONCURRENCY, async (guest) => {
+      const offset = agentOffsets.get(host.id) ?? 0;
+      const { picked, nextOffset } = takeRotated(needAgent, offset, DISK_AGENT_LIMIT);
+      agentOffsets.set(host.id, nextOffset);
+      const agentHits = await mapPool(picked, DISK_AGENT_CONCURRENCY, async (guest) => {
         if (!guest.node || !guest.vmid) return null;
         const usage = await vmDiskFromAgent(client, guest.node, guest.vmid).catch(() => null);
         if (!usage) return null;

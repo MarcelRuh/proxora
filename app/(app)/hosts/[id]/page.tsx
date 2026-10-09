@@ -12,7 +12,7 @@ import { ConfirmAction } from "@/components/confirm-action";
 import { api } from "@/lib/api";
 import { formatUptime, percentage } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCan, useCanAny } from "@/components/auth/session-user";
 import { isClusterNodeOnline } from "@/lib/cluster-metrics";
 import { peerHostAllowsPermission } from "@/lib/federation-access";
@@ -61,6 +61,23 @@ export default function HostDetailPage() {
     staleTime: 20_000,
     placeholderData: (previous) => previous,
   });
+  const [tempProbes, setTempProbes] = useState(0);
+  const tempReading = Boolean(
+    data?.nodes.some((node) => node.status?.cpuTempState === "reading"),
+  );
+  useEffect(() => {
+    if (!data) return;
+    if (!tempReading) {
+      setTempProbes(0);
+      return;
+    }
+    if (tempProbes >= 4) return;
+    const id = setTimeout(() => {
+      setTempProbes((n) => n + 1);
+      void refetch();
+    }, 8_000);
+    return () => clearTimeout(id);
+  }, [data, refetch, tempReading, tempProbes]);
   const { data: meta } = useQuery({
     queryKey: ["host-meta", params.id],
     queryFn: () => api<{ host: PublicHost }>(`/api/hosts/${params.id}`),

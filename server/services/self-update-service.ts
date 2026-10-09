@@ -221,7 +221,7 @@ async function withProgress(status: SelfUpdateStatus): Promise<SelfUpdateStatus>
   if (progress && status.updating && progress.step === "done") {
     return { ...status, progress };
   }
-  return { ...status, progress: status.updating || progress?.step === "error" ? progress : progress };
+  return { ...status, progress: status.updating || progress?.step === "error" ? progress : null };
 }
 
 function clearStaleProgress() {
@@ -240,25 +240,25 @@ export async function applySelfUpdate(): Promise<{ ok: boolean; message: string;
   if (applyInFlight || isUpdaterRunning()) {
     return { ok: false, message: "Update already running", mode: "compose" };
   }
-  clearStaleProgress();
-  const status = await getSelfUpdateStatus();
-  if (!status.enabled) return { ok: false, message: status.message, mode: status.mode };
-  if (!status.updateAvailable) {
-    return { ok: false, message: status.message, mode: status.mode };
-  }
-  if (status.sidecar === "missing") {
-    return { ok: false, message: status.message, mode: status.mode };
-  }
-
-  const opts = options();
-  const hostDir = opts.installDirHost ?? opts.installDirMount;
-  const mount = opts.installDirMount;
-  if (!hostDir || !mount) {
-    return { ok: false, message: "PROXORA_INSTALL_DIR is not set", mode: "compose" };
-  }
-
   applyInFlight = true;
   try {
+    clearStaleProgress();
+    const status = await getSelfUpdateStatus();
+    if (!status.enabled) return { ok: false, message: status.message, mode: status.mode };
+    if (!status.updateAvailable) {
+      return { ok: false, message: status.message, mode: status.mode };
+    }
+    if (status.sidecar === "missing") {
+      return { ok: false, message: status.message, mode: status.mode };
+    }
+
+    const opts = options();
+    const hostDir = opts.installDirHost ?? opts.installDirMount;
+    const mount = opts.installDirMount;
+    if (!hostDir || !mount) {
+      return { ok: false, message: "PROXORA_INSTALL_DIR is not set", mode: "compose" };
+    }
+
     await broadcastSelfUpdate({ updating: true, from: APP_VERSION, to: status.targetVersion });
     if (!existsSync("/.dockerenv")) {
       const result = await applyOnHost(mount, opts.repo, opts.branch, status.targetTag);
@@ -273,6 +273,7 @@ export async function applySelfUpdate(): Promise<{ ok: boolean; message: string;
     }
     return result;
   } finally {
+    // Signal/lock files cover sidecar busy; clear the in-process gate after the request path.
     applyInFlight = false;
   }
 }

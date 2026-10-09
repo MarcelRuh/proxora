@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.18] – 2026-10-09
+
+### Fixed
+
+- Self-update sets the in-process apply lock before any await, so parallel apply requests cannot clear progress twice.
+- Suite proxy caps rewrite bodies without Content-Length and skips inert JS/CSS rewrites.
+- APT refresh only runs on local online hosts; overlap skips still reschedule.
+- Host detail probes CPU temperature while sensors report reading; cpu-temp watch scans nodes with limited concurrency.
+- Disk watch uses guest-agent/cache for VMs (not cluster disk %), rotates the agent cap, and skips peer/error hosts.
+- Idle self-update status no longer keeps stale progress banners.
+
 ## [2.2.17] – 2026-10-09
 
 ### Fixed

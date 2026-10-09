@@ -68,12 +68,29 @@ export function rewriteKind(contentType: string | null): RewriteKind | null {
 }
 
 export function rewriteEmbedBody(body: string, kind: RewriteKind, mount: string): string {
-  let out = kind === "html" ? rewriteHtmlAttributes(body, mount) : body;
-  if (kind === "html" || kind === "js") out = rewriteJsHrefs(out, mount);
-  out = rewriteRoots(out, mount);
-  if (kind === "html" || kind === "css" || kind === "js") out = rewriteCssUrls(out, mount);
-  if (kind === "html") out = injectImageProxy(out, mount);
-  return out;
+  if (kind === "css") {
+    let out = needsRootRewrite(body) ? rewriteRoots(body, mount) : body;
+    if (out.includes("url(")) out = rewriteCssUrls(out, mount);
+    return out;
+  }
+  if (kind === "js") {
+    let out = body.includes('href:"/') ? rewriteJsHrefs(body, mount) : body;
+    if (needsRootRewrite(out)) out = rewriteRoots(out, mount);
+    if (out.includes("url(")) out = rewriteCssUrls(out, mount);
+    return out;
+  }
+  let out = rewriteHtmlAttributes(body, mount);
+  if (out.includes('href:"/')) out = rewriteJsHrefs(out, mount);
+  if (needsRootRewrite(out)) out = rewriteRoots(out, mount);
+  if (out.includes("url(")) out = rewriteCssUrls(out, mount);
+  return injectImageProxy(out, mount);
+}
+
+function needsRootRewrite(body: string): boolean {
+  for (const root of [...STATIC_ROOTS, ...API_ROOTS]) {
+    if (body.includes(`"${root}`) || body.includes(`'${root}`) || body.includes(`\\"${root}`)) return true;
+  }
+  return false;
 }
 
 export function isExternalImagePath(pathname: string): boolean {

@@ -1,3 +1,5 @@
+import { HostOrigin } from "@prisma/client";
+import { mapPool } from "@/lib/async-pool";
 import { prisma } from "@/lib/db";
 import { applyCpuTempWatchState, cpuTempKey, type CpuTempSample } from "@/lib/cpu-temp";
 import { logger } from "@/lib/logger";
@@ -9,6 +11,7 @@ import { loadHostInventory } from "@/server/services/inventory-cache";
 
 export const CPU_TEMP_WATCH_INTERVAL_MS = 5 * 60_000;
 export const CPU_TEMP_WATCH_STARTUP_DELAY_MS = 50_000;
+export const CPU_TEMP_NODE_CONCURRENCY = 2;
 
 let scheduled = false;
 let running = false;
@@ -51,22 +54,30 @@ export async function scanCpuTemps(): Promise<number> {
   const samples: CpuTempSample[] = [];
 
   for (const host of hosts) {
-    if (host.connectionState === "OFFLINE" || host.connectionState === "MAINTENANCE") continue;
+    if (host.origin !== HostOrigin.LOCAL) continue;
+    if (host.connectionState === "OFFLINE" || host.connectionState === "MAINTENANCE" || host.connectionState === "ERROR") {
+      continue;
+    }
     try {
       const client = await clientForHost(host);
       const inv = await loadHostInventory(client, host.id);
-      for (const node of inv.nodes) {
-        if (!node.node || node.status === "offline") continue;
-        const reading = await readNodeCpuTemp(client, node.node).catch(() => null);
-        if (!reading) continue;
-        samples.push({
-          key: cpuTempKey(host.id, node.node),
+      const online = inv.nodes
+        .map((node) => (node.status !== "offline" && node.node ? node.node : null))
+        .filter((name): name is string => Boolean(name));
+      const readings = await mapPool(online, CPU_TEMP_NODE_CONCURRENCY, async (nodeName) => {
+        const reading = await readNodeCpuTemp(client, nodeName).catch(() => null);
+        if (!reading) return null;
+        return {
+          key: cpuTempKey(host.id, nodeName),
           celsius: reading.celsius,
           label: reading.label,
           hostId: host.id,
           hostName: host.name,
-          node: node.node,
-        });
+          node: nodeName,
+        } satisfies CpuTempSample;
+      });
+      for (const sample of readings) {
+        if (sample) samples.push(sample);
       }
     } catch (error) {
       logger.warn({ err: error, host: host.name }, "CPU temperature scan skipped host");

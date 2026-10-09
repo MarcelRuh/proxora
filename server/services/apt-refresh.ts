@@ -1,4 +1,4 @@
-import type { Host } from "@prisma/client";
+import { HostOrigin, type Host } from "@prisma/client";
 import {
   APT_REFRESH_INTERVAL_MS,
   APT_REFRESH_STARTUP_DELAY_MS,
@@ -69,7 +69,11 @@ export async function refreshAllHostPackageLists(): Promise<{
   const hosts = await prisma.host.findMany({ orderBy: { name: "asc" } });
   const alerts: Array<{ name: string; count: number; hostId?: string; node?: string; preview?: string }> = [];
   let failed = 0;
+  let scanned = 0;
   for (const host of hosts) {
+    if (host.origin !== HostOrigin.LOCAL) continue;
+    if (host.connectionState !== "ONLINE") continue;
+    scanned += 1;
     try {
       const { count, preview, nodes } = await refreshOneHost(host);
       const result = await persistAptSnapshot(host, count);
@@ -92,16 +96,26 @@ export async function refreshAllHostPackageLists(): Promise<{
     }
   }
   await notifyAptUpdates(alerts);
-  return { hosts: hosts.length, failed, notified: alerts.length };
+  return { hosts: scanned, failed, notified: alerts.length };
 }
 
 let scheduled = false;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let running = false;
 
+function scheduleNextAptTick() {
+  if (timer) clearTimeout(timer);
+  timer = setTimeout(() => {
+    timer = null;
+    void tick();
+  }, APT_REFRESH_INTERVAL_MS);
+  timer.unref?.();
+}
+
 async function tick() {
   if (running) {
     logger.info("APT refresh already running, skip");
+    scheduleNextAptTick();
     return;
   }
   running = true;
@@ -111,10 +125,7 @@ async function tick() {
     logger.warn({ err: error }, "APT refresh cycle failed");
   } finally {
     running = false;
-    timer = setTimeout(() => {
-      void tick();
-    }, APT_REFRESH_INTERVAL_MS);
-    timer.unref?.();
+    scheduleNextAptTick();
   }
 }
 

@@ -2,7 +2,6 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import type { Duplex } from "node:stream";
-import { text as readText } from "node:stream/consumers";
 import { Agent, request as undiciRequest } from "undici";
 import { SESSION_COOKIE } from "@/lib/env";
 import { logger } from "@/lib/logger";
@@ -355,11 +354,12 @@ async function writeUpstream(
     return;
   }
 
-  const payload = await readText(upstream.body);
-  if (payload.length > TEXT_LIMIT) {
+  const buf = await readLimited(upstream.body, TEXT_LIMIT);
+  if (!buf) {
     send(res, 502, "Antwort der App ist zu groß");
     return;
   }
+  const payload = buf.toString("utf8");
   const rewritten = rewriteEmbedBody(payload, kind, mount);
   delete headers["content-length"];
   res.writeHead(upstream.statusCode, headers);

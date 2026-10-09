@@ -78,6 +78,11 @@ describe("suite proxy rewriting", () => {
     expect(out).toContain("url(../fonts/a.woff2)");
   });
 
+  it("leaves inert js chunks unchanged", () => {
+    const source = 'const x=1;export default function(){return x}';
+    expect(rewriteEmbedBody(source, "js", mount)).toBe(source);
+  });
+
   it("rewrites redirects, preload links and cookie paths", () => {
     const upstream = new URL("https://10.0.0.9:8443/");
     expect(rewriteLocation("/login?next=/", upstream, "/ora/sambora")).toBe("/ora/sambora/login?next=/");
