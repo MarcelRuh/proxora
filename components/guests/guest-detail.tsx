@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ActionMenu } from "@/components/ui/action-menu";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -301,38 +302,40 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
         >
           {t("guest.console")}
         </Button>
-        <details className="relative">
-          <summary className="flex h-9 cursor-pointer list-none items-center rounded-[var(--ui-radius)] border border-border px-3 text-sm [&::-webkit-details-marker]:hidden">
-            {t("table.more")}
-          </summary>
-          <div className="absolute right-0 z-30 mt-1 grid w-64 gap-1 rounded-[var(--ui-radius)] border border-border bg-card p-2 shadow-lg">
-        {running ? (
-        <ConfirmAction
-          title={t("guest.shutdownTitle")}
-          description={t("guest.shutdownBody", { id: params.vmid, name })}
-          actionLabel={t("guest.shutdown")}
-          disabled={Boolean(deny(can.shutdown, share.shutdown)) || Boolean(pending)}
-          onConfirm={() => action("shutdown")}
+        <ActionMenu
+          label={t("table.more")}
+          triggerSize="default"
+          triggerVariant="outline"
+          contentClassName="grid gap-1 p-2"
+          menuWidth={256}
         >
-          <Button variant="outline" className="w-full" disabled={Boolean(deny(can.shutdown, share.shutdown)) || Boolean(pending)} title={deny(can.shutdown, share.shutdown)}>
-            {t("guest.shutdown")}
-          </Button>
-        </ConfirmAction>
-        ) : null}
-        {running ? (
-        <ConfirmAction
-          title={t("guest.rebootTitle")}
-          description={t("guest.rebootBody", { id: params.vmid, name })}
-          actionLabel={t("guest.reboot")}
-          disabled={Boolean(deny(can.reboot, share.reboot)) || Boolean(pending)}
-          onConfirm={() => action("reboot")}
-        >
-          <Button variant="outline" className="w-full" disabled={Boolean(deny(can.reboot, share.reboot)) || Boolean(pending)} title={deny(can.reboot, share.reboot)}>
-            {t("guest.reboot")}
-          </Button>
-        </ConfirmAction>
-        ) : null}
-        {kind === "vm" && running ? (
+          {running ? (
+            <ConfirmAction
+              title={t("guest.shutdownTitle")}
+              description={t("guest.shutdownBody", { id: params.vmid, name })}
+              actionLabel={t("guest.shutdown")}
+              disabled={Boolean(deny(can.shutdown, share.shutdown)) || Boolean(pending)}
+              onConfirm={() => action("shutdown")}
+            >
+              <Button variant="outline" className="w-full" disabled={Boolean(deny(can.shutdown, share.shutdown)) || Boolean(pending)} title={deny(can.shutdown, share.shutdown)}>
+                {t("guest.shutdown")}
+              </Button>
+            </ConfirmAction>
+          ) : null}
+          {running ? (
+            <ConfirmAction
+              title={t("guest.rebootTitle")}
+              description={t("guest.rebootBody", { id: params.vmid, name })}
+              actionLabel={t("guest.reboot")}
+              disabled={Boolean(deny(can.reboot, share.reboot)) || Boolean(pending)}
+              onConfirm={() => action("reboot")}
+            >
+              <Button variant="outline" className="w-full" disabled={Boolean(deny(can.reboot, share.reboot)) || Boolean(pending)} title={deny(can.reboot, share.reboot)}>
+                {t("guest.reboot")}
+              </Button>
+            </ConfirmAction>
+          ) : null}
+          {kind === "vm" && running ? (
             <Button
               variant="outline"
               disabled={Boolean(deny(can.pause, share.pause))}
@@ -341,8 +344,8 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             >
               {t("guest.pause")}
             </Button>
-        ) : null}
-        {kind === "vm" && paused ? (
+          ) : null}
+          {kind === "vm" && paused ? (
             <Button
               variant="outline"
               disabled={Boolean(deny(can.resume, share.resume))}
@@ -351,22 +354,22 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             >
               {t("guest.resume")}
             </Button>
-        ) : null}
-        {!stopped ? (
-        <ConfirmAction
-          title={t("guest.stopTitle")}
-          description={t("guest.stopBody", { id: params.vmid, name })}
-          actionLabel={t("guest.stop")}
-          destructive
-          disabled={Boolean(deny(can.stop, share.stop)) || Boolean(pending)}
-          onConfirm={() => action("stop")}
-        >
-          <Button variant="destructive" className="w-full" disabled={Boolean(deny(can.stop, share.stop)) || Boolean(pending)} title={deny(can.stop, share.stop)}>
-            {t("guest.stop")}
-          </Button>
-        </ConfirmAction>
-        ) : null}
-        {kind === "vm" && !stopped && !deny(can.reset, share.reset) ? (
+          ) : null}
+          {!stopped ? (
+            <ConfirmAction
+              title={t("guest.stopTitle")}
+              description={t("guest.stopBody", { id: params.vmid, name })}
+              actionLabel={t("guest.stop")}
+              destructive
+              disabled={Boolean(deny(can.stop, share.stop)) || Boolean(pending)}
+              onConfirm={() => action("stop")}
+            >
+              <Button variant="destructive" className="w-full" disabled={Boolean(deny(can.stop, share.stop)) || Boolean(pending)} title={deny(can.stop, share.stop)}>
+                {t("guest.stop")}
+              </Button>
+            </ConfirmAction>
+          ) : null}
+          {kind === "vm" && !stopped && !deny(can.reset, share.reset) ? (
             <ConfirmAction
               title={t("guest.resetTitle")}
               description={t("guest.resetBody")}
@@ -376,104 +379,103 @@ export default function GuestDetailPage({ kind }: { kind: "vm" | "lxc" }) {
             >
               <Button variant="destructive" className="w-full">{t("guest.reset")}</Button>
             </ConfirmAction>
-        ) : null}
-        <CloneDialog
-          kind={kind}
-          hostId={params.hostId}
-          node={params.node}
-          vmid={Number(params.vmid)}
-          name={name}
-          path={path}
-          disabled={Boolean(deny(can.clone, share.clone))}
-          disabledReason={deny(can.clone, share.clone)}
-          onDone={() => void refetch()}
-        />
-        {showMigrate ? (
-          <MigrateDialog
+          ) : null}
+          <CloneDialog
             kind={kind}
             hostId={params.hostId}
             node={params.node}
             vmid={Number(params.vmid)}
+            name={name}
             path={path}
-            running={running || paused}
-            disabled={
-              Boolean(deny(can.migrate, share.migrate)) ||
-              !hostAllowsMigrate(isCluster, hostStatus?.nodes, params.node)
-            }
-            disabledReason={deny(can.migrate, share.migrate)}
-            onDone={(target) => {
-              router.push(`/${kind === "lxc" ? "containers" : "vms"}/${params.hostId}/${encodeURIComponent(target)}/${params.vmid}`);
-            }}
+            disabled={Boolean(deny(can.clone, share.clone))}
+            disabledReason={deny(can.clone, share.clone)}
+            onDone={() => void refetch()}
           />
-        ) : null}
-        <BackupNowDialog
-          hostId={params.hostId}
-          node={params.node}
-          vmid={Number(params.vmid)}
-          kind={kind}
-          disabled={Boolean(deny(can.backup, share.backup))}
-          disabledReason={deny(can.backup, share.backup)}
-          onDone={() => void qc.invalidateQueries({ queryKey: ["backups"] })}
-        />
-        <Button
-          variant="outline"
-          disabled={Boolean(deny(can.restore, share.restore))}
-          title={deny(can.restore, share.restore)}
-          onClick={() => setRestoreOpen(true)}
-        >
-          {t("backup.restore")}
-        </Button>
-        {windows ? null : (
+          {showMigrate ? (
+            <MigrateDialog
+              kind={kind}
+              hostId={params.hostId}
+              node={params.node}
+              vmid={Number(params.vmid)}
+              path={path}
+              running={running || paused}
+              disabled={
+                Boolean(deny(can.migrate, share.migrate)) ||
+                !hostAllowsMigrate(isCluster, hostStatus?.nodes, params.node)
+              }
+              disabledReason={deny(can.migrate, share.migrate)}
+              onDone={(target) => {
+                router.push(`/${kind === "lxc" ? "containers" : "vms"}/${params.hostId}/${encodeURIComponent(target)}/${params.vmid}`);
+              }}
+            />
+          ) : null}
+          <BackupNowDialog
+            hostId={params.hostId}
+            node={params.node}
+            vmid={Number(params.vmid)}
+            kind={kind}
+            disabled={Boolean(deny(can.backup, share.backup))}
+            disabledReason={deny(can.backup, share.backup)}
+            onDone={() => void qc.invalidateQueries({ queryKey: ["backups"] })}
+          />
           <Button
             variant="outline"
-            disabled={Boolean(deny(can.files, share.files))}
-            title={deny(can.files, share.files)}
-            onClick={() =>
-              openGuestToolWindow({
-                kind,
-                hostId: params.hostId,
-                node: params.node,
-                vmid: params.vmid,
-                tool: "files",
-              })
-            }
+            disabled={Boolean(deny(can.restore, share.restore))}
+            title={deny(can.restore, share.restore)}
+            onClick={() => setRestoreOpen(true)}
           >
-            {t("files.show")}
+            {t("backup.restore")}
           </Button>
-        )}
-        <div className="mt-1 border-t border-border pt-1">
-        <GuestDeleteDialog
-          hostId={params.hostId}
-          node={params.node}
-          kind={kind}
-          vmid={Number(params.vmid)}
-          name={name}
-          status={runState}
-          kindLabel={kindLabel}
-          disabled={Boolean(deny(can.delete, share.delete))}
-          onConfirm={(backupVolids, phase) =>
-            api<{ upid?: unknown; phase?: "shutdown" | "stop" | "delete" }>(path, {
-              method: "POST",
-              body: JSON.stringify({ action: "delete", confirm: true, confirmId: Number(params.vmid), wait: false, backupVolids, phase }),
-            })
-          }
-          onFinished={() => {
-            void invalidateDashboardQueries(qc);
-            router.push(listPath);
-          }}
-        >
-          <Button
-            variant="destructive"
-            className="w-full"
-            disabled={Boolean(deny(can.delete, share.delete))}
-            title={deny(can.delete, share.delete)}
-          >
-            {t("guest.delete")}
-          </Button>
-        </GuestDeleteDialog>
-        </div>
+          {windows ? null : (
+            <Button
+              variant="outline"
+              disabled={Boolean(deny(can.files, share.files))}
+              title={deny(can.files, share.files)}
+              onClick={() =>
+                openGuestToolWindow({
+                  kind,
+                  hostId: params.hostId,
+                  node: params.node,
+                  vmid: params.vmid,
+                  tool: "files",
+                })
+              }
+            >
+              {t("files.show")}
+            </Button>
+          )}
+          <div className="mt-1 border-t border-border pt-1">
+            <GuestDeleteDialog
+              hostId={params.hostId}
+              node={params.node}
+              kind={kind}
+              vmid={Number(params.vmid)}
+              name={name}
+              status={runState}
+              kindLabel={kindLabel}
+              disabled={Boolean(deny(can.delete, share.delete))}
+              onConfirm={(backupVolids, phase) =>
+                api<{ upid?: unknown; phase?: "shutdown" | "stop" | "delete" }>(path, {
+                  method: "POST",
+                  body: JSON.stringify({ action: "delete", confirm: true, confirmId: Number(params.vmid), wait: false, backupVolids, phase }),
+                })
+              }
+              onFinished={() => {
+                void invalidateDashboardQueries(qc);
+                router.push(listPath);
+              }}
+            >
+              <Button
+                variant="destructive"
+                className="w-full"
+                disabled={Boolean(deny(can.delete, share.delete))}
+                title={deny(can.delete, share.delete)}
+              >
+                {t("guest.delete")}
+              </Button>
+            </GuestDeleteDialog>
           </div>
-        </details>
+        </ActionMenu>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.19] – 2026-10-09
+
+### Fixed
+
+- Action menus (Mehr) render in a body portal so they are no longer clipped by panel overflow or stacked under the next table/card.
+
 ## [2.2.18] – 2026-10-09
 
 ### Fixed

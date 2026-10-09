@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ActionMenu } from "@/components/ui/action-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -862,38 +863,12 @@ function GuestRowActions({
   onDeleted: () => void;
 }) {
   const { t } = useI18n();
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
   const blocked = t("peers.shareBlocked");
   const noPerm = t("common.noPermission");
   const item = "flex w-full rounded-[var(--ui-radius)] px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-40";
 
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (event: MouseEvent) => {
-      if (rootRef.current?.contains(event.target as Node)) return;
-      setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onPointer);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  function place(button: HTMLButtonElement) {
-    const rect = button.getBoundingClientRect();
-    setPos({ top: rect.bottom + 4, left: Math.max(8, rect.right - 224) });
-  }
-
   return (
-    <div ref={rootRef} className="flex flex-wrap items-center gap-1">
+    <div className="flex flex-wrap items-center gap-1">
       <Button
         size="sm"
         variant="outline"
@@ -912,106 +887,87 @@ function GuestRowActions({
       >
         {t("guest.console")}
       </Button>
-      <Button
-        size="sm"
-        variant="ghost"
-        aria-expanded={open}
-        aria-haspopup="menu"
-        onClick={(event) => {
-          place(event.currentTarget);
-          setMounted(true);
-          setOpen((current) => !current);
-        }}
-      >
-        {t("table.more")}
-      </Button>
-      {mounted ? (
-        <div
-          role="menu"
-          className={open ? "fixed z-50 w-56 rounded-[var(--ui-radius)] border border-border bg-card p-1 shadow-lg" : "hidden"}
-          style={{ top: pos.top, left: pos.left }}
+      <ActionMenu label={t("table.more")}>
+        <ConfirmAction
+          title={t("guest.shutdownTitle")}
+          description={t("guest.shutdownBody", { id: vmid, name })}
+          actionLabel={t("guest.shutdown")}
+          disabled={!running || rowBusy || powerPending || !perms.shutdown || !share.shutdown}
+          onConfirm={() => onAction("shutdown")}
         >
-          <ConfirmAction
-            title={t("guest.shutdownTitle")}
-            description={t("guest.shutdownBody", { id: vmid, name })}
-            actionLabel={t("guest.shutdown")}
-            disabled={!running || rowBusy || powerPending || !perms.shutdown || !share.shutdown}
-            onConfirm={() => onAction("shutdown")}
-          >
-            <button type="button" role="menuitem" className={item} disabled={!running || rowBusy || powerPending || !perms.shutdown || !share.shutdown} title={menuLock(perms.shutdown, share.shutdown, t("guest.shutdown"), blocked, noPerm)}>
-              {t("guest.shutdown")}
-            </button>
-          </ConfirmAction>
-          <ConfirmAction
-            title={t("guest.rebootTitle")}
-            description={t("guest.rebootBody", { id: vmid, name })}
-            actionLabel={t("guest.reboot")}
-            disabled={!running || rowBusy || powerPending || !perms.reboot || !share.reboot}
-            onConfirm={() => onAction("reboot")}
-          >
-            <button type="button" role="menuitem" className={item} disabled={!running || rowBusy || powerPending || !perms.reboot || !share.reboot}>
-              {t("guest.reboot")}
-            </button>
-          </ConfirmAction>
-          <ConfirmAction
-            title={t("guest.stopTitle")}
-            description={t("guest.stopBody", { id: vmid, name })}
-            actionLabel={t("guest.stop")}
-            destructive
-            disabled={stopped || rowBusy || powerPending || !perms.stop || !share.stop}
-            onConfirm={() => onAction("stop")}
-          >
-            <button type="button" role="menuitem" className={`${item} text-destructive`} disabled={stopped || rowBusy || powerPending || !perms.stop || !share.stop}>
-              {t("guest.stop")}
-            </button>
-          </ConfirmAction>
-          <ConfirmAction
-            title={t("guest.snapshotTitle")}
-            description={t("guest.snapshotBody", { name })}
-            actionLabel={t("guest.createSnapshot")}
-            disabled={rowBusy || !perms.snapshot || !share.snapshot}
-            onConfirm={() => onAction("snapshot", { snapname: `snap-${Date.now()}` })}
-          >
-            <button type="button" role="menuitem" className={item} disabled={rowBusy || !perms.snapshot || !share.snapshot}>
-              {t("guest.createSnapshot")}
-            </button>
-          </ConfirmAction>
-          <button
-            type="button"
-            role="menuitem"
-            className={item}
-            disabled={!perms.files || !share.files}
-            title={menuLock(perms.files, share.files, t("files.show"), blocked, noPerm)}
-            onClick={() => openGuestToolWindow({ kind: row, hostId: hid, node, vmid, tool: "files" })}
-          >
-            {t("files.show")}
+          <button type="button" role="menuitem" className={item} disabled={!running || rowBusy || powerPending || !perms.shutdown || !share.shutdown} title={menuLock(perms.shutdown, share.shutdown, t("guest.shutdown"), blocked, noPerm)}>
+            {t("guest.shutdown")}
           </button>
-          <GuestDeleteDialog
-            hostId={hid}
-            node={node}
-            kind={row}
-            vmid={vmid}
-            name={name}
-            status={status}
-            kindLabel={kindLabel}
-            disabled={!perms.delete || !share.delete || rowBusy}
-            onConfirm={(backupVolids, phase) =>
-              api<{ upid?: unknown; phase?: "shutdown" | "stop" | "delete" }>(
-                `/api/hosts/${hid}/${row === "vm" ? "vms" : "lxc"}/${node}/${vmid}`,
-                {
-                  method: "POST",
-                  body: JSON.stringify({ action: "delete", confirm: true, confirmId: vmid, wait: false, backupVolids, phase }),
-                },
-              )
-            }
-            onFinished={onDeleted}
-          >
-            <button type="button" role="menuitem" className={`${item} text-destructive`} disabled={rowBusy || !perms.delete || !share.delete}>
-              {t("guest.delete")}
-            </button>
-          </GuestDeleteDialog>
-        </div>
-      ) : null}
+        </ConfirmAction>
+        <ConfirmAction
+          title={t("guest.rebootTitle")}
+          description={t("guest.rebootBody", { id: vmid, name })}
+          actionLabel={t("guest.reboot")}
+          disabled={!running || rowBusy || powerPending || !perms.reboot || !share.reboot}
+          onConfirm={() => onAction("reboot")}
+        >
+          <button type="button" role="menuitem" className={item} disabled={!running || rowBusy || powerPending || !perms.reboot || !share.reboot}>
+            {t("guest.reboot")}
+          </button>
+        </ConfirmAction>
+        <ConfirmAction
+          title={t("guest.stopTitle")}
+          description={t("guest.stopBody", { id: vmid, name })}
+          actionLabel={t("guest.stop")}
+          destructive
+          disabled={stopped || rowBusy || powerPending || !perms.stop || !share.stop}
+          onConfirm={() => onAction("stop")}
+        >
+          <button type="button" role="menuitem" className={`${item} text-destructive`} disabled={stopped || rowBusy || powerPending || !perms.stop || !share.stop}>
+            {t("guest.stop")}
+          </button>
+        </ConfirmAction>
+        <ConfirmAction
+          title={t("guest.snapshotTitle")}
+          description={t("guest.snapshotBody", { name })}
+          actionLabel={t("guest.createSnapshot")}
+          disabled={rowBusy || !perms.snapshot || !share.snapshot}
+          onConfirm={() => onAction("snapshot", { snapname: `snap-${Date.now()}` })}
+        >
+          <button type="button" role="menuitem" className={item} disabled={rowBusy || !perms.snapshot || !share.snapshot}>
+            {t("guest.createSnapshot")}
+          </button>
+        </ConfirmAction>
+        <button
+          type="button"
+          role="menuitem"
+          className={item}
+          disabled={!perms.files || !share.files}
+          title={menuLock(perms.files, share.files, t("files.show"), blocked, noPerm)}
+          onClick={() => openGuestToolWindow({ kind: row, hostId: hid, node, vmid, tool: "files" })}
+        >
+          {t("files.show")}
+        </button>
+        <GuestDeleteDialog
+          hostId={hid}
+          node={node}
+          kind={row}
+          vmid={vmid}
+          name={name}
+          status={status}
+          kindLabel={kindLabel}
+          disabled={!perms.delete || !share.delete || rowBusy}
+          onConfirm={(backupVolids, phase) =>
+            api<{ upid?: unknown; phase?: "shutdown" | "stop" | "delete" }>(
+              `/api/hosts/${hid}/${row === "vm" ? "vms" : "lxc"}/${node}/${vmid}`,
+              {
+                method: "POST",
+                body: JSON.stringify({ action: "delete", confirm: true, confirmId: vmid, wait: false, backupVolids, phase }),
+              },
+            )
+          }
+          onFinished={onDeleted}
+        >
+          <button type="button" role="menuitem" className={`${item} text-destructive`} disabled={rowBusy || !perms.delete || !share.delete}>
+            {t("guest.delete")}
+          </button>
+        </GuestDeleteDialog>
+      </ActionMenu>
     </div>
   );
 }

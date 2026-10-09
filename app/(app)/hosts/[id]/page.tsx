@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
+import { ActionMenu } from "@/components/ui/action-menu";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/misc";
@@ -181,53 +182,53 @@ export default function HostDetailPage() {
                     </Link>
                   </Button>
                 )}
-                <details className="relative">
-                  <summary className="flex h-8 cursor-pointer list-none items-center rounded-[var(--ui-radius)] border border-border px-3 text-xs [&::-webkit-details-marker]:hidden">
-                    {t("table.more")}
-                  </summary>
-                  <div className="absolute right-0 z-30 mt-1 grid w-56 gap-1 rounded-[var(--ui-radius)] border border-border bg-card p-2 shadow-lg">
-                    <Button size="sm" variant="outline" className="w-full" asChild>
-                      <Link href={`/updates?host=${params.id}`}>{t("nav.updates")}</Link>
+                <ActionMenu
+                  label={t("table.more")}
+                  triggerVariant="outline"
+                  contentClassName="grid gap-1 p-2"
+                  menuWidth={224}
+                >
+                  <Button size="sm" variant="outline" className="w-full" asChild>
+                    <Link href={`/updates?host=${params.id}`}>{t("nav.updates")}</Link>
+                  </Button>
+                  <Button size="sm" variant="outline" className="w-full" asChild>
+                    <Link href="/backups">{t("nav.backups")}</Link>
+                  </Button>
+                  {rebootDenied ? (
+                    <Button size="sm" variant="outline" className="w-full" disabled title={rebootDenied}>
+                      {t("guest.reboot")}
                     </Button>
-                    <Button size="sm" variant="outline" className="w-full" asChild>
-                      <Link href="/backups">{t("nav.backups")}</Link>
-                    </Button>
-                    {rebootDenied ? (
-                      <Button size="sm" variant="outline" className="w-full" disabled title={rebootDenied}>
+                  ) : (
+                    <ConfirmAction
+                      title={t("hosts.rebootTitle", { node: item.node })}
+                      description={t("hosts.rebootBody")}
+                      actionLabel={t("guest.reboot")}
+                      destructive
+                      onConfirm={() => power("reboot", item.node)}
+                    >
+                      <Button size="sm" variant="outline" className="w-full">
                         {t("guest.reboot")}
                       </Button>
-                    ) : (
-                      <ConfirmAction
-                        title={t("hosts.rebootTitle", { node: item.node })}
-                        description={t("hosts.rebootBody")}
-                        actionLabel={t("guest.reboot")}
-                        destructive
-                        onConfirm={() => power("reboot", item.node)}
-                      >
-                        <Button size="sm" variant="outline" className="w-full">
-                          {t("guest.reboot")}
-                        </Button>
-                      </ConfirmAction>
-                    )}
-                    {shutdownDenied ? (
-                      <Button size="sm" variant="outline" className="w-full" disabled title={shutdownDenied}>
+                    </ConfirmAction>
+                  )}
+                  {shutdownDenied ? (
+                    <Button size="sm" variant="outline" className="w-full" disabled title={shutdownDenied}>
+                      {t("guest.shutdown")}
+                    </Button>
+                  ) : (
+                    <ConfirmAction
+                      title={t("hosts.shutdownTitle", { node: item.node })}
+                      description={t("hosts.shutdownBody")}
+                      actionLabel={t("guest.shutdown")}
+                      destructive
+                      onConfirm={() => power("shutdown", item.node)}
+                    >
+                      <Button size="sm" variant="destructive" className="w-full">
                         {t("guest.shutdown")}
                       </Button>
-                    ) : (
-                      <ConfirmAction
-                        title={t("hosts.shutdownTitle", { node: item.node })}
-                        description={t("hosts.shutdownBody")}
-                        actionLabel={t("guest.shutdown")}
-                        destructive
-                        onConfirm={() => power("shutdown", item.node)}
-                      >
-                        <Button size="sm" variant="destructive" className="w-full">
-                          {t("guest.shutdown")}
-                        </Button>
-                      </ConfirmAction>
-                    )}
-                  </div>
-                </details>
+                    </ConfirmAction>
+                  )}
+                </ActionMenu>
               </div>
             </CardHeader>
             {st && isClusterNodeOnline(item.online) ? (
