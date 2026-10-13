@@ -3,9 +3,10 @@ import { cpuTempFromNodeStatus, cpuTempFromSensorRows, cpuTempFromSensorsJson, t
 import type { ProxmoxClient } from "@/server/proxmox/client";
 import { readNodeHwmon } from "@/server/services/node-hwmon";
 
-const CACHE_MS = 60_000;
+/** Successful readings: align with cpu-temp-watch so UI polls do not reopen termproxy. */
+export const CPU_TEMP_CACHE_MS = 5 * 60_000;
 /** Keep “no sensors” / failed reads longer so host pages do not reopen termproxy often. */
-const CACHE_NEGATIVE_MS = 5 * 60_000;
+export const CPU_TEMP_CACHE_NEGATIVE_MS = 5 * 60_000;
 
 export type CpuTempOutcome = "value" | "none" | "failed";
 
@@ -83,7 +84,7 @@ async function readUncached(
 export function readNodeCpuTemp(client: ProxmoxClient, node: string): Promise<CpuTempReading | null> {
   const key = cacheKey(client, node);
   const hit = cache.get(key);
-  const ttl = hit?.outcome === "value" ? CACHE_MS : CACHE_NEGATIVE_MS;
+  const ttl = hit?.outcome === "value" ? CPU_TEMP_CACHE_MS : CPU_TEMP_CACHE_NEGATIVE_MS;
   if (hit && Date.now() - hit.at < ttl) return Promise.resolve(hit.value);
   const pending = inflight.get(key);
   if (pending) return pending;
@@ -98,4 +99,13 @@ export function readNodeCpuTemp(client: ProxmoxClient, node: string): Promise<Cp
     });
   inflight.set(key, job);
   return job;
+}
+
+/**
+ * UI/request paths: only open a sensor read (and possibly termproxy) when this
+ * process has never finished a read for the node. Periodic refresh is cpu-temp-watch.
+ */
+export function kickNodeCpuTempIfNeeded(client: ProxmoxClient, node: string): void {
+  if (peekNodeCpuTempOutcome(client, node) !== undefined) return;
+  void readNodeCpuTemp(client, node).catch(() => null);
 }

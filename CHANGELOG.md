@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.20] – 2026-10-13
+
+### Fixed
+
+- CPU temperature polling no longer opens a Proxmox node Shell (termproxy) on every dashboard refresh. UI requests only fill an empty cache; the background watch refreshes about every five minutes.
+
 ## [2.2.19] – 2026-10-09
 
 ### Fixed

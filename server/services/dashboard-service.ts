@@ -8,7 +8,7 @@ import { userHasPermission } from "@/lib/permissions";
 import { isClusterNodeOnline, minPositiveUptime, weightedCpuRatio } from "@/lib/cluster-metrics";
 import { CPU_TEMP_ALERT_CELSIUS } from "@/lib/cpu-temp";
 import { loadCpuTempSettings } from "@/server/services/cpu-temp-settings";
-import { peekNodeCpuTemp, peekNodeCpuTempOutcome, readNodeCpuTemp } from "@/server/services/cpu-temp";
+import { kickNodeCpuTempIfNeeded, peekNodeCpuTemp, peekNodeCpuTempOutcome } from "@/server/services/cpu-temp";
 import { withTimeoutFallback } from "@/lib/promise-timeout";
 import type { ConnectionState, Guest } from "@/lib/types";
 import type { GuestListItem, ProxmoxResource } from "@/server/proxmox/types";
@@ -142,7 +142,7 @@ async function snapshotHost(
       const diskTotal = pool.reduce((acc, n) => acc + (n.maxdisk ?? 0), 0);
       const onlineNodes = inv.nodes.filter((n) => isClusterNodeOnline(n.status)).length;
       const nodeNames = pool.map((n) => n.node).filter((name): name is string => Boolean(name));
-      void Promise.all(nodeNames.map((name) => readNodeCpuTemp(client, name).catch(() => null)));
+      for (const name of nodeNames) kickNodeCpuTempIfNeeded(client, name);
       const peeks = nodeNames.map((name) => ({
         name,
         reading: peekNodeCpuTemp(client, name),

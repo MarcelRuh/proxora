@@ -9,7 +9,7 @@ import { filterGuestsForUser } from "@/server/auth/session-core";
 import { userHasPermission } from "@/lib/permissions";
 import { ForbiddenError } from "@/lib/errors";
 import { loadHostInventory } from "@/server/services/inventory-cache";
-import { peekNodeCpuTemp, peekNodeCpuTempOutcome, readNodeCpuTemp } from "@/server/services/cpu-temp";
+import { kickNodeCpuTempIfNeeded, peekNodeCpuTemp, peekNodeCpuTempOutcome } from "@/server/services/cpu-temp";
 import { loadCpuTempSettings } from "@/server/services/cpu-temp-settings";
 
 const actionSchema = z.object({
@@ -23,7 +23,7 @@ export const GET = apiRoute("hosts.view", async (_req, session, params) => {
     const inv = await loadHostInventory(client, params.id);
     const tempSettings = await loadCpuTempSettings();
     const liveNodes = inv.nodes.filter((n) => n.node && n.status !== "offline").map((n) => n.node as string);
-    void Promise.all(liveNodes.map((node) => readNodeCpuTemp(client, node).catch(() => null)));
+    for (const node of liveNodes) kickNodeCpuTempIfNeeded(client, node);
     const details = inv.nodes
       .filter((n) => n.node)
       .map((n) => {

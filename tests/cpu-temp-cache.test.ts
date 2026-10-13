@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProxmoxClient } from "@/server/proxmox/client";
-import { mergeCpuTemp, peekNodeCpuTemp, peekNodeCpuTempOutcome, readNodeCpuTemp, retainCpuTemp } from "@/server/services/cpu-temp";
+import {
+  CPU_TEMP_CACHE_MS,
+  kickNodeCpuTempIfNeeded,
+  mergeCpuTemp,
+  peekNodeCpuTemp,
+  peekNodeCpuTempOutcome,
+  readNodeCpuTemp,
+  retainCpuTemp,
+} from "@/server/services/cpu-temp";
 
 function client(baseUrl: string, read: () => Promise<unknown>): ProxmoxClient {
   return {
@@ -34,7 +42,7 @@ describe("cpu temperature cache", () => {
     vi.spyOn(Date, "now").mockReturnValue(1_000);
     await expect(readNodeCpuTemp(api, "pve")).resolves.toEqual({ celsius: 42, label: "Package id 0" });
 
-    vi.spyOn(Date, "now").mockReturnValue(1_000 + 61_000);
+    vi.spyOn(Date, "now").mockReturnValue(1_000 + CPU_TEMP_CACHE_MS + 1_000);
     expect(peekNodeCpuTemp(api, "pve")).toEqual({ celsius: 42, label: "Package id 0" });
 
     current = 51;
@@ -62,6 +70,21 @@ describe("cpu temperature cache", () => {
     });
   });
 
+  it("only kicks a sensor read when the node has never been read", async () => {
+    let calls = 0;
+    const api = client("https://cache-kick.example", async () => {
+      calls += 1;
+      return [{ sensor: "Package id 0", temperature: 40 }];
+    });
+    vi.spyOn(Date, "now").mockReturnValue(2_000);
+    kickNodeCpuTempIfNeeded(api, "pve");
+    await vi.waitFor(() => expect(calls).toBe(1));
+    kickNodeCpuTempIfNeeded(api, "pve");
+    kickNodeCpuTempIfNeeded(api, "pve");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls).toBe(1);
+  });
+
   it("does not replace a reading when the sensor read throws", async () => {
     let fail = false;
     const api = client("https://cache-fail.example", async () => {
@@ -71,7 +94,7 @@ describe("cpu temperature cache", () => {
     vi.spyOn(Date, "now").mockReturnValue(5_000);
     await readNodeCpuTemp(api, "pve");
     fail = true;
-    vi.spyOn(Date, "now").mockReturnValue(5_000 + 61_000);
+    vi.spyOn(Date, "now").mockReturnValue(5_000 + CPU_TEMP_CACHE_MS + 1_000);
     await expect(readNodeCpuTemp(api, "pve")).resolves.toEqual({ celsius: 47, label: "Package id 0" });
     expect(peekNodeCpuTemp(api, "pve")).toEqual({ celsius: 47, label: "Package id 0" });
   });
