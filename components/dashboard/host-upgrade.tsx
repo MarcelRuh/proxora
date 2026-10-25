@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { WebConsole } from "@/components/console/web-console";
 import { api } from "@/lib/api";
+import { hostUpdatesDetailKey } from "@/lib/apt-updates";
 import { peerHostAllowsPermission } from "@/lib/federation-access";
 import { userHasPermission } from "@/lib/permissions";
 import type { DashboardHost } from "@/lib/types";
@@ -44,14 +45,23 @@ export function HostUpgrade({
     online && userHasPermission(user, "updates.upgrade", host.id) && peerHostAllowsPermission(host, "updates.upgrade");
   const canCheck = userHasPermission(user, "updates.check", host.id) && peerHostAllowsPermission(host, "updates.check");
   const { data, isFetching, isError, refetch } = useQuery({
-    queryKey: ["update-details", host.id],
+    queryKey: hostUpdatesDetailKey(host.id),
     // Lazy: full package lists only when the upgrade picker opens (not every dashboard poll).
     enabled: pick && online,
-    queryFn: () => api<{ updates: NodeUpdates[] }>(`/api/hosts/${host.id}/updates`),
+    queryFn: async () => {
+      const r = await api<{ updates: NodeUpdates[] }>(`/api/hosts/${host.id}/updates`);
+      const updates = Array.isArray(r.updates)
+        ? r.updates.map((item) => ({
+            node: item.node,
+            count: typeof item.count === "number" ? item.count : 0,
+          }))
+        : [];
+      return { updates };
+    },
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
-  const pending = (data?.updates ?? []).filter((item) => item.count > 0);
+  const pending = (Array.isArray(data?.updates) ? data.updates : []).filter((item) => item.count > 0);
   const liveCount = pending.reduce((sum, item) => sum + item.count, 0);
 
   useEffect(() => {
@@ -80,7 +90,7 @@ export function HostUpgrade({
       toast.error(error instanceof Error ? error.message : t("updates.listFailed"));
     }
     void qc.invalidateQueries({ queryKey: ["apt-summary"] });
-    void qc.invalidateQueries({ queryKey: ["update-details", current.hostId] });
+    void qc.invalidateQueries({ queryKey: hostUpdatesDetailKey(current.hostId) });
   }
 
   async function startUpgrade() {

@@ -56,4 +56,16 @@ describe("APT update notifications", () => {
     expect(merged?.[0]?.host.aptCheckedAt).toBe("2026-09-05T12:00:00Z");
     expect(merged?.[1]?.updates).toEqual([{ node: "pve", count: 2, packages: [] }]);
   });
+
+  it("ignores non-array react-query cache entries (detail vs list shape)", () => {
+    const detail = { version: "8.4", updates: [{ node: "pve", count: 1 }] };
+    expect(
+      mergeHostUpdateDetails(
+        detail as unknown as Parameters<typeof mergeHostUpdateDetails>[0],
+        "a",
+        { version: "8.4", updates: [] },
+        "2026-09-05T12:00:00Z",
+      ),
+    ).toBe(detail);
+  });
 });

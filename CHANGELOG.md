@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.23] – 2026-10-25
+
+### Fixed
+
+- Host updates UI no longer crashes with "r.map is not a function" when the dashboard upgrade cache and the Updates page share a react-query prefix. List and detail queries use separate keys; package arrays are normalized defensively.
+
 ## [2.2.22] – 2026-10-25
 
 ### Fixed

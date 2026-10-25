@@ -70,7 +70,8 @@ export async function listHostUpdates(hostId: string, user: SessionUser, node?: 
   const data = await withHostClient(hostId, user, async (client, host) => {
     const nodes = await nodesFor(client, hostId, node);
     const updates: NodeUpdates[] = await mapPool(nodes, UPDATE_NODE_CONCURRENCY, async (n) => {
-      const packages = await client.updates.list(n.node);
+      const raw = await client.updates.list(n.node);
+      const packages = Array.isArray(raw) ? raw : [];
       return { node: n.node, packages, count: packages.length };
     });
     return { version: host.proxmoxVersion, updates };

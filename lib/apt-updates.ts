@@ -35,6 +35,13 @@ export function aptSummaryFromHosts(
   return { total, checkedAt, hosts: rows };
 }
 
+/** Query key for the Updates page (array of per-host rows). */
+export const HOST_UPDATES_LIST_KEY = ["host-updates", "list"] as const;
+/** Query key for a single host package list (dashboard upgrade dialog). */
+export function hostUpdatesDetailKey(hostId: string) {
+  return ["host-updates", "detail", hostId] as const;
+}
+
 export function mergeHostUpdateDetails<
   T extends { host: { id: string; aptCheckedAt?: Date | string | null }; version: string | null; updates: unknown; error: string | null },
 >(
@@ -43,7 +50,8 @@ export function mergeHostUpdateDetails<
   next: { version: string | null; updates: T["updates"] },
   checkedAt: string,
 ): T[] | undefined {
-  if (!rows) return rows;
+  // Guard: setQueriesData with a shared prefix must not treat detail objects as list rows.
+  if (!Array.isArray(rows)) return rows;
   return rows.map((row) =>
     row.host.id === hostId
       ? { ...row, version: next.version, updates: next.updates, error: null, host: { ...row.host, aptCheckedAt: checkedAt } }

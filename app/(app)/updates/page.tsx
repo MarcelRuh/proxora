@@ -12,7 +12,7 @@ import { ConfirmAction } from "@/components/confirm-action";
 import { WebConsole } from "@/components/console/web-console";
 import { api } from "@/lib/api";
 import { mapPool } from "@/lib/async-pool";
-import { mergeHostUpdateDetails } from "@/lib/apt-updates";
+import { HOST_UPDATES_LIST_KEY, mergeHostUpdateDetails } from "@/lib/apt-updates";
 import type { PublicHost } from "@/lib/types";
 import { PageHeader } from "@/components/layout/page-header";
 import { QueryGate } from "@/components/layout/query-gate";
@@ -64,7 +64,7 @@ export default function UpdatesPage() {
     placeholderData: (previous) => previous,
   });
   const { data: details, isFetching } = useQuery({
-    queryKey: ["update-details", hosts?.hosts.map((h) => h.id)],
+    queryKey: [...HOST_UPDATES_LIST_KEY, hosts?.hosts.map((h) => h.id)],
     enabled: Boolean(hosts),
     queryFn: async () => {
       return mapPool(hosts?.hosts ?? [], UPDATE_HOST_CONCURRENCY, async (h) => {
@@ -72,7 +72,14 @@ export default function UpdatesPage() {
           const r = await api<{ version: string | null; updates: HostUpdates["updates"] }>(
             `/api/hosts/${h.id}/updates`,
           );
-          return { host: h, ...r, error: null as string | null };
+          const updates = Array.isArray(r.updates)
+            ? r.updates.map((n) => ({
+                ...n,
+                packages: Array.isArray(n.packages) ? n.packages : [],
+                count: typeof n.count === "number" ? n.count : Array.isArray(n.packages) ? n.packages.length : 0,
+              }))
+            : [];
+          return { host: h, version: r.version ?? null, updates, error: null as string | null };
         } catch (e) {
           return {
             host: h,
@@ -90,8 +97,14 @@ export default function UpdatesPage() {
 
   function applyChecked(hostId: string, data: { version: string | null; updates: HostUpdates["updates"] }) {
     const checkedAt = new Date().toISOString();
-    qc.setQueriesData<HostUpdates[]>({ queryKey: ["update-details"] }, (prev) =>
-      mergeHostUpdateDetails(prev, hostId, data, checkedAt),
+    const updates = Array.isArray(data.updates)
+      ? data.updates.map((n) => ({
+          ...n,
+          packages: Array.isArray(n.packages) ? n.packages : [],
+        }))
+      : [];
+    qc.setQueriesData<HostUpdates[]>({ queryKey: [...HOST_UPDATES_LIST_KEY] }, (prev) =>
+      mergeHostUpdateDetails(prev, hostId, { version: data.version, updates }, checkedAt),
     );
     void qc.invalidateQueries({ queryKey: ["apt-summary"] });
     void qc.invalidateQueries({ queryKey: ["hosts"] });
@@ -187,8 +200,11 @@ export default function UpdatesPage() {
           </p>
         ) : null}
         <div className="grid gap-4 md:grid-cols-2">
-          {(details ?? []).filter((row) => !hostFilter || row.host.id === hostFilter).map((row) => {
-            const count = row.updates.reduce((acc, n) => acc + n.count, 0);
+          {(Array.isArray(details) ? details : [])
+            .filter((row) => !hostFilter || row.host.id === hostFilter)
+            .map((row) => {
+            const nodeUpdates = Array.isArray(row.updates) ? row.updates : [];
+            const count = nodeUpdates.reduce((acc, n) => acc + (n.count ?? 0), 0);
             const checking = checkOne.isPending && checkOne.variables?.hostId === row.host.id;
             const canCheck =
               userHasPermission(user, "updates.check", row.host.id) && peerHostAllowsPermission(row.host, "updates.check");
@@ -198,7 +214,9 @@ export default function UpdatesPage() {
             const checkedAt = row.host.aptCheckedAt
               ? new Date(row.host.aptCheckedAt).toLocaleString(locale === "en" ? "en-GB" : "de-DE")
               : null;
-            const packages = row.updates.flatMap((n) => n.packages.map((p) => ({ node: n.node, pkg: p })));
+            const packages = nodeUpdates.flatMap((n) =>
+              (Array.isArray(n.packages) ? n.packages : []).map((p) => ({ node: n.node, pkg: p })),
+            );
             const shown = packages.slice(0, 12);
             const rest = packages.length - shown.length;
             return (
@@ -261,8 +279,10 @@ export default function UpdatesPage() {
                     >
                       {checking ? t("updates.checking") : t("updates.checkOne")}
                     </Button>
-                    {row.updates.filter((n) => n.count > 0).map((n) => {
-                      const label = t("updates.upgrade", { node: row.updates.filter((item) => item.count > 0).length > 1 ? n.node : "" });
+                    {nodeUpdates.filter((n) => n.count > 0).map((n) => {
+                      const label = t("updates.upgrade", {
+                        node: nodeUpdates.filter((item) => item.count > 0).length > 1 ? n.node : "",
+                      });
                       if (!canUpgradeHost || row.error) return null;
                       return (
                         <ConfirmAction
@@ -296,7 +316,7 @@ export default function UpdatesPage() {
             );
           })}
         </div>
-        {hostFilter && details && !details.some((row) => row.host.id === hostFilter) ? (
+        {hostFilter && Array.isArray(details) && !details.some((row) => row.host.id === hostFilter) ? (
           <p className="mt-3 text-sm text-muted-foreground">{t("updates.filteredEmpty")}</p>
         ) : null}
         {isFetching && !details ? <p className="text-sm text-muted-foreground">{t("updates.loading")}</p> : null}
