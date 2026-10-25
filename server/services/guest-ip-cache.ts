@@ -4,7 +4,8 @@ import type { ProxmoxClient } from "@/server/proxmox/client";
 import type { GuestListItem } from "@/server/proxmox/types";
 
 const TTL_FULL_MS = 10 * 60_000;
-const TTL_EMPTY_MS = 20_000;
+/** Empty / no-agent results stay cached so dashboard scroll does not re-hit config+agent. */
+const TTL_EMPTY_MS = 5 * 60_000;
 const cache = new Map<string, { ips: string[]; at: number }>();
 
 function ipCacheKey(client: ProxmoxClient, kind: "vm" | "lxc", node: string, vmid: number) {

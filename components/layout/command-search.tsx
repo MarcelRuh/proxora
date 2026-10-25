@@ -29,6 +29,8 @@ export function CommandSearch({ open, onOpenChange }: { open: boolean; onOpenCha
     queryKey: ["search", debounced],
     queryFn: () => api<SearchResponse>(`/api/search?q=${encodeURIComponent(debounced)}`),
     enabled: open && debounced.length > 0,
+    staleTime: 30_000,
+    placeholderData: (previous) => previous,
   });
 
   const groups: Array<{ labelKey: MessageKey; items: SearchResponse[keyof SearchResponse] }> = [

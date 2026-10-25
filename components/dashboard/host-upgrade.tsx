@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -45,13 +45,22 @@ export function HostUpgrade({
   const canCheck = userHasPermission(user, "updates.check", host.id) && peerHostAllowsPermission(host, "updates.check");
   const { data, isFetching, isError, refetch } = useQuery({
     queryKey: ["update-details", host.id],
-    enabled: count > 0 && online,
+    // Lazy: full package lists only when the upgrade picker opens (not every dashboard poll).
+    enabled: pick && online,
     queryFn: () => api<{ updates: NodeUpdates[] }>(`/api/hosts/${host.id}/updates`),
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
   const pending = (data?.updates ?? []).filter((item) => item.count > 0);
   const liveCount = pending.reduce((sum, item) => sum + item.count, 0);
+
+  useEffect(() => {
+    if (!pick || !data?.updates?.length) return;
+    const nodes = data.updates.filter((item) => item.count > 0);
+    if (!nodes.length) return;
+    if (node && nodes.some((item) => item.node === node)) return;
+    setNode(nodes[0]!.node);
+  }, [pick, data, node]);
 
   async function closeShell() {
     const current = shellRef.current;
@@ -113,19 +122,21 @@ export function HostUpgrade({
           {stale ? t("dashboard.updatesStale") : packageLabel(labelCount, t("dashboard.packageOne"), (n) => t("dashboard.packages", { n }))}
         </Link>
       )}
-      {canUpgrade && pending.length > 0 ? (
+      {canUpgrade ? (
         <Button
           size="sm"
           variant="outline"
           onClick={() => {
-            setNode(pending[0]?.node ?? "");
             setPick(true);
+            setNode(pending[0]?.node ?? "");
           }}
         >
           {t("dashboard.upgrade")}
         </Button>
       ) : null}
-      {isFetching && !data && !isError ? <span className="text-xs text-muted-foreground">{t("updates.checkingList")}</span> : null}
+      {pick && isFetching && !data && !isError ? (
+        <span className="text-xs text-muted-foreground">{t("updates.checkingList")}</span>
+      ) : null}
       <Dialog open={pick} onOpenChange={setPick}>
         <DialogContent>
           <DialogHeader>
@@ -134,6 +145,9 @@ export function HostUpgrade({
             </DialogTitle>
             <DialogDescription>{t("updates.upgradeBody")}</DialogDescription>
           </DialogHeader>
+          {isFetching && !data ? (
+            <p className="text-sm text-muted-foreground">{t("updates.checkingList")}</p>
+          ) : null}
           {pending.length > 4 ? (
             <select
               className="h-9 w-full rounded-[var(--ui-radius)] border border-input bg-transparent px-2 text-sm"
@@ -165,7 +179,7 @@ export function HostUpgrade({
             <Button variant="outline" onClick={() => setPick(false)} disabled={starting}>
               {t("common.cancel")}
             </Button>
-            <Button variant="destructive" disabled={!node || starting} onClick={() => void startUpgrade()}>
+            <Button variant="destructive" disabled={!node || starting || isFetching} onClick={() => void startUpgrade()}>
               {starting ? t("common.loading") : t("updates.upgradeStart")}
             </Button>
           </div>

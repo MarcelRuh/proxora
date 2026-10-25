@@ -10,8 +10,11 @@ import { CPU_TEMP_ALERT_CELSIUS } from "@/lib/cpu-temp";
 import { loadCpuTempSettings } from "@/server/services/cpu-temp-settings";
 import { kickNodeCpuTempIfNeeded, peekNodeCpuTemp, peekNodeCpuTempOutcome } from "@/server/services/cpu-temp";
 import { withTimeoutFallback } from "@/lib/promise-timeout";
+import { mapPool } from "@/lib/async-pool";
 import type { ConnectionState, Guest } from "@/lib/types";
 import type { GuestListItem, ProxmoxResource } from "@/server/proxmox/types";
+
+const DASHBOARD_HOST_CONCURRENCY = 3;
 
 export type HostOverview = {
   id: string;
@@ -258,13 +261,17 @@ async function snapshotHostTimed(
 export async function getDashboard(user: SessionUser) {
   const hosts = await listHosts(user);
   const { alertCelsius } = await loadCpuTempSettings();
-  const snapshots = await Promise.all(hosts.map((host) => snapshotHostTimed(host, user, "overview", alertCelsius)));
+  const snapshots = await mapPool(hosts, DASHBOARD_HOST_CONCURRENCY, (host) =>
+    snapshotHostTimed(host, user, "overview", alertCelsius),
+  );
   return { ...dashboardShell(snapshots), cpuTempAlertC: alertCelsius };
 }
 
 export async function getDashboardGuests(user: SessionUser, kind: "vm" | "lxc" | "all" = "all") {
   const hosts = await listHosts(user);
-  const snapshots = await Promise.all(hosts.map((host) => snapshotHostTimed(host, user, "guests")));
+  const snapshots = await mapPool(hosts, DASHBOARD_HOST_CONCURRENCY, (host) =>
+    snapshotHostTimed(host, user, "guests"),
+  );
   const revealHost = userHasPermission(user, "hosts.view");
   const vms = kind === "lxc" ? [] : snapshots.flatMap((s) => attachHost(s, s.vms, revealHost));
   const containers = kind === "vm" ? [] : snapshots.flatMap((s) => attachHost(s, s.containers, revealHost));
@@ -285,8 +292,7 @@ export async function hydrateVisibleGuestIps(user: SessionUser, targets: GuestIp
     byHost.set(target.hostId, list);
   }
   const rows: Array<{ hostId: string; kind: "vm" | "lxc"; node: string; vmid: number; ips: string[] }> = [];
-  await Promise.all(
-    [...byHost.entries()].map(async ([hostId, group]) => {
+  await mapPool([...byHost.entries()], DASHBOARD_HOST_CONCURRENCY, async ([hostId, group]) => {
       try {
         await withHostClient(hostId, user, async (client) => {
           const vms = group
@@ -335,7 +341,6 @@ export async function hydrateVisibleGuestIps(user: SessionUser, targets: GuestIp
       } catch {
         // skip unreachable host
       }
-    }),
-  );
+  });
   return { ips: rows };
 }

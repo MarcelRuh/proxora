@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { QueryGate } from "@/components/layout/query-gate";
 import { EmptyState } from "@/components/ui/misc";
 import { api } from "@/lib/api";
+import { mapPool } from "@/lib/async-pool";
 import { bytesToSize } from "@/lib/utils";
 import { filterBackupFiles, type BackupFileFilter } from "@/lib/backup";
 import type { PublicHost } from "@/lib/types";
@@ -21,6 +22,8 @@ import { JobDialog } from "@/components/backups/job-dialog";
 import { BackupTaskDialog } from "@/components/backups/backup-task-dialog";
 import { RestoreDialog } from "@/components/backups/restore-dialog";
 import type { BackupFile, BackupJob, BackupOverview } from "@/components/backups/types";
+
+const BACKUP_HOST_CONCURRENCY = 2;
 
 export default function BackupsPage() {
   const { t, locale } = useI18n();
@@ -35,17 +38,14 @@ export default function BackupsPage() {
     queryKey: ["backups", hostIds],
     enabled: Boolean(hosts),
     queryFn: async () => {
-      const rows = await Promise.all(
-        (hosts?.hosts ?? []).map(async (h) => {
-          try {
-            const overview = await api<BackupOverview>(`/api/hosts/${h.id}/backups`);
-            return { host: h, overview };
-          } catch (error) {
-            return { host: h, overview: null as BackupOverview | null, error: error instanceof Error ? error.message : true };
-          }
-        }),
-      );
-      return rows;
+      return mapPool(hosts?.hosts ?? [], BACKUP_HOST_CONCURRENCY, async (h) => {
+        try {
+          const overview = await api<BackupOverview>(`/api/hosts/${h.id}/backups`);
+          return { host: h, overview };
+        } catch (error) {
+          return { host: h, overview: null as BackupOverview | null, error: error instanceof Error ? error.message : true };
+        }
+      });
     },
     refetchInterval: 45_000,
     staleTime: 20_000,

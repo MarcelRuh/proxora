@@ -9,6 +9,7 @@ import { logger } from "@/lib/logger";
 import { dispatchNotification } from "@/server/notifications/dispatch";
 import { clientForHost } from "@/server/services/host-service";
 import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
+import { clearHostUpdatesListCache } from "@/server/services/update-service";
 
 export async function persistAptSnapshot(
   host: Pick<Host, "id" | "name" | "aptNotifiedCount">,
@@ -96,6 +97,7 @@ export async function refreshAllHostPackageLists(): Promise<{
     }
   }
   await notifyAptUpdates(alerts);
+  clearHostUpdatesListCache();
   return { hosts: scanned, failed, notified: alerts.length };
 }
 

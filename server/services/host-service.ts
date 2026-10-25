@@ -1,5 +1,6 @@
 import { AuthType, Host, HostConnectionState, HostOrigin } from "@prisma/client";
 import { z } from "zod";
+import { mapPool } from "@/lib/async-pool";
 import { prisma } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { ConflictError, ForbiddenError, HostUnreachableError, isHostTransportFailure, NotFoundError, ValidationError } from "@/lib/errors";
@@ -329,49 +330,49 @@ export async function testHost(id: string, user: SessionUser) {
   return result;
 }
 
+const HOST_PROBE_CONCURRENCY = 3;
+
 export async function probeAllHosts() {
   await expireStalePeerUpdates();
   const hosts = await prisma.host.findMany({ orderBy: { name: "asc" } });
-  await Promise.all(
-    hosts.map(async (host) => {
-      if (host.connectionState === HostConnectionState.MAINTENANCE) return;
-      try {
-        if (host.origin === HostOrigin.PEER) {
-          const client = await clientForHost(host);
-          try {
-            const result = await client.testConnection();
-            await applyTestResult(host.id, result);
-            logger.info({ host: host.name, ok: result.ok }, "Host probe finished");
-          } finally {
-            client.dispose();
-            hostClientCache.invalidate(host.id);
-          }
-          return;
+  await mapPool(hosts, HOST_PROBE_CONCURRENCY, async (host) => {
+    if (host.connectionState === HostConnectionState.MAINTENANCE) return;
+    try {
+      if (host.origin === HostOrigin.PEER) {
+        const client = await clientForHost(host);
+        try {
+          const result = await client.testConnection();
+          await applyTestResult(host.id, result);
+          logger.info({ host: host.name, ok: result.ok }, "Host probe finished");
+        } finally {
+          client.dispose();
+          hostClientCache.invalidate(host.id);
         }
-        const secret = decryptSecret(host.encryptedSecret);
-        const result = await testRawConnection({
-          name: host.name,
-          url: host.url,
-          authType: host.authType,
-          username: host.username,
-          tokenId: host.tokenId,
-          secret,
-          allowInsecureTls: host.allowInsecureTls,
-        });
-        await applyTestResult(host.id, result);
-        logger.info({ host: host.name, ok: result.ok }, "Host probe finished");
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error";
-        logger.warn({ host: host.name, err: message }, "Host probe failed");
-        if (await absorbPeerUpdateOutage(host.id)) return;
-        await prisma.host.update({
-          where: { id: host.id },
-          data: { connectionState: HostConnectionState.ERROR, lastError: message },
-        });
-        notifyHostState(host, HostConnectionState.ERROR);
+        return;
       }
-    }),
-  );
+      const secret = decryptSecret(host.encryptedSecret);
+      const result = await testRawConnection({
+        name: host.name,
+        url: host.url,
+        authType: host.authType,
+        username: host.username,
+        tokenId: host.tokenId,
+        secret,
+        allowInsecureTls: host.allowInsecureTls,
+      });
+      await applyTestResult(host.id, result);
+      logger.info({ host: host.name, ok: result.ok }, "Host probe finished");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      logger.warn({ host: host.name, err: message }, "Host probe failed");
+      if (await absorbPeerUpdateOutage(host.id)) return;
+      await prisma.host.update({
+        where: { id: host.id },
+        data: { connectionState: HostConnectionState.ERROR, lastError: message },
+      });
+      notifyHostState(host, HostConnectionState.ERROR);
+    }
+  });
 }
 
 export async function withHostClient<T>(

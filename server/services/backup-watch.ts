@@ -1,3 +1,5 @@
+import { HostOrigin } from "@prisma/client";
+import { mapPool } from "@/lib/async-pool";
 import { failedTaskKind, guestTaskLabel } from "@/lib/backup-tasks";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
@@ -6,8 +8,10 @@ import { clientForHost } from "@/server/services/host-service";
 import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
 import type { ProxmoxTask } from "@/server/proxmox/types";
 
-export const BACKUP_WATCH_INTERVAL_MS = 60_000;
+export const BACKUP_WATCH_INTERVAL_MS = 3 * 60_000;
 export const BACKUP_WATCH_STARTUP_DELAY_MS = 20_000;
+const BACKUP_WATCH_HOST_CONCURRENCY = 2;
+const BACKUP_WATCH_TASK_LIMIT = 40;
 
 const seenFailedUpids = new Set<string>();
 let primed = false;
@@ -31,13 +35,16 @@ export async function scanFailedBackupTasks(): Promise<number> {
   const hosts = await prisma.host.findMany({ orderBy: { name: "asc" } });
   const failed: Array<{ hostId: string; hostName: string; task: ProxmoxTask }> = [];
 
-  for (const host of hosts) {
-    if (host.connectionState === "OFFLINE" || host.connectionState === "MAINTENANCE") continue;
+  await mapPool(hosts, BACKUP_WATCH_HOST_CONCURRENCY, async (host) => {
+    if (host.origin !== HostOrigin.LOCAL) return;
+    if (host.connectionState === "OFFLINE" || host.connectionState === "MAINTENANCE" || host.connectionState === "ERROR") {
+      return;
+    }
     try {
       const client = await clientForHost(host);
       const names = inventoryNodeNames(await loadHostInventory(client, host.id));
-      const lists = await Promise.all(
-        names.map((node) => client.tasks.list(node, { source: "all", limit: 80 }).catch(() => [] as ProxmoxTask[])),
+      const lists = await mapPool(names, 2, (node) =>
+        client.tasks.list(node, { source: "all", limit: BACKUP_WATCH_TASK_LIMIT }).catch(() => [] as ProxmoxTask[]),
       );
       for (const task of lists.flat()) {
         if (!failedTaskKind(task) || !task.upid) continue;
@@ -49,7 +56,7 @@ export async function scanFailedBackupTasks(): Promise<number> {
         "Backup task scan failed",
       );
     }
-  }
+  });
 
   if (!primed) {
     for (const row of failed) remember(row.task.upid);

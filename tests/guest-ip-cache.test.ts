@@ -57,14 +57,16 @@ describe("guest IP cache", () => {
     expect(interfaces).toHaveBeenCalledTimes(1);
   });
 
-  it("retries empty IP results after a short TTL", async () => {
+  it("retries empty IP results after the empty TTL", async () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date("2026-09-05T20:00:00Z"));
       const client = { http: { baseUrl: "https://pve.test" } } as unknown as ProxmoxClient;
       rememberGuestIpCache(client, "vm", "pve", 10, []);
       expect(applyCachedGuestIps(client, "vm", [guest({ vmid: 10 })])[0]?.ips).toEqual([]);
-      vi.setSystemTime(new Date("2026-09-05T20:00:25Z"));
+      vi.setSystemTime(new Date("2026-09-05T20:04:00Z"));
+      expect(applyCachedGuestIps(client, "vm", [guest({ vmid: 10 })])[0]?.ips).toEqual([]);
+      vi.setSystemTime(new Date("2026-09-05T20:05:01Z"));
       expect(applyCachedGuestIps(client, "vm", [guest({ vmid: 10 })])[0]?.ips).toBeUndefined();
     } finally {
       vi.useRealTimers();

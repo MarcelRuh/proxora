@@ -212,7 +212,7 @@ export default function TasksPage() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((row) => (
+                  filtered.slice(0, 200).map((row) => (
                     <tr key={row.upid} className="border-t border-border">
                       <td className="py-2">{row.hostName}</td>
                       <td>

@@ -7,12 +7,31 @@ import { inventoryNodeNames, loadHostInventory } from "@/server/services/invento
 import type { ProxmoxClient } from "@/server/proxmox/client";
 
 const UPDATE_NODE_CONCURRENCY = 2;
+const LIST_CACHE_MS = 2 * 60_000;
 
 export type NodeUpdates = {
   node: string;
   packages: Array<{ Package: string; Version?: string; OldVersion?: string; Title?: string }>;
   count: number;
 };
+
+type ListedUpdates = { version: string | null; updates: NodeUpdates[] };
+
+const listCache = new Map<string, { at: number; data: ListedUpdates }>();
+
+function listCacheKey(hostId: string, node?: string) {
+  return `${hostId}\n${node ?? ""}`;
+}
+
+export function clearHostUpdatesListCache(hostId?: string) {
+  if (!hostId) {
+    listCache.clear();
+    return;
+  }
+  for (const key of listCache.keys()) {
+    if (key.startsWith(`${hostId}\n`)) listCache.delete(key);
+  }
+}
 
 async function nodesFor(client: ProxmoxClient, hostId: string, node?: string) {
   const names = inventoryNodeNames(await loadHostInventory(client, hostId));
@@ -34,8 +53,21 @@ async function storeSnapshot(
   return count;
 }
 
+/** Counts from the last APT refresh — no Proxmox package-list calls. */
+export async function summarizeHostUpdates(hostId: string, user: SessionUser) {
+  return withHostClient(hostId, user, async (_client, host) => ({
+    version: host.proxmoxVersion,
+    count: host.aptUpdateCount,
+    checkedAt: host.aptCheckedAt?.toISOString() ?? null,
+  }));
+}
+
 export async function listHostUpdates(hostId: string, user: SessionUser, node?: string) {
-  return withHostClient(hostId, user, async (client, host) => {
+  const key = listCacheKey(hostId, node);
+  const hit = listCache.get(key);
+  if (hit && Date.now() - hit.at < LIST_CACHE_MS) return hit.data;
+
+  const data = await withHostClient(hostId, user, async (client, host) => {
     const nodes = await nodesFor(client, hostId, node);
     const updates: NodeUpdates[] = await mapPool(nodes, UPDATE_NODE_CONCURRENCY, async (n) => {
       const packages = await client.updates.list(n.node);
@@ -43,6 +75,8 @@ export async function listHostUpdates(hostId: string, user: SessionUser, node?: 
     });
     return { version: host.proxmoxVersion, updates };
   });
+  listCache.set(key, { at: Date.now(), data });
+  return data;
 }
 
 export async function refreshHostUpdates(hostId: string, user: SessionUser, node?: string) {
@@ -68,7 +102,10 @@ export async function refreshHostUpdates(hostId: string, user: SessionUser, node
       updates.push({ node: n.node, packages, count: packages.length });
     }
     await storeSnapshot(host, updates);
-    return { version: host.proxmoxVersion, updates };
+    const data = { version: host.proxmoxVersion, updates };
+    clearHostUpdatesListCache(hostId);
+    listCache.set(listCacheKey(hostId, node), { at: Date.now(), data });
+    return data;
   });
 }
 

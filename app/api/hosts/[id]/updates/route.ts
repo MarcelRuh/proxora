@@ -7,6 +7,7 @@ import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import {
   listHostUpdates,
   refreshHostUpdates,
+  summarizeHostUpdates,
   upgradeConsoleTarget,
 } from "@/server/services/update-service";
 import { userHasPermission } from "@/lib/permissions";
@@ -17,7 +18,12 @@ const bodySchema = z.object({
   confirm: z.boolean().optional(),
 });
 
-export const GET = apiRoute("updates.view", async (_req, session, params) => {
+export const GET = apiRoute("updates.view", async (req, session, params) => {
+  const summary = new URL(req.url).searchParams.get("summary") === "1";
+  if (summary) {
+    const data = await summarizeHostUpdates(params.id, session.user);
+    return json(data);
+  }
   const data = await listHostUpdates(params.id, session.user);
   return json(data);
 });

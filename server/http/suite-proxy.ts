@@ -27,7 +27,7 @@ import {
 } from "@/lib/suite-proxy";
 import { INVENTORY_VIEW_PERMISSIONS, userHasAnyPermission, userHasPermission } from "@/lib/permissions";
 import { getSessionFromToken } from "@/server/auth/session-core";
-import { loadSuiteEmbeds } from "@/server/services/suite-embeds";
+import { loadSuiteEmbedAppsCached } from "@/server/services/suite-embeds";
 
 function canUseSuite(user: Parameters<typeof userHasPermission>[0]) {
   return userHasAnyPermission(user, INVENTORY_VIEW_PERMISSIONS) || userHasPermission(user, "settings.view");
@@ -53,8 +53,6 @@ const STRIP = new Set([
 
 const BODYLESS = new Set(["GET", "HEAD"]);
 const TEXT_LIMIT = 8_000_000;
-
-let embedCache: { at: number; apps: Awaited<ReturnType<typeof loadSuiteEmbeds>>["apps"] } | null = null;
 
 function cookieValue(req: IncomingMessage, name: string): string | undefined {
   const raw = req.headers.cookie ?? "";
@@ -92,11 +90,8 @@ function flatHeaders(req: IncomingMessage): Record<string, string | undefined> {
 }
 
 async function findApp(id: string) {
-  const now = Date.now();
-  if (!embedCache || now - embedCache.at > 2000) {
-    embedCache = { at: now, apps: (await loadSuiteEmbeds()).apps };
-  }
-  return embedCache.apps.find((app) => app.id === id) ?? null;
+  const apps = await loadSuiteEmbedAppsCached();
+  return apps.find((app) => app.id === id) ?? null;
 }
 
 const IMAGE_BYTES = 2_000_000;

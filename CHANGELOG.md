@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.21] – 2026-10-25
+
+### Fixed
+
+- Dashboard and guest IP hydration fan out hosts with limited concurrency instead of unbounded Promise.all.
+- Host probes, search, backups page, ZFS detail reads, and backup-task watches use concurrency caps; backup watch runs every 3 minutes with a smaller task window.
+- APT package lists are cached for two minutes; dashboard HostUpgrade loads details only when the upgrade dialog opens. Empty guest-IP results stay cached for five minutes. Suite embed lookups cache for one minute.
+
 ## [2.2.20] – 2026-10-13
 
 ### Fixed

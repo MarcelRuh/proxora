@@ -1,3 +1,5 @@
+import { HostOrigin, type Prisma } from "@prisma/client";
+import { mapPool } from "@/lib/async-pool";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { notifyTopic } from "@/server/notifications/dispatch";
@@ -5,10 +7,10 @@ import { summarizeZfsPool } from "@/server/proxmox/zfs-health";
 import { clientForHost } from "@/server/services/host-service";
 import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
 import { applyZfsWatchState, parseZfsWatchState, ZFS_WATCH_STATE_KEY, zfsPoolKey } from "@/lib/zfs-alerts";
-import type { Prisma } from "@prisma/client";
 
 export const ZFS_WATCH_INTERVAL_MS = 5 * 60_000;
 export const ZFS_WATCH_STARTUP_DELAY_MS = 70_000;
+const ZFS_DETAIL_CONCURRENCY = 2;
 
 let scheduled = false;
 let running = false;
@@ -35,34 +37,53 @@ export async function scanZfsHealth(): Promise<number> {
   let count = 0;
 
   for (const host of hosts) {
-    if (host.connectionState === "OFFLINE" || host.connectionState === "MAINTENANCE") continue;
+    if (host.origin !== HostOrigin.LOCAL) continue;
+    if (host.connectionState === "OFFLINE" || host.connectionState === "MAINTENANCE" || host.connectionState === "ERROR") {
+      continue;
+    }
     try {
       const client = await clientForHost(host);
       const names = inventoryNodeNames(await loadHostInventory(client, host.id));
+      const targets: Array<{ node: string; name: string; health?: string }> = [];
       for (const node of names) {
         const pools = await client.zfs.pools(node).catch(() => []);
         for (const pool of pools) {
-          const detail = await client.zfs.poolDetail(node, pool.name).catch(() => null);
-          const summary = summarizeZfsPool(detail, pool.health);
-          const key = zfsPoolKey(host.id, node, pool.name);
-          const was = prev[key] ?? false;
-          const next = applyZfsWatchState(was, summary.allHealthy);
-          nextNotified[key] = next.notified;
-          if (!next.notify) continue;
-          count += 1;
-          const problems = summary.problemDisks;
-          notifyTopic("zfs.degraded", {
-            level: summary.problemDisks ? "warning" : "error",
-            title: `ZFS ${pool.name} ${pool.health || "DEGRADED"}`,
-            message: `${pool.name} auf ${host.name}/${node}: ${problems}/${summary.totalDisks || "?"} Disk(s) nicht OK`,
-            hostId: host.id,
-            name: pool.name,
-            id: pool.name,
-            host: host.name,
-            node,
-            href: "/zfs",
-          });
+          // ONLINE pools: trust list health; detail only when already degraded/unknown.
+          const listHealth = (pool.health ?? "").toUpperCase();
+          if (listHealth === "ONLINE") {
+            const key = zfsPoolKey(host.id, node, pool.name);
+            const was = prev[key] ?? false;
+            const next = applyZfsWatchState(was, true);
+            nextNotified[key] = next.notified;
+            continue;
+          }
+          targets.push({ node, name: pool.name, health: pool.health });
         }
+      }
+      const details = await mapPool(targets, ZFS_DETAIL_CONCURRENCY, async (pool) => {
+        const detail = await client.zfs.poolDetail(pool.node, pool.name).catch(() => null);
+        return { pool, detail };
+      });
+      for (const { pool, detail } of details) {
+        const summary = summarizeZfsPool(detail, pool.health);
+        const key = zfsPoolKey(host.id, pool.node, pool.name);
+        const was = prev[key] ?? false;
+        const next = applyZfsWatchState(was, summary.allHealthy);
+        nextNotified[key] = next.notified;
+        if (!next.notify) continue;
+        count += 1;
+        const problems = summary.problemDisks;
+        notifyTopic("zfs.degraded", {
+          level: summary.problemDisks ? "warning" : "error",
+          title: `ZFS ${pool.name} ${pool.health || "DEGRADED"}`,
+          message: `${pool.name} auf ${host.name}/${pool.node}: ${problems}/${summary.totalDisks || "?"} Disk(s) nicht OK`,
+          hostId: host.id,
+          name: pool.name,
+          id: pool.name,
+          host: host.name,
+          node: pool.node,
+          href: "/zfs",
+        });
       }
     } catch (error) {
       logger.warn({ host: host.name, err: error instanceof Error ? error.message : error }, "ZFS health scan failed");
