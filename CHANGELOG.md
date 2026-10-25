@@ -4,11 +4,21 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.26] – 2026-10-25
+
+### Fixed
+
+- Self-update no longer stays on 2.2.24 after installing 2.2.25: `APP_VERSION` was left behind package.json, so the UI kept offering the same update. Version sync is covered by a unit test.
+
 ## [2.2.25] – 2026-10-25
 
 ### Added
 
 - Backups page: cleanup button deletes orphan archives whose VM/LXC no longer exists (shown as "—" / "verwaist", not filename underscores).
+
+### Known issue
+
+- Image reported `APP_VERSION` 2.2.24; fixed in 2.2.26.
 
 ## [2.2.24] – 2026-10-25
 
