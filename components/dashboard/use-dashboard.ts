@@ -48,17 +48,18 @@ export function useDashboard() {
       (host) => host.connectionState === "ONLINE" && (host.cpuTempPending || host.cpuTempState === "reading"),
     ),
   );
+  // At most two light follow-ups; the background cpu-temp watch fills the cache.
   useEffect(() => {
     if (!data) return;
     if (!tempMissing) {
       setProbes(0);
       return;
     }
-    if (probes >= 4) return;
+    if (probes >= 2) return;
     const id = setTimeout(() => {
       setProbes((n) => n + 1);
       void refetch();
-    }, 8_000);
+    }, 12_000);
     return () => clearTimeout(id);
   }, [data, refetch, tempMissing, probes]);
   return query;

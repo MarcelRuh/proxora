@@ -18,6 +18,7 @@ import {
   type StorageContentItem,
   type StorageContentKind,
 } from "@/lib/storage-content";
+import { LIST_RENDER_CAP } from "@/lib/table-window";
 
 const selectClass = "h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm";
 
@@ -48,6 +49,7 @@ export function StorageContentPanel({ hostId, node, storage, onClose }: Props) {
     () => filterStorageContent(data?.items ?? [], { query, content }),
     [data?.items, query, content],
   );
+  const visible = useMemo(() => items.slice(0, LIST_RENDER_CAP), [items]);
 
   function canDelete(item: StorageContentItem): boolean {
     const needed = storageContentDeletePermission(item.content);
@@ -148,7 +150,7 @@ export function StorageContentPanel({ hostId, node, storage, onClose }: Props) {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => {
+              {visible.map((item) => {
                 const guests = item.vmid
                   ? [{ kind: item.guestKind ?? "vm", vmid: item.vmid, name: item.guestName ?? "", node }]
                   : [];
@@ -190,6 +192,11 @@ export function StorageContentPanel({ hostId, node, storage, onClose }: Props) {
               })}
             </tbody>
           </table>
+          {items.length > visible.length ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {visible.length} / {items.length}
+            </p>
+          ) : null}
         </div>
       )}
     </div>

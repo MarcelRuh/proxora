@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.22] – 2026-10-25
+
+### Fixed
+
+- ZFS list scans online nodes with limited concurrency. Templates load one host at a time. Dashboard CPU-temp probes are capped. Storage content and guest file lists use windowing/caps. User scope guest inventory fetches lazily with concurrency limits.
+
 ## [2.2.21] – 2026-10-25
 
 ### Fixed

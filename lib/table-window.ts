@@ -2,6 +2,9 @@ export const GUEST_ROW_ESTIMATE_PX = 56;
 export const GUEST_CARD_ESTIMATE_PX = 132;
 export const GUEST_TABLE_VIRTUALIZE_AFTER = 48;
 export const GUEST_TABLE_OVERSCAN = 8;
+/** Soft cap for dense admin tables when full virtualization is not wired yet. */
+export const LIST_RENDER_CAP = 200;
+export const FILE_ROW_ESTIMATE_PX = 40;
 
 export type TableWindow<T> = {
   start: number;

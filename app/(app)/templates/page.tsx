@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +13,8 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
 import { LxcTemplatePanel } from "@/components/templates/lxc-template-panel";
 import { IsoImagePanel } from "@/components/templates/iso-image-panel";
-import { cn } from "@/lib/utils";
+
+const selectClass = "h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm";
 
 export default function TemplatesPage() {
   return (
@@ -31,7 +32,6 @@ function TemplatesContent() {
   const canVm = useCan("vm.create");
   const requested = search.get("tab") === "iso" ? "iso" : "lxc";
   const tab = requested === "iso" && canVm ? "iso" : canLxc ? "lxc" : "iso";
-  const hostFilter = search.get("host") ?? "";
 
   const { data: hosts } = useQuery({
     queryKey: ["hosts"],
@@ -39,14 +39,23 @@ function TemplatesContent() {
   });
 
   const allHosts = hosts?.hosts ?? [];
-  const list =
-    hostFilter && allHosts.some((host) => host.id === hostFilter)
-      ? allHosts.filter((host) => host.id === hostFilter)
-      : allHosts;
+  const hostFilter = search.get("host") ?? "";
+  const activeHostId = useMemo(() => {
+    if (hostFilter && allHosts.some((host) => host.id === hostFilter)) return hostFilter;
+    return allHosts[0]?.id ?? "";
+  }, [allHosts, hostFilter]);
+  const activeHost = allHosts.find((host) => host.id === activeHostId) ?? null;
 
   function setTab(next: "lxc" | "iso") {
     const params = new URLSearchParams(search.toString());
     params.set("tab", next);
+    router.replace(`/templates?${params.toString()}`);
+  }
+
+  function setHost(id: string) {
+    const params = new URLSearchParams(search.toString());
+    if (id) params.set("host", id);
+    else params.delete("host");
     router.replace(`/templates?${params.toString()}`);
   }
 
@@ -57,26 +66,42 @@ function TemplatesContent() {
         title={t("tmpl.title")}
         description={t("tmpl.description")}
       />
-      {canLxc && canVm ? (
-        <div className="flex flex-wrap gap-2">
-          <Button variant={tab === "lxc" ? "default" : "outline"} onClick={() => setTab("lxc")}>
-            {t("tmpl.tabLxc")}
-          </Button>
-          <Button variant={tab === "iso" ? "default" : "outline"} onClick={() => setTab("iso")}>
-            {t("tmpl.tabIso")}
-          </Button>
-        </div>
-      ) : null}
-      {list.map((host) => (
-        <Card key={host.id} id={`host-${host.id}`} className={cn(hostFilter === host.id && "ring-1 ring-primary/40")}>
+      <div className="flex flex-wrap items-center gap-2">
+        {canLxc && canVm ? (
+          <>
+            <Button variant={tab === "lxc" ? "default" : "outline"} onClick={() => setTab("lxc")}>
+              {t("tmpl.tabLxc")}
+            </Button>
+            <Button variant={tab === "iso" ? "default" : "outline"} onClick={() => setTab("iso")}>
+              {t("tmpl.tabIso")}
+            </Button>
+          </>
+        ) : null}
+        {allHosts.length > 1 ? (
+          <select
+            className={selectClass}
+            value={activeHostId}
+            aria-label={t("tmpl.selectHost")}
+            onChange={(event) => setHost(event.target.value)}
+          >
+            {allHosts.map((host) => (
+              <option key={host.id} value={host.id}>
+                {host.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+      </div>
+      {activeHost ? (
+        <Card key={activeHost.id} id={`host-${activeHost.id}`}>
           <CardHeader>
-            <CardTitle>{host.name}</CardTitle>
+            <CardTitle>{activeHost.name}</CardTitle>
           </CardHeader>
           <CardContent>
-            {tab === "iso" ? <IsoImagePanel hostId={host.id} /> : <LxcTemplatePanel hostId={host.id} />}
+            {tab === "iso" ? <IsoImagePanel hostId={activeHost.id} /> : <LxcTemplatePanel hostId={activeHost.id} />}
           </CardContent>
         </Card>
-      ))}
+      ) : null}
     </div>
   );
 }

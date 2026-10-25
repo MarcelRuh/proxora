@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { mapPool } from "@/lib/async-pool";
 import type { PublicHost } from "@/lib/types";
 import type { Guest } from "@/lib/types";
 import type { GuestGrant, GuestScope } from "@/lib/guest-scope";
@@ -17,6 +18,8 @@ import {
   hostGrantCatalog,
   hostScopedFromRole,
 } from "@/lib/permissions";
+
+const SCOPE_GUEST_HOST_CONCURRENCY = 2;
 
 export type HostGrant = {
   hostId: string;
@@ -51,28 +54,27 @@ export function UserScopeFields({
   const [openHost, setOpenHost] = useState<string | null>(null);
   const [openGuestHost, setOpenGuestHost] = useState<string | null>(null);
   const [openGuest, setOpenGuest] = useState<string | null>(null);
+  // Lazy: only hosts with existing guest grants, plus the currently expanded host.
   const guestHostIds = [...new Set([...guests.map((g) => g.hostId), ...(openGuestHost ? [openGuestHost] : [])])].sort();
   const { data: inventory } = useQuery({
     queryKey: ["scope-guests", guestHostIds],
     enabled: guestHostIds.length > 0 && allHosts.length > 0,
     queryFn: async () => {
-      return Promise.all(
-        guestHostIds.map(async (id) => {
-          const host = allHosts.find((h) => h.id === id) ?? { id, name: id };
-          const row = await api<{ vms: Guest[]; containers: Guest[] }>(`/api/hosts/${id}/guests`).catch(() => ({
-            vms: [] as Guest[],
-            containers: [] as Guest[],
-          }));
-          return { host, vms: row.vms, containers: row.containers };
-        }),
-      );
+      return mapPool(guestHostIds, SCOPE_GUEST_HOST_CONCURRENCY, async (id) => {
+        const host = allHosts.find((h) => h.id === id) ?? { id, name: id };
+        const row = await api<{ vms: Guest[]; containers: Guest[] }>(`/api/hosts/${id}/guests`).catch(() => ({
+          vms: [] as Guest[],
+          containers: [] as Guest[],
+        }));
+        return { host, vms: row.vms, containers: row.containers };
+      });
     },
     staleTime: 30_000,
   });
 
   useEffect(() => {
     if (inventory) onGuestNames?.(guestNameMap(inventory));
-  }, [inventory]);
+  }, [inventory, onGuestNames]);
 
   function grantFor(id: string): HostGrant | undefined {
     return grants.find((g) => g.hostId === id);

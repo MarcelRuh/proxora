@@ -27,6 +27,7 @@ import { useCan } from "@/components/auth/session-user";
 import { api, ApiRequestError } from "@/lib/api";
 import { bytesToSize, formatPercent } from "@/lib/utils";
 import { formatGuestFileText, prettyGuestFileOnOpen } from "@/lib/guest-file-format";
+import { FILE_ROW_ESTIMATE_PX, GUEST_TABLE_OVERSCAN, windowRows } from "@/lib/table-window";
 import {
   createRateTracker,
   formatByteRate,
@@ -184,6 +185,8 @@ export function GuestFilesPanel({
   const rateRef = useRef<ReturnType<typeof createRateTracker> | null>(null);
   const lastUiRef = useRef(0);
   const opened = useRef(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [listScroll, setListScroll] = useState({ top: 0, height: 480 });
 
   const apiPath = `/api/hosts/${hostId}/${kind === "vm" ? "vms" : "lxc"}/${encodeURIComponent(node)}/${vmid}/files`;
   const ipOptions = useMemo(() => Array.from(new Set(ips.filter(Boolean))), [ips]);
@@ -193,6 +196,25 @@ export function GuestFilesPanel({
   const maxBytes = via === "agent" ? AGENT_FILE_MAX_BYTES : null;
   const transferring = Boolean(transfer);
   const canWrite = useCan(guestFilePermission(kind, "write"), hostId, { hostId, kind, vmid });
+  const entryWindow = useMemo(
+    () =>
+      entries.length > 80
+        ? windowRows(entries, listScroll.top, listScroll.height, FILE_ROW_ESTIMATE_PX, GUEST_TABLE_OVERSCAN)
+        : {
+            start: 0,
+            end: entries.length,
+            padTop: 0,
+            padBottom: 0,
+            slice: entries,
+          },
+    [entries, listScroll],
+  );
+
+  useEffect(() => {
+    setListScroll((prev) => ({ ...prev, top: 0 }));
+    const el = listRef.current;
+    if (el) setListScroll({ top: 0, height: el.clientHeight || 480 });
+  }, [path, entries.length]);
 
   async function request(op: "list" | "read" | "write" | "mkdir" | "delete" | "rename" | "transfer-ticket", extra: Record<string, unknown> = {}) {
     const mode = extra.via === "sftp" || session ? "sftp" : "agent";
@@ -995,8 +1017,15 @@ export function GuestFilesPanel({
                     </div>
                   ))
                 : null}
-              <div className={fill ? "min-h-0 flex-1 overflow-auto" : "max-h-[28rem] overflow-auto"}>
-                <div className="sticky top-0 grid grid-cols-[1fr_8rem_10rem_auto] gap-2 border-b border-border bg-card px-3 py-1.5 text-xs text-muted-foreground">
+              <div
+                ref={listRef}
+                className={fill ? "min-h-0 flex-1 overflow-auto" : "max-h-[28rem] overflow-auto"}
+                onScroll={(event) => {
+                  const el = event.currentTarget;
+                  setListScroll({ top: el.scrollTop, height: el.clientHeight });
+                }}
+              >
+                <div className="sticky top-0 z-[1] grid grid-cols-[1fr_8rem_10rem_auto] gap-2 border-b border-border bg-card px-3 py-1.5 text-xs text-muted-foreground">
                   <span>{t("files.colName")}</span>
                   <span>{t("files.colSize")}</span>
                   <span>{t("files.colMtime")}</span>
@@ -1005,10 +1034,13 @@ export function GuestFilesPanel({
                 {entries.length === 0 ? (
                   <p className="px-3 py-8 text-sm text-muted-foreground">{busy ? t("common.loading") : t("files.empty")}</p>
                 ) : (
-                  entries.map((entry) => (
+                  <>
+                    {entryWindow.padTop ? <div style={{ height: entryWindow.padTop }} aria-hidden /> : null}
+                    {entryWindow.slice.map((entry) => (
                     <div
                       key={entry.path}
                       className="grid grid-cols-[1fr_8rem_10rem_auto] items-center gap-2 border-b border-border/60 px-3 py-1.5 text-sm hover:bg-primary/5"
+                      style={{ height: FILE_ROW_ESTIMATE_PX }}
                     >
                       <button
                         type="button"
@@ -1065,7 +1097,9 @@ export function GuestFilesPanel({
                         ) : null}
                       </div>
                     </div>
-                  ))
+                    ))}
+                    {entryWindow.padBottom ? <div style={{ height: entryWindow.padBottom }} aria-hidden /> : null}
+                  </>
                 )}
               </div>
             </div>
