@@ -20,17 +20,6 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import { useSessionUser } from "@/components/auth/session-user";
 import { userHasPermission } from "@/lib/permissions";
 import { peerHostAllowsPermission } from "@/lib/federation-access";
-import type { MessageKey } from "@/lib/i18n/messages";
-
-const JOB_STATUS: Record<string, MessageKey> = {
-  PENDING: "updates.job.PENDING",
-  WAITING: "updates.job.WAITING",
-  RUNNING: "updates.job.RUNNING",
-  SUCCESS: "updates.job.SUCCESS",
-  FAILED: "updates.job.FAILED",
-  CANCELLED: "updates.job.CANCELLED",
-};
-
 const UPDATE_HOST_CONCURRENCY = 2;
 
 type AptPackage = { Package: string; Version?: string; OldVersion?: string };
@@ -52,16 +41,6 @@ export default function UpdatesPage() {
   const { data: hosts, error: hostsError, refetch: refetchHosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
-  });
-  const { data: jobs } = useQuery({
-    queryKey: ["update-jobs"],
-    queryFn: () =>
-      api<{
-        jobs: Array<{ id: string; status: string; host?: { name: string } | null; error?: string | null }>;
-      }>("/api/updates"),
-    refetchInterval: 15_000,
-    staleTime: 8_000,
-    placeholderData: (previous) => previous,
   });
   const { data: details, isFetching } = useQuery({
     queryKey: [...HOST_UPDATES_LIST_KEY, hosts?.hosts.map((h) => h.id)],
@@ -322,26 +301,6 @@ export default function UpdatesPage() {
         {isFetching && !details ? <p className="text-sm text-muted-foreground">{t("updates.loading")}</p> : null}
       </QueryGate>
 
-      {(jobs?.jobs ?? []).length ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("updates.jobsTitle")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            {(jobs?.jobs ?? []).map((j) => (
-              <div key={j.id} className="flex flex-wrap justify-between gap-2">
-                <span>{j.host?.name ?? t("updates.unknown")}</span>
-                <div className="flex items-center gap-2">
-                  {j.error ? <span className="text-xs text-destructive">{j.error}</span> : null}
-                  <Badge variant={j.status === "FAILED" ? "danger" : j.status === "SUCCESS" ? "success" : "warning"}>
-                    {JOB_STATUS[j.status] ? t(JOB_STATUS[j.status]) : j.status}
-                  </Badge>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
     </div>
   );
 }

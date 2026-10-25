@@ -2,9 +2,11 @@ import { listHosts } from "@/server/services/host-service";
 import { apiRoute } from "@/server/http/api-route";
 import { json } from "@/server/http/respond";
 import { prisma } from "@/lib/db";
+import { pruneObsoleteHostUpdateJobs } from "@/server/services/update-service";
 
 export const GET = apiRoute("tasks.view", async (_req, session) => {
   const hosts = await listHosts(session.user);
+  await pruneObsoleteHostUpdateJobs();
   const jobs = await prisma.job.findMany({
     orderBy: { createdAt: "desc" },
     take: 50,

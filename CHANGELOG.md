@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.24] – 2026-10-25
+
+### Fixed
+
+- Remove obsolete silent host-update Job history from the Updates page. Leftover FAILED rows from the old API upgrade path are pruned so stale errors no longer linger.
+
 ## [2.2.23] – 2026-10-25
 
 ### Fixed

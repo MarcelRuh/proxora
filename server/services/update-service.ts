@@ -119,7 +119,20 @@ export async function upgradeConsoleTarget(hostId: string, user: SessionUser, no
   });
 }
 
+/**
+ * Silent APT upgrade jobs were removed (Proxmox has no /apt/upgrade API).
+ * Leftover FAILED rows kept showing as “previous update jobs” forever — drop them.
+ */
+export async function pruneObsoleteHostUpdateJobs(): Promise<number> {
+  const result = await prisma.job.deleteMany({ where: { type: "host.update" } });
+  return result.count;
+}
+
 export async function listJobs(type?: string) {
+  if (type === "host.update") {
+    await pruneObsoleteHostUpdateJobs();
+    return [];
+  }
   return prisma.job.findMany({
     where: type ? { type } : undefined,
     include: { host: { select: { id: true, name: true } } },
