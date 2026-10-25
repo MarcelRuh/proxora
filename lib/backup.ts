@@ -306,6 +306,27 @@ const PERIOD_MS: Record<Exclude<BackupFileFilter["period"], "all">, number> = {
   month: 30 * 24 * 60 * 60 * 1000,
 };
 
+export type BackupGuestRef = { vmid: number; kind: "vm" | "lxc" };
+
+/** Backup belongs to a VMID that no longer exists (or kind no longer matches). */
+export function isOrphanBackupFile(
+  file: { vmid: number | null; kind: BackupKind },
+  guests: BackupGuestRef[],
+): boolean {
+  if (file.vmid == null || file.vmid <= 0) return false;
+  const live = guests.filter((g) => g.vmid === file.vmid);
+  if (live.length === 0) return true;
+  if (file.kind === "unknown") return false;
+  return !live.some((g) => g.kind === file.kind);
+}
+
+export function orphanBackupFiles<T extends { vmid: number | null; kind: BackupKind }>(
+  files: T[],
+  guests: BackupGuestRef[],
+): T[] {
+  return files.filter((file) => isOrphanBackupFile(file, guests));
+}
+
 export function filterBackupFiles<T extends { volid: string; storage: string; vmid: number | null; kind: BackupKind; ctime: number }>(
   files: T[],
   filter: BackupFileFilter,

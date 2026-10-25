@@ -509,6 +509,7 @@ export function backupPermissionForAction(action: string): Permission {
     case "restore":
       return "backup.restore";
     case "delete-file":
+    case "cleanup-orphans":
       return "backup.delete";
     default:
       return "backup.view";

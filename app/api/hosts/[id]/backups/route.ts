@@ -8,7 +8,12 @@ import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { compactProxmoxBody } from "@/lib/lxc-net";
 import { newBackupJobId, parseBackupVolid } from "@/lib/backup";
-import { listHostBackups, runBackupJob, upsertBackupJob } from "@/server/services/backup-service";
+import {
+  cleanupOrphanBackupFiles,
+  listHostBackups,
+  runBackupJob,
+  upsertBackupJob,
+} from "@/server/services/backup-service";
 import { enqueueRestoreJob } from "@/server/services/restore-jobs";
 import { ValidationError } from "@/lib/errors";
 import { lookupGuestName } from "@/server/notifications/guest-name";
@@ -60,6 +65,9 @@ const schema = z.discriminatedUnion("action", [
     node: z.string().min(1),
     volid: z.string().min(1),
   }),
+  z.object({
+    action: z.literal("cleanup-orphans"),
+  }),
 ]);
 
 export const GET = apiRoute("backup.view", async (_req, session, params) => {
@@ -79,6 +87,9 @@ export const POST = apiRoute(
   let notifyNode: string | undefined;
   let result: Record<string, unknown>;
   try {
+    if (body.action === "cleanup-orphans") {
+      result = await cleanupOrphanBackupFiles(params.id, session.user);
+    } else {
     result = await withHostClient(params.id, session.user, async (client, host) => {
     hostName = host.name;
     switch (body.action) {
@@ -144,6 +155,7 @@ export const POST = apiRoute(
         throw new ValidationError("Unbekannte Aktion");
     }
     });
+    }
   } catch (error) {
     if (body.action === "run" || body.action === "run-job") {
       notifyTopic("backup.failed", {
@@ -194,7 +206,7 @@ export const POST = apiRoute(
           ? AUDIT_ACTIONS.BACKUP_JOB_DELETED
           : body.action === "restore"
             ? AUDIT_ACTIONS.BACKUP_RESTORED
-            : body.action === "delete-file"
+            : body.action === "delete-file" || body.action === "cleanup-orphans"
               ? AUDIT_ACTIONS.BACKUP_FILE_DELETED
               : AUDIT_ACTIONS.BACKUP_STARTED;
 

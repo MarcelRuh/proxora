@@ -14,7 +14,7 @@ import { EmptyState } from "@/components/ui/misc";
 import { api } from "@/lib/api";
 import { mapPool } from "@/lib/async-pool";
 import { bytesToSize } from "@/lib/utils";
-import { filterBackupFiles, type BackupFileFilter } from "@/lib/backup";
+import { filterBackupFiles, orphanBackupFiles, type BackupFileFilter } from "@/lib/backup";
 import type { PublicHost } from "@/lib/types";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
@@ -136,6 +136,11 @@ function HostBackups({
       ),
     [files, fileQuery, fileKind, fileStorage, filePeriod, guestNames],
   );
+  const orphanFiles = useMemo(
+    () => orphanBackupFiles(files, overview?.guests ?? []),
+    [files, overview?.guests],
+  );
+  const orphanVolids = useMemo(() => new Set(orphanFiles.map((f) => f.volid)), [orphanFiles]);
 
   const guestLabel = useMemo(() => {
     const map = new Map((overview?.guests ?? []).map((g) => [g.vmid, g.name]));
@@ -157,6 +162,23 @@ function HostBackups({
     try {
       await api(`/api/hosts/${hostId}/backups`, { method: "POST", body: JSON.stringify(body) });
       toast.success(t(successKey));
+      onDone();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t("common.failed"));
+    }
+  }
+
+  async function cleanupOrphans() {
+    try {
+      const res = await api<{ deleted: number; failed: number; found: number }>(`/api/hosts/${hostId}/backups`, {
+        method: "POST",
+        body: JSON.stringify({ action: "cleanup-orphans" }),
+      });
+      if (res.failed > 0) {
+        toast.error(t("backup.cleanupOrphansPartial", { deleted: res.deleted, failed: res.failed }));
+      } else {
+        toast.success(t("backup.cleanupOrphansDone", { deleted: res.deleted }));
+      }
       onDone();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t("common.failed"));
@@ -280,11 +302,26 @@ function HostBackups({
             <section>
               <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
                 <p className="proxora-section">{t("backup.files")}</p>
-                {files.length ? (
-                  <p className="text-xs text-muted-foreground">
-                    {t("backup.filterCount", { shown: filteredFiles.length, total: files.length })}
-                  </p>
-                ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  {files.length ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t("backup.filterCount", { shown: filteredFiles.length, total: files.length })}
+                    </p>
+                  ) : null}
+                  {canDeleteFile && orphanFiles.length > 0 ? (
+                    <ConfirmAction
+                      title={t("backup.cleanupOrphansTitle")}
+                      description={t("backup.cleanupOrphansBody", { count: orphanFiles.length })}
+                      actionLabel={t("backup.cleanupOrphans")}
+                      destructive
+                      onConfirm={cleanupOrphans}
+                    >
+                      <Button size="sm" variant="destructive">
+                        {t("backup.cleanupOrphans")} ({orphanFiles.length})
+                      </Button>
+                    </ConfirmAction>
+                  ) : null}
+                </div>
               </div>
               {filesPending && !filesData ? (
                 <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
@@ -348,42 +385,52 @@ function HostBackups({
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredFiles.map((file) => (
-                            <tr key={file.volid} className="border-t border-border">
-                              <td className="py-2 font-mono">{file.vmid ?? "—"}</td>
-                              <td className="max-w-[180px] truncate">{file.vmid != null ? guestNames.get(file.vmid) ?? "—" : "—"}</td>
-                              <td>{file.kind === "lxc" ? "LXC" : file.kind === "vm" ? "VM" : "—"}</td>
-                              <td>{file.ctime ? new Date(file.ctime).toLocaleString(dateLocale) : "—"}</td>
-                              <td>{bytesToSize(file.size)}</td>
-                              <td className="max-w-[220px] truncate text-muted-foreground" title={file.volid}>
-                                {file.storage}
-                              </td>
-                              <td>
-                                <div className="flex flex-wrap gap-1">
-                                  {canRestore ? (
-                                    <Button size="sm" variant="outline" onClick={() => setRestoreFile(file)}>
-                                      {t("backup.restore")}
-                                    </Button>
-                                  ) : null}
-                                  {canDeleteFile ? (
-                                    <ConfirmAction
-                                      title={t("backup.deleteFileTitle")}
-                                      description={t("backup.deleteFileBody", { volid: file.volid })}
-                                      actionLabel={t("backup.deleteFile")}
-                                      destructive
-                                      onConfirm={() =>
-                                        post({ action: "delete-file", node: file.node, volid: file.volid }, "backup.fileDeleted")
-                                      }
-                                    >
-                                      <Button size="sm" variant="destructive">
-                                        {t("backup.deleteFile")}
+                          {filteredFiles.map((file) => {
+                            const orphan = orphanVolids.has(file.volid);
+                            return (
+                              <tr key={file.volid} className="border-t border-border">
+                                <td className="py-2 font-mono">{file.vmid ?? "—"}</td>
+                                <td className="max-w-[180px] truncate">
+                                  {file.vmid != null
+                                    ? guestNames.get(file.vmid) ?? (orphan ? t("backup.orphan") : "—")
+                                    : "—"}
+                                </td>
+                                <td>{file.kind === "lxc" ? "LXC" : file.kind === "vm" ? "VM" : "—"}</td>
+                                <td>{file.ctime ? new Date(file.ctime).toLocaleString(dateLocale) : "—"}</td>
+                                <td>{bytesToSize(file.size)}</td>
+                                <td className="max-w-[220px] truncate text-muted-foreground" title={file.volid}>
+                                  {file.storage}
+                                </td>
+                                <td>
+                                  <div className="flex flex-wrap gap-1">
+                                    {canRestore ? (
+                                      <Button size="sm" variant="outline" onClick={() => setRestoreFile(file)}>
+                                        {t("backup.restore")}
                                       </Button>
-                                    </ConfirmAction>
-                                  ) : null}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
+                                    ) : null}
+                                    {canDeleteFile ? (
+                                      <ConfirmAction
+                                        title={t("backup.deleteFileTitle")}
+                                        description={t("backup.deleteFileBody", { volid: file.volid })}
+                                        actionLabel={t("backup.deleteFile")}
+                                        destructive
+                                        onConfirm={() =>
+                                          post(
+                                            { action: "delete-file", node: file.node, volid: file.volid },
+                                            "backup.fileDeleted",
+                                          )
+                                        }
+                                      >
+                                        <Button size="sm" variant="destructive">
+                                          {t("backup.deleteFile")}
+                                        </Button>
+                                      </ConfirmAction>
+                                    ) : null}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

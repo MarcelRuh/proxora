@@ -6,11 +6,13 @@ import {
   backupsForGuestNewestFirst,
   assertGuestBackupVolids,
   guestNeedsStopForRestore,
+  isOrphanBackupFile,
   jobSchedulePayload,
   isBackupJobScheduleConflict,
   normalizeBackupJob,
   normalizeProxmoxTaskLog,
   isEmptyProxmoxTaskLogError,
+  orphanBackupFiles,
   parseBackupSchedule,
   formatBackupSchedule,
   parseBackupVolid,
@@ -208,6 +210,40 @@ describe("proxmox restore log progress", () => {
     const parsed = parseProxmoxTaskProgress(["no content", { n: 2, t: "TASK OK" }]);
     expect(parsed.percent).toBe(100);
     expect(parsed.detail).toBe("TASK OK");
+  });
+});
+
+describe("orphan backup detection", () => {
+  const guests = [
+    { vmid: 100, kind: "vm" as const },
+    { vmid: 200, kind: "lxc" as const },
+  ];
+
+  it("marks backups whose VMID is gone", () => {
+    expect(isOrphanBackupFile({ vmid: 999, kind: "vm" }, guests)).toBe(true);
+    expect(isOrphanBackupFile({ vmid: 100, kind: "vm" }, guests)).toBe(false);
+  });
+
+  it("marks kind mismatch as orphan", () => {
+    expect(isOrphanBackupFile({ vmid: 100, kind: "lxc" }, guests)).toBe(true);
+    expect(isOrphanBackupFile({ vmid: 200, kind: "vm" }, guests)).toBe(true);
+  });
+
+  it("keeps unknown-kind backups when the VMID still exists", () => {
+    expect(isOrphanBackupFile({ vmid: 100, kind: "unknown" }, guests)).toBe(false);
+  });
+
+  it("ignores files without a VMID", () => {
+    expect(isOrphanBackupFile({ vmid: null, kind: "vm" }, guests)).toBe(false);
+  });
+
+  it("filters orphan lists", () => {
+    const files = [
+      { volid: "a", vmid: 100, kind: "vm" as const },
+      { volid: "b", vmid: 999, kind: "lxc" as const },
+      { volid: "c", vmid: 200, kind: "vm" as const },
+    ];
+    expect(orphanBackupFiles(files, guests).map((f) => f.volid)).toEqual(["b", "c"]);
   });
 });
 

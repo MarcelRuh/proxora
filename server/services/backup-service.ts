@@ -1,3 +1,4 @@
+import { mapPool } from "@/lib/async-pool";
 import { compactProxmoxBody } from "@/lib/lxc-net";
 import {
   backupCtimeMs,
@@ -6,6 +7,7 @@ import {
   isBackupJobScheduleConflict,
   newBackupJobId,
   normalizeBackupJob,
+  orphanBackupFiles,
   parseBackupVolid,
   pruneKeepLast,
   vzdumpGuestParams,
@@ -18,6 +20,9 @@ import { filterGuestsForUser } from "@/server/auth/session-core";
 import type { ProxmoxClient } from "@/server/proxmox/client";
 import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
 import { listStorageContentRows } from "@/server/services/storage-content";
+
+const ORPHAN_DELETE_CONCURRENCY = 2;
+const ORPHAN_DELETE_LIMIT = 200;
 
 export type BackupGuest = { vmid: number; name: string; kind: "vm" | "lxc"; node: string; status: string };
 
@@ -118,6 +123,43 @@ export async function listHostBackupFiles(hostId: string, user: SessionUser) {
         ? null
         : new Set(user.allowedGuests.filter((g) => g.hostId === hostId).map((g) => g.vmid));
     return { files: allowedVmids ? files.filter((f) => f.vmid != null && allowedVmids.has(f.vmid)) : files };
+  });
+}
+
+/** Deletes backup archives whose VMID no longer exists as VM/LXC on the host. */
+export async function cleanupOrphanBackupFiles(hostId: string, user: SessionUser) {
+  const overview = await listHostBackups(hostId, user);
+  const { files } = await listHostBackupFiles(hostId, user);
+  const orphans = orphanBackupFiles(files, overview.guests).slice(0, ORPHAN_DELETE_LIMIT);
+  if (orphans.length === 0) {
+    return { found: 0, deleted: 0, failed: 0, volids: [] as string[], errors: [] as Array<{ volid: string; error: string }> };
+  }
+  return withHostClient(hostId, user, async (client) => {
+    const results = await mapPool(orphans, ORPHAN_DELETE_CONCURRENCY, async (file) => {
+      const parsed = parseBackupVolid(file.volid);
+      if (!parsed.storage || !parsed.volume) {
+        return { volid: file.volid, ok: false as const, error: "invalid" };
+      }
+      try {
+        await client.storage.deleteContent(file.node, parsed.storage, parsed.volume);
+        return { volid: file.volid, ok: true as const };
+      } catch (error) {
+        return {
+          volid: file.volid,
+          ok: false as const,
+          error: error instanceof Error ? error.message : "failed",
+        };
+      }
+    });
+    const deleted = results.filter((r) => r.ok).map((r) => r.volid);
+    const failed = results.filter((r) => !r.ok);
+    return {
+      found: orphans.length,
+      deleted: deleted.length,
+      failed: failed.length,
+      volids: deleted,
+      errors: failed.map((r) => ({ volid: r.volid, error: r.error })),
+    };
   });
 }
 

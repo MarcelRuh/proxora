@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.25] – 2026-10-25
+
+### Added
+
+- Backups page: cleanup button deletes orphan archives whose VM/LXC no longer exists (shown as "—" / "verwaist", not filename underscores).
+
 ## [2.2.24] – 2026-10-25
 
 ### Fixed
