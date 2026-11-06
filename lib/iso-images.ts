@@ -237,6 +237,23 @@ export function vmCdromDisks(iso?: string, iso2?: string): Record<string, string
   return disks;
 }
 
+/** Boot order for new VMs. With an install ISO, prefer it and omit net0 so a missed CD keypress does not fall through to PXE. */
+export function vmCreateBootOrder(input: {
+  diskBus: "scsi" | "virtio" | "sata" | "ide";
+  hasInstallIso: boolean;
+}): string {
+  const disk =
+    input.diskBus === "virtio"
+      ? "virtio0"
+      : input.diskBus === "sata"
+        ? "sata0"
+        : input.diskBus === "ide"
+          ? "ide0"
+          : "scsi0";
+  if (input.hasInstallIso) return `order=ide2;${disk}`;
+  return `order=${disk}`;
+}
+
 export function isoVersionFromFilename(filename: string): string {
   const file = volidFilename(filename);
   const virtio = /virtio[-_]?win[-_]?(\d+\.\d+\.\d+)/i.exec(file);

@@ -8,7 +8,7 @@ import { filterGuestsForUser } from "@/server/auth/session-core";
 import { followGuestCreateTask } from "@/server/services/guest-start";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { assertGuestIdentityFree } from "@/server/services/guest-ips";
-import { ostypeFromIso, vmCdromDisks, windowsVmFirmware } from "@/lib/iso-images";
+import { ostypeFromIso, vmCdromDisks, vmCreateBootOrder, windowsVmFirmware } from "@/lib/iso-images";
 import { diskExtras, vmDiskSpec } from "@/lib/vm-storage";
 import { withNetFirewall } from "@/lib/windows-guest";
 import type { VmCreateParams } from "@/server/proxmox/vms";
@@ -117,6 +117,10 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
   else if (body.diskBus === "ide") payload.ide0 = disk;
   else payload.scsi0 = disk;
   Object.assign(payload, vmCdromDisks(body.iso, body.iso2));
+  payload.boot = vmCreateBootOrder({
+    diskBus: body.diskBus,
+    hasInstallIso: Boolean(body.iso?.trim()),
+  });
   if (efi) payload.efidisk0 = `${body.diskStorage}:1,efitype=4m,pre-enrolled-keys=1`;
   if (tpm) payload.tpmstate0 = `${body.diskStorage}:1,version=v2.0`;
 

@@ -462,6 +462,7 @@ export function permissionForGuestAction(kind: "vm" | "lxc", action: string): Pe
   const prefix = kind === "vm" ? "vm" : "lxc";
   switch (action) {
     case "start":
+    case "sendkey":
       return `${prefix}.start` as Permission;
     case "stop":
       return `${prefix}.force-stop` as Permission;

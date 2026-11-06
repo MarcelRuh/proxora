@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.3.2] – 2026-11-06
+
+### Fixed
+
+- New VMs with an install ISO boot from `ide2` first and omit NIC from the boot order, so a missed Windows "Press any key" prompt no longer falls through to PXE.
+- After Windows VM create+start, Proxora sends Space/Enter automatically to clear the UEFI CD boot prompt.
+
 ## [2.3.1] – 2026-11-06
 
 ### Added

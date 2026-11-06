@@ -41,6 +41,7 @@ const actionSchema = z.object({
     "snapshot-rollback",
     "config",
     "resize",
+    "sendkey",
   ]),
   confirm: z.boolean().optional(),
   confirmId: z.number().int().positive().optional(),
@@ -55,6 +56,7 @@ const actionSchema = z.object({
   backupVolids: z.array(z.string().min(1)).max(50).optional(),
   wait: z.boolean().optional(),
   phase: z.enum(["shutdown", "stop", "delete"]).optional(),
+  key: z.string().min(1).max(32).optional(),
 });
 
 const ACTION_AUDIT: Record<string, string> = {
@@ -151,6 +153,11 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
       case "start":
         result = await vm.start(node, vmid);
         break;
+      case "sendkey":
+        await vm.sendkey(node, vmid, body.key?.trim() || "spc");
+        // No UPID — return immediately without task wait.
+        return { ok: true };
+
       case "stop":
         result = await vm.stop(node, vmid);
         break;
@@ -261,8 +268,11 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
     }
     throw error;
   }
-  invalidateInventoryCache(params.id);
-  if (!(body.action === "delete" && body.wait === false && deletePhase && deletePhase !== "delete")) {
+  if (body.action !== "sendkey") invalidateInventoryCache(params.id);
+  if (
+    body.action !== "sendkey" &&
+    !(body.action === "delete" && body.wait === false && deletePhase && deletePhase !== "delete")
+  ) {
     await writeAuditLog({
       userId: session.user.id,
       ip: await clientIp(),

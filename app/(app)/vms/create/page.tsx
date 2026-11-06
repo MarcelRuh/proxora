@@ -300,6 +300,7 @@ export default function CreateVmPage() {
     startAfter: form.startAfter,
     open: progress === "running" && Boolean(createUpid),
     failedFallback: t("common.failed"),
+    nudgeCdBoot: Boolean(form.iso && isWindowsIso(form.iso) && form.startAfter),
     onAllDone: () => {
       toast.success(t("vms.created"));
       setProgress("done");

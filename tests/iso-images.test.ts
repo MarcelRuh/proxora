@@ -18,9 +18,11 @@ import {
   virtioCatalogItemFromRelease,
   VIRTIO_WIN_CATALOG_ITEM,
   vmCdromDisks,
+  vmCreateBootOrder,
   windowsVmFirmware,
   withLiveVirtioCatalog,
 } from "@/lib/iso-images";
+import { cdBootNudgePlan } from "@/lib/vm-cd-boot-nudge";
 import { configReferencesVolume, formatVolumeUsers, usersForVolids } from "@/lib/volume-usage";
 
 describe("iso images", () => {
@@ -129,6 +131,9 @@ describe("iso images", () => {
       ide2: "local:iso/Win11_24H2.iso,media=cdrom",
       ide3: "local:iso/virtio-win-0.1.266.iso,media=cdrom",
     });
+    expect(vmCreateBootOrder({ diskBus: "scsi", hasInstallIso: true })).toBe("order=ide2;scsi0");
+    expect(vmCreateBootOrder({ diskBus: "virtio", hasInstallIso: false })).toBe("order=virtio0");
+    expect(cdBootNudgePlan(1, 100, 10).map((s) => s.key)).toEqual(["spc", "ret", "spc"]);
   });
 });
 

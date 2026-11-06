@@ -62,6 +62,11 @@ export class VmApi {
     return this.http.post<string>(`/nodes/${encodeURIComponent(node)}/qemu/${vmid}/status/start`);
   }
 
+  /** QEMU key name, e.g. `spc`, `ret`, `kp_enter`. */
+  sendkey(node: string, vmid: number, key: string) {
+    return this.http.put<null>(`/nodes/${encodeURIComponent(node)}/qemu/${vmid}/sendkey`, { key });
+  }
+
   stop(node: string, vmid: number) {
     return this.http.post<string>(`/nodes/${encodeURIComponent(node)}/qemu/${vmid}/status/stop`);
   }

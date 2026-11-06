@@ -3,9 +3,21 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { isUpid } from "@/lib/guest-task";
+import { cdBootNudgePlan } from "@/lib/vm-cd-boot-nudge";
 import { useProxmoxTask } from "@/components/tasks/use-proxmox-task";
 
 export type CreateTaskPhase = "create" | "start";
+
+async function nudgeCdBoot(hostId: string, node: string, vmid: number) {
+  const path = `/api/hosts/${hostId}/vms/${encodeURIComponent(node)}/${vmid}`;
+  for (const step of cdBootNudgePlan()) {
+    await new Promise((resolve) => window.setTimeout(resolve, step.delayMs));
+    await api(path, {
+      method: "POST",
+      body: JSON.stringify({ action: "sendkey", key: step.key, wait: false }),
+    }).catch(() => undefined);
+  }
+}
 
 export function useCreateTaskFollow({
   kind,
@@ -16,6 +28,7 @@ export function useCreateTaskFollow({
   startAfter,
   open,
   failedFallback,
+  nudgeCdBoot: nudgeCdBootEnabled = false,
   onAllDone,
   onFailed,
 }: {
@@ -27,6 +40,8 @@ export function useCreateTaskFollow({
   startAfter: boolean;
   open: boolean;
   failedFallback: string;
+  /** After start, send Space/Enter so Windows UEFI CD boot does not time out into PXE. */
+  nudgeCdBoot?: boolean;
   onAllDone: () => void;
   onFailed: (message: string) => void;
 }) {
@@ -34,6 +49,7 @@ export function useCreateTaskFollow({
   const [upid, setUpid] = useState<string | null>(null);
   const startedRef = useRef(false);
   const doneRef = useRef(false);
+  const nudgedRef = useRef(false);
   const onAllDoneRef = useRef(onAllDone);
   const onFailedRef = useRef(onFailed);
   onAllDoneRef.current = onAllDone;
@@ -44,6 +60,7 @@ export function useCreateTaskFollow({
     setUpid(createUpid);
     startedRef.current = false;
     doneRef.current = false;
+    nudgedRef.current = false;
   }, [createUpid]);
 
   const task = useProxmoxTask({
@@ -83,9 +100,13 @@ export function useCreateTaskFollow({
         });
       return;
     }
+    if (kind === "vm" && nudgeCdBootEnabled && !nudgedRef.current) {
+      nudgedRef.current = true;
+      void nudgeCdBoot(hostId, node, vmid);
+    }
     doneRef.current = true;
     onAllDoneRef.current();
-  }, [task.finished, phase, startAfter, hostId, kind, node, vmid, failedFallback]);
+  }, [task.finished, phase, startAfter, hostId, kind, node, vmid, failedFallback, nudgeCdBootEnabled]);
 
   return { logLines: task.logLines, phase };
 }
