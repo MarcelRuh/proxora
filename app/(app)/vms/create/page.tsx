@@ -15,16 +15,13 @@ import { invalidateDashboardQueries } from "@/components/dashboard/use-dashboard
 import { bytesToSize } from "@/lib/utils";
 import { isWindowsIso, suggestVirtioIso } from "@/lib/iso-images";
 import { storageIsIscsi, vmDiskStorages, VM_DISK_BUSES, VM_SCSI_CONTROLLERS } from "@/lib/vm-storage";
-import { CreateIpFields, ipCollision, ipFieldsFromVmid } from "@/components/guests/create-ip-fields";
 import { useCreateOptions } from "@/components/guests/use-create-options";
 import { MemoryField } from "@/components/guests/memory-field";
 import { HostSelect, hostAllowsCreate } from "@/components/guests/host-select";
-import { DEFAULT_GUEST_NETWORK, shouldSyncGuestIp } from "@/lib/create-ip";
 import { nextAutoVmid } from "@/lib/guest-create-options";
 import { visitGuestDetail } from "@/lib/guest-href";
 import { isUpid } from "@/lib/guest-task";
 import { useCreateTaskFollow } from "@/components/guests/use-create-task";
-import type { LxcIpMode } from "@/lib/lxc-net";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { StorageContentItem } from "@/lib/storage-content";
 import type { MessageKey } from "@/lib/i18n/messages";
@@ -55,11 +52,6 @@ export default function CreateVmPage() {
     cores: 2,
     memory: 2048,
     bridge: "",
-    ipMode: "static" as LxcIpMode,
-    network: DEFAULT_GUEST_NETWORK,
-    cidr: "",
-    gateway: "",
-    cloudInit: true,
     startAfter: true,
   });
   const [progress, setProgress] = useState<"idle" | "running" | "done" | "error">("idle");
@@ -67,7 +59,7 @@ export default function CreateVmPage() {
   const [createUpid, setCreateUpid] = useState<string | null>(null);
   const createdRef = useRef<{ hostId: string; node: string; vmid: number } | null>(null);
   const autoVmidRef = useRef(0);
-  const { data: options } = useCreateOptions(form.hostId, form.ipMode, form.node);
+  const { data: options } = useCreateOptions(form.hostId, "dhcp", form.node);
 
   useEffect(() => {
     const creatable = (hosts?.hosts ?? []).filter((host) => hostAllowsCreate(host, "vm"));
@@ -98,8 +90,6 @@ export default function CreateVmPage() {
     retry: false,
   });
   const luns = lunData?.items ?? [];
-  const networks = options?.networks ?? [];
-  const usedIps = options?.usedIps ?? [];
 
   useEffect(() => {
     if (!options) return;
@@ -118,23 +108,13 @@ export default function CreateVmPage() {
       const isoList = (options.isos ?? []).map((i) => String(i.volid ?? "")).filter(Boolean);
       const iso = f.iso && isoList.includes(f.iso) ? f.iso : "";
       const iso2 = f.iso2 && isoList.includes(f.iso2) && f.iso2 !== iso ? f.iso2 : "";
-      const netList = options.networks?.length ? options.networks : undefined;
-      const network =
-        f.network && netList?.some((n) => n.id === f.network) ? f.network : (netList?.[0]?.id ?? f.network ?? DEFAULT_GUEST_NETWORK);
-      const ip =
-        f.ipMode === "static" && shouldSyncGuestIp(f.cidr, network, vmid, netList)
-          ? ipFieldsFromVmid(network, vmid, netList)
-          : {};
-      const next = { ...f, node, diskStorage, bridge, vmid, iso, iso2, network, ...ip };
+      const next = { ...f, node, diskStorage, bridge, vmid, iso, iso2 };
       return next.node === f.node &&
         next.diskStorage === f.diskStorage &&
         next.bridge === f.bridge &&
         next.vmid === f.vmid &&
         next.iso === f.iso &&
-        next.iso2 === f.iso2 &&
-        next.network === f.network &&
-        next.cidr === f.cidr &&
-        next.gateway === f.gateway
+        next.iso2 === f.iso2
         ? f
         : next;
     });
@@ -162,9 +142,6 @@ export default function CreateVmPage() {
           cores: form.cores,
           memory: form.memory,
           bridge: form.bridge,
-          ipv4: form.ipMode === "dhcp" ? "dhcp" : form.cidr,
-          gateway: form.ipMode === "static" ? form.gateway : undefined,
-          cloudInit: form.cloudInit,
           startAfter: form.startAfter,
           discard: true,
           ssd: true,
@@ -244,9 +221,7 @@ export default function CreateVmPage() {
     form.name.trim().length > 0 &&
     Boolean(form.diskStorage) &&
     (iscsi ? Boolean(form.diskVolume) || Number(form.diskSize) > 0 : Number(form.diskSize) > 0) &&
-    Boolean(form.bridge) &&
-    (form.ipMode === "dhcp" || (form.cidr.trim().length > 0 && form.gateway.trim().length > 0)) &&
-    !(form.ipMode === "static" && ipCollision(form.cidr, usedIps));
+    Boolean(form.bridge);
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -272,8 +247,6 @@ export default function CreateVmPage() {
                   diskVolume: "",
                   bridge: "",
                   vmid: 0,
-                  cidr: "",
-                  gateway: "",
                 });
               }}
             />
@@ -320,8 +293,7 @@ export default function CreateVmPage() {
                       ? ""
                       : form.iso2;
                 const cpu = iso && isWindowsIso(iso) ? "host" : isWindowsIso(form.iso) ? "" : form.cpu;
-                const cloudInit = iso && isWindowsIso(iso) ? false : true;
-                setForm({ ...form, iso, iso2, cpu, cloudInit });
+                setForm({ ...form, iso, iso2, cpu });
               }}
             >
               <option value="">{t("common.none")}</option>
@@ -451,7 +423,7 @@ export default function CreateVmPage() {
           )}
           <Field label={t("create.cores")} value={String(form.cores)} onChange={(v) => setForm({ ...form, cores: Number(v) || 1 })} />
           <MemoryField value={form.memory} onChange={(memory) => setForm({ ...form, memory })} />
-          <label className="text-sm">
+          <label className="text-sm md:col-span-2">
             {t("create.bridge")}
             <select className={selectClass} value={form.bridge} onChange={(e) => setForm({ ...form, bridge: e.target.value })}>
               {(bridges.length ? bridges : ["vmbr0"]).map((iface) => (
@@ -460,22 +432,6 @@ export default function CreateVmPage() {
                 </option>
               ))}
             </select>
-          </label>
-          <CreateIpFields
-            value={{ ipMode: form.ipMode, network: form.network, cidr: form.cidr, gateway: form.gateway }}
-            vmid={form.vmid}
-            networks={networks}
-            usedIps={usedIps}
-            hint={t("create.isoIpHint")}
-            onChange={(ip) => setForm({ ...form, ...ip })}
-          />
-          <label className="flex items-center gap-2 text-sm md:col-span-2">
-            <input
-              type="checkbox"
-              checked={form.cloudInit}
-              onChange={(e) => setForm({ ...form, cloudInit: e.target.checked })}
-            />
-            {t("create.cloudInit")}
           </label>
           <label className="flex items-center gap-2 text-sm md:col-span-2">
             <input

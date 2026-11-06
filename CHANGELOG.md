@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.27] – 2026-11-06
+
+### Changed
+
+- VM create no longer asks for IPv4 / Cloud-Init IP. Bridge stays; guest IP is configured inside the VM (LXC create unchanged).
+
 ## [2.2.26] – 2026-10-25
 
 ### Fixed

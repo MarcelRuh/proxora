@@ -8,7 +8,6 @@ import { filterGuestsForUser } from "@/server/auth/session-core";
 import { followGuestCreateTask } from "@/server/services/guest-start";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { assertGuestIdentityFree } from "@/server/services/guest-ips";
-import { applyQemuCloudInit, buildQemuIpconfig, qemuCreateIpMode, qemuCreateStaticIp } from "@/lib/cloud-init";
 import { ostypeFromIso, vmCdromDisks, windowsVmFirmware } from "@/lib/iso-images";
 import { diskExtras, vmDiskSpec } from "@/lib/vm-storage";
 import { withNetFirewall } from "@/lib/windows-guest";
@@ -48,9 +47,6 @@ const createVmSchema = z.object({
   efi: z.boolean().optional(),
   tpm: z.boolean().optional(),
   startAfter: z.boolean().optional(),
-  ipv4: z.string().optional(),
-  gateway: z.string().optional(),
-  cloudInit: z.boolean().optional(),
 }).refine((body) => Boolean(body.diskVolume?.trim()) || Boolean(body.diskSize?.trim()), {
   message: "Disk-Größe oder Volume fehlt",
   path: ["diskSize"],
@@ -123,12 +119,6 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
   Object.assign(payload, vmCdromDisks(body.iso, body.iso2));
   if (efi) payload.efidisk0 = `${body.diskStorage}:1,efitype=4m,pre-enrolled-keys=1`;
   if (tpm) payload.tpmstate0 = `${body.diskStorage}:1,version=v2.0`;
-  const ipMode = qemuCreateIpMode(body.ipv4);
-  if (body.cloudInit) {
-    const ipconfig = buildQemuIpconfig(ipMode ?? "dhcp", body.ipv4, body.gateway);
-    applyQemuCloudInit(payload, body.diskStorage, ipconfig);
-  }
-  const staticIp = qemuCreateStaticIp(body.ipv4);
 
   const ip = await clientIp();
   let hostName = "";
@@ -136,7 +126,7 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
   try {
     const result = await withHostClient(params.id, session.user, async (client, host) => {
       hostName = host.name;
-      await assertGuestIdentityFree(host, body.vmid, staticIp);
+      await assertGuestIdentityFree(host, body.vmid);
       const createUpid = await client.vms.create(body.node, payload as VmCreateParams);
       followGuestCreateTask({
         client,
