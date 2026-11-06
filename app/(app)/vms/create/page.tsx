@@ -17,8 +17,10 @@ import {
   hasUsableVirtioIso,
   isWindowsIso,
   isoVolid,
+  needsVirtioDownload as virtioDownloadNeeded,
   suggestVirtioIso,
   VIRTIO_WIN_CATALOG_ITEM,
+  type IsoCatalogItem,
 } from "@/lib/iso-images";
 import { storageIsIscsi, vmDiskStorages, VM_DISK_BUSES, VM_SCSI_CONTROLLERS } from "@/lib/vm-storage";
 import { useCreateOptions } from "@/components/guests/use-create-options";
@@ -68,6 +70,7 @@ export default function CreateVmPage() {
     upid: string;
     node: string;
     storage: string;
+    filename: string;
     status: "running" | "done" | "error";
     error: string | null;
   } | null>(null);
@@ -76,6 +79,14 @@ export default function CreateVmPage() {
   const autoVmidRef = useRef(0);
   const virtioDoneRef = useRef(false);
   const { data: options } = useCreateOptions(form.hostId, "dhcp", form.node);
+  const windowsSelected = Boolean(form.iso && isWindowsIso(form.iso));
+  const { data: virtioRec } = useQuery({
+    queryKey: ["virtio-recommended", form.hostId],
+    enabled: Boolean(form.hostId && windowsSelected),
+    queryFn: () => api<{ recommendedVirtio: IsoCatalogItem }>(`/api/hosts/${form.hostId}/isos?virtio=1`),
+    staleTime: 30 * 60_000,
+  });
+  const recommendedVirtio = virtioRec?.recommendedVirtio ?? VIRTIO_WIN_CATALOG_ITEM;
 
   useEffect(() => {
     const creatable = (hosts?.hosts ?? []).filter((host) => hostAllowsCreate(host, "vm"));
@@ -93,10 +104,11 @@ export default function CreateVmPage() {
     () => (options?.bridges ?? []).map((b) => String(b.iface ?? "")).filter(Boolean),
     [options],
   );
-  const needsVirtioDownload = useMemo(
-    () => Boolean(form.iso && isWindowsIso(form.iso) && !hasUsableVirtioIso(isos)),
-    [form.iso, isos],
+  const showVirtioDownload = useMemo(
+    () => windowsSelected && virtioDownloadNeeded(isos, recommendedVirtio.version),
+    [windowsSelected, isos, recommendedVirtio.version],
   );
+  const virtioIsUpdate = windowsSelected && hasUsableVirtioIso(isos) && showVirtioDownload;
   const selectedStore = imageStores.find((s) => s.storage === form.diskStorage);
   const iscsi = selectedStore ? storageIsIscsi(selectedStore) : false;
   const node = form.node || options?.nodes[0]?.node || "";
@@ -214,7 +226,7 @@ export default function CreateVmPage() {
     }
     if (!virtioTask.finished || virtioDoneRef.current) return;
     virtioDoneRef.current = true;
-    const expected = isoVolid(virtioDownload.storage, VIRTIO_WIN_CATALOG_ITEM.filename);
+    const expected = isoVolid(virtioDownload.storage, virtioDownload.filename);
     setForm((f) => ({ ...f, iso2: expected }));
     setVirtioDownload((cur) => (cur ? { ...cur, status: "done", error: null } : cur));
     setVirtioBusy(false);
@@ -222,6 +234,7 @@ export default function CreateVmPage() {
     void qc.invalidateQueries({ queryKey: ["options-media", form.hostId] });
     void qc.invalidateQueries({ queryKey: ["options", form.hostId] });
     void qc.invalidateQueries({ queryKey: ["iso-images", form.hostId] });
+    void qc.invalidateQueries({ queryKey: ["virtio-recommended", form.hostId] });
   }, [virtioDownload, virtioTask.errorMsg, virtioTask.finished, form.hostId, qc, t]);
 
   async function downloadVirtioIso() {
@@ -232,16 +245,21 @@ export default function CreateVmPage() {
     try {
       const nodeName = form.node || options?.nodes[0]?.node || "";
       const q = nodeName ? `?node=${encodeURIComponent(nodeName)}` : "";
-      const catalog = await api<{ node: string; storages: string[] }>(`/api/hosts/${form.hostId}/isos${q}`);
+      const catalog = await api<{
+        node: string;
+        storages: string[];
+        recommendedVirtio?: IsoCatalogItem;
+      }>(`/api/hosts/${form.hostId}/isos${q}`);
       const storage = catalog.storages[0];
+      const item = catalog.recommendedVirtio ?? recommendedVirtio;
       if (!catalog.node || !storage) throw new Error(t("iso.noStorage"));
       const res = await api<{ upid?: string; node?: string }>(`/api/hosts/${form.hostId}/isos`, {
         method: "POST",
         body: JSON.stringify({
           node: catalog.node,
           storage,
-          url: VIRTIO_WIN_CATALOG_ITEM.url,
-          filename: VIRTIO_WIN_CATALOG_ITEM.filename,
+          url: item.url,
+          filename: item.filename,
         }),
       });
       if (!isUpid(res.upid)) throw new Error(t("common.failed"));
@@ -249,6 +267,7 @@ export default function CreateVmPage() {
         upid: res.upid,
         node: res.node || catalog.node,
         storage,
+        filename: item.filename,
         status: "running",
         error: null,
       });
@@ -417,7 +436,7 @@ export default function CreateVmPage() {
             {form.iso && isWindowsIso(form.iso) ? (
               <p className="mt-1 text-sm text-muted-foreground">{t("create.iso2Hint")}</p>
             ) : null}
-            {needsVirtioDownload ? (
+            {showVirtioDownload ? (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
@@ -428,7 +447,9 @@ export default function CreateVmPage() {
                 >
                   {virtioBusy || virtioDownload?.status === "running"
                     ? t("create.virtioDownloading")
-                    : t("create.virtioDownload", { version: VIRTIO_WIN_CATALOG_ITEM.version })}
+                    : t(virtioIsUpdate ? "create.virtioUpdate" : "create.virtioDownload", {
+                        version: recommendedVirtio.version,
+                      })}
                 </Button>
                 <span className="text-xs text-muted-foreground">{t("create.virtioDownloadHint")}</span>
               </div>
@@ -563,7 +584,7 @@ export default function CreateVmPage() {
         finished={virtioDownload?.status === "done"}
         error={virtioDownload?.error ?? null}
         title={t("create.virtioDownloadTitle")}
-        detail={VIRTIO_WIN_CATALOG_ITEM.filename}
+        detail={virtioDownload?.filename ?? recommendedVirtio.filename}
         lines={virtioTask.logLines}
         onClose={() => {
           if (virtioDownload?.status === "running") return;

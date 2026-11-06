@@ -87,16 +87,94 @@ export function isVirtioIso(volid: string): boolean {
 }
 
 /** Versions Proxmox flags as problematic for Windows VirtIO SCSI/Block. */
-const VIRTIO_KNOWN_BAD = new Set(["0.1.285"]);
+export const VIRTIO_KNOWN_BAD = new Set(["0.1.285"]);
+
+export const VIRTIO_ARCHIVE_BASE =
+  "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio";
+
+export type VirtioArchiveRelease = {
+  version: string;
+  release: number;
+  dir: string;
+  filename: string;
+  url: string;
+};
 
 export function virtioIsoVersion(volid: string): string | null {
   const match = /virtio[-_]?win[-_]?(\d+\.\d+\.\d+)/i.exec(volidFilename(volid));
   return match?.[1] ?? null;
 }
 
-export function isKnownBadVirtioIso(volid: string): boolean {
-  const version = virtioIsoVersion(volid);
+export function isKnownBadVirtioVersion(version: string | null | undefined): boolean {
   return Boolean(version && VIRTIO_KNOWN_BAD.has(version));
+}
+
+export function isKnownBadVirtioIso(volid: string): boolean {
+  return isKnownBadVirtioVersion(virtioIsoVersion(volid));
+}
+
+/** Parse Fedora archive directory listing HTML into versioned releases. */
+export function parseVirtioArchiveHtml(html: string): VirtioArchiveRelease[] {
+  const found = new Map<string, VirtioArchiveRelease>();
+  const re = /href="(virtio-win-(\d+\.\d+\.\d+)-(\d+)\/)"/gi;
+  for (const match of html.matchAll(re)) {
+    const dir = match[1]?.replace(/\/$/, "") ?? "";
+    const version = match[2] ?? "";
+    const release = Number(match[3] ?? 0) || 0;
+    if (!dir || !version) continue;
+    const key = `${version}-${release}`;
+    const prev = found.get(key);
+    if (prev && prev.release >= release) continue;
+    const filename = `virtio-win-${version}.iso`;
+    found.set(key, {
+      version,
+      release,
+      dir,
+      filename,
+      url: `${VIRTIO_ARCHIVE_BASE}/${dir}/${filename}`,
+    });
+  }
+  return [...found.values()].sort((a, b) => {
+    const byVersion = compareTemplateVersion(b.version, a.version);
+    if (byVersion !== 0) return byVersion;
+    return b.release - a.release;
+  });
+}
+
+/** Newest archive release that is not on the known-bad list. */
+export function pickRecommendedVirtioRelease(
+  releases: VirtioArchiveRelease[],
+  fallback: IsoCatalogItem = VIRTIO_WIN_CATALOG_ITEM,
+): VirtioArchiveRelease {
+  const safe = releases.find((item) => !isKnownBadVirtioVersion(item.version));
+  if (safe) return safe;
+  return {
+    version: fallback.version,
+    release: 1,
+    dir: `virtio-win-${fallback.version}-1`,
+    filename: fallback.filename,
+    url: fallback.url,
+  };
+}
+
+export function virtioCatalogItemFromRelease(
+  release: VirtioArchiveRelease,
+  base: IsoCatalogItem = VIRTIO_WIN_CATALOG_ITEM,
+): IsoCatalogItem {
+  return {
+    ...base,
+    filename: release.filename,
+    url: release.url,
+    version: release.version,
+  };
+}
+
+export function bestInstalledVirtioVersion(isos: string[]): string {
+  return isos
+    .filter((volid) => isVirtioIso(volid) && !isKnownBadVirtioIso(volid))
+    .map((volid) => virtioIsoVersion(volid) ?? "")
+    .filter(Boolean)
+    .sort((a, b) => compareTemplateVersion(b, a))[0] ?? "";
 }
 
 export function isWindowsIso(volid: string): boolean {
@@ -117,6 +195,21 @@ export function suggestVirtioIso(isos: string[], installIso: string): string {
 /** True when a non-known-bad VirtIO ISO is already on the host. */
 export function hasUsableVirtioIso(isos: string[]): boolean {
   return isos.some((volid) => isVirtioIso(volid) && !isKnownBadVirtioIso(volid));
+}
+
+/** Missing VirtIO or installed usable build older than the live recommendation. */
+export function needsVirtioDownload(isos: string[], recommendedVersion: string): boolean {
+  if (!recommendedVersion) return !hasUsableVirtioIso(isos);
+  if (!hasUsableVirtioIso(isos)) return true;
+  return compareTemplateVersion(recommendedVersion, bestInstalledVirtioVersion(isos)) > 0;
+}
+
+export function withLiveVirtioCatalog(
+  live: IsoCatalogItem | null | undefined,
+  catalog: IsoCatalogItem[] = ISO_CATALOG,
+): IsoCatalogItem[] {
+  if (!live) return catalog;
+  return catalog.map((item) => (item.id === VIRTIO_WIN_CATALOG_ITEM.id ? live : item));
 }
 
 export function ostypeFromIso(volid: string): string | undefined {
@@ -174,12 +267,15 @@ export function isHttpUrl(url: string): boolean {
   }
 }
 
-export function mergeIsoCatalog(installedVolids: Iterable<string>): IsoPackageRow[] {
+export function mergeIsoCatalog(
+  installedVolids: Iterable<string>,
+  catalog: IsoCatalogItem[] = ISO_CATALOG,
+): IsoPackageRow[] {
   const installed = [...installedVolids].filter(Boolean);
   const used = new Set<string>();
   const rows: IsoPackageRow[] = [];
 
-  for (const item of ISO_CATALOG) {
+  for (const item of catalog) {
     const family = isoFamily(item.filename);
     const matches = installed.filter((volid) => isoFamily(volid) === family);
     for (const volid of matches) used.add(volid);

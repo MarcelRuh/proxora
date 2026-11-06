@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.3.1] – 2026-11-06
+
+### Added
+
+- VirtIO recommendation is resolved live from the Fedora archive (newest build that is not known-bad, e.g. skips 0.1.285). Templates and VM create use that version for download/update.
+
 ## [2.3.0] – 2026-11-06
 
 ### Added

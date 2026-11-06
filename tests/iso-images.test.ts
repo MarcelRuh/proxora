@@ -10,11 +10,16 @@ import {
   isVirtioIso,
   isWindowsIso,
   mergeIsoCatalog,
+  needsVirtioDownload,
   ostypeFromIso,
+  parseVirtioArchiveHtml,
+  pickRecommendedVirtioRelease,
   suggestVirtioIso,
+  virtioCatalogItemFromRelease,
   VIRTIO_WIN_CATALOG_ITEM,
   vmCdromDisks,
   windowsVmFirmware,
+  withLiveVirtioCatalog,
 } from "@/lib/iso-images";
 import { configReferencesVolume, formatVolumeUsers, usersForVolids } from "@/lib/volume-usage";
 
@@ -40,6 +45,36 @@ describe("iso images", () => {
     expect(virtio?.latestFilename).toBe("virtio-win-0.1.271.iso");
     expect(hasUsableVirtioIso(["local:iso/virtio-win-0.1.285.iso"])).toBe(false);
     expect(hasUsableVirtioIso(["local:iso/virtio-win-0.1.271.iso"])).toBe(true);
+  });
+
+  it("picks the newest safe VirtIO release from archive HTML", () => {
+    const html = `
+      <a href="virtio-win-0.1.302-1/">virtio-win-0.1.302-1/</a>
+      <a href="virtio-win-0.1.285-1/">virtio-win-0.1.285-1/</a>
+      <a href="virtio-win-0.1.271-1/">virtio-win-0.1.271-1/</a>
+    `;
+    const releases = parseVirtioArchiveHtml(html);
+    expect(releases[0]?.version).toBe("0.1.302");
+    const picked = pickRecommendedVirtioRelease(releases);
+    expect(picked.version).toBe("0.1.302");
+    expect(picked.filename).toBe("virtio-win-0.1.302.iso");
+    expect(picked.url).toContain("virtio-win-0.1.302-1/virtio-win-0.1.302.iso");
+    const live = virtioCatalogItemFromRelease(picked);
+    const rows = mergeIsoCatalog(["local:iso/virtio-win-0.1.271.iso"], withLiveVirtioCatalog(live));
+    const virtio = rows.find((row) => row.key === VIRTIO_WIN_CATALOG_ITEM.id);
+    expect(virtio?.latestVersion).toBe("0.1.302");
+    expect(virtio?.updateAvailable).toBe(true);
+    expect(needsVirtioDownload(["local:iso/virtio-win-0.1.271.iso"], "0.1.302")).toBe(true);
+    expect(needsVirtioDownload(["local:iso/virtio-win-0.1.302.iso"], "0.1.302")).toBe(false);
+  });
+
+  it("skips known-bad VirtIO when it is the newest archive entry", () => {
+    const releases = parseVirtioArchiveHtml(`
+      <a href="virtio-win-0.1.285-1/">virtio-win-0.1.285-1/</a>
+      <a href="virtio-win-0.1.271-2/">virtio-win-0.1.271-2/</a>
+    `);
+    expect(pickRecommendedVirtioRelease(releases).version).toBe("0.1.271");
+    expect(pickRecommendedVirtioRelease(releases).release).toBe(2);
   });
 
   it("parses filenames from download URLs", () => {

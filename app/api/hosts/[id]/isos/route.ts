@@ -7,23 +7,46 @@ import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { ForbiddenError, ValidationError } from "@/lib/errors";
 import { parseBackupVolid } from "@/lib/backup";
-import { filenameFromUrl, isHttpUrl, isoVolid, isIsoContentVolid, mergeIsoCatalog } from "@/lib/iso-images";
+import {
+  filenameFromUrl,
+  isHttpUrl,
+  isoVolid,
+  isIsoContentVolid,
+  mergeIsoCatalog,
+  withLiveVirtioCatalog,
+  type IsoCatalogItem,
+} from "@/lib/iso-images";
 import { collectIsoVolumes } from "@/server/services/lxc-template-catalog";
 import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
 import { clearVolumeListCache } from "@/server/services/storage-content";
 import { collectVolumeUsers } from "@/server/services/volume-usage";
 import { userHasPermission } from "@/lib/permissions";
+import { resolveVirtioCatalogItem } from "@/server/services/virtio-win-catalog";
 
 export const GET = apiRoute("vm.create", async (req, session, params) => {
   const url = new URL(req.url);
   const nodeParam = url.searchParams.get("node")?.trim() || undefined;
   const usageOnly = url.searchParams.get("usage") === "1";
+  const virtioOnly = url.searchParams.get("virtio") === "1";
+  if (virtioOnly) {
+    const recommendedVirtio = await resolveVirtioCatalogItem();
+    return json({ recommendedVirtio });
+  }
+  const recommendedVirtio = usageOnly ? null : await resolveVirtioCatalogItem();
   const data = await withHostClient(params.id, session.user, async (client) => {
     const inv = await loadHostInventory(client, params.id);
     const nodeNames = inventoryNodeNames(inv);
     const selected = nodeParam ?? nodeNames[0] ?? "";
     if (!selected) {
-      return { nodes: [], node: "", storages: [], installed: [] as string[], catalog: [], usedBy: {} };
+      return {
+        nodes: [],
+        node: "",
+        storages: [],
+        installed: [] as string[],
+        catalog: [],
+        usedBy: {},
+        recommendedVirtio,
+      };
     }
     const volumes = await collectIsoVolumes(client, nodeNames);
     if (usageOnly) {
@@ -34,6 +57,7 @@ export const GET = apiRoute("vm.create", async (req, session, params) => {
         installed: volumes.volids,
         catalog: [],
         usedBy: await collectVolumeUsers(client, params.id, volumes.volids, { kind: "vm" }),
+        recommendedVirtio: null as IsoCatalogItem | null,
       };
     }
     return {
@@ -41,8 +65,9 @@ export const GET = apiRoute("vm.create", async (req, session, params) => {
       node: selected,
       storages: volumes.storages,
       installed: volumes.volids,
-      catalog: mergeIsoCatalog(volumes.volids),
+      catalog: mergeIsoCatalog(volumes.volids, withLiveVirtioCatalog(recommendedVirtio)),
       usedBy: {},
+      recommendedVirtio,
     };
   });
   return json(data);
