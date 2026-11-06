@@ -13,7 +13,13 @@ import { PageHeader } from "@/components/layout/page-header";
 import { CreateProgressDialog } from "@/components/guests/create-progress-dialog";
 import { invalidateDashboardQueries } from "@/components/dashboard/use-dashboard";
 import { bytesToSize } from "@/lib/utils";
-import { isWindowsIso, suggestVirtioIso } from "@/lib/iso-images";
+import {
+  hasUsableVirtioIso,
+  isWindowsIso,
+  isoVolid,
+  suggestVirtioIso,
+  VIRTIO_WIN_CATALOG_ITEM,
+} from "@/lib/iso-images";
 import { storageIsIscsi, vmDiskStorages, VM_DISK_BUSES, VM_SCSI_CONTROLLERS } from "@/lib/vm-storage";
 import { useCreateOptions } from "@/components/guests/use-create-options";
 import { MemoryField } from "@/components/guests/memory-field";
@@ -22,6 +28,7 @@ import { nextAutoVmid } from "@/lib/guest-create-options";
 import { visitGuestDetail } from "@/lib/guest-href";
 import { isUpid } from "@/lib/guest-task";
 import { useCreateTaskFollow } from "@/components/guests/use-create-task";
+import { useProxmoxTask } from "@/components/tasks/use-proxmox-task";
 import { useI18n } from "@/components/i18n/locale-provider";
 import type { StorageContentItem } from "@/lib/storage-content";
 import type { MessageKey } from "@/lib/i18n/messages";
@@ -57,8 +64,17 @@ export default function CreateVmPage() {
   const [progress, setProgress] = useState<"idle" | "running" | "done" | "error">("idle");
   const [progressError, setProgressError] = useState<string | null>(null);
   const [createUpid, setCreateUpid] = useState<string | null>(null);
+  const [virtioDownload, setVirtioDownload] = useState<{
+    upid: string;
+    node: string;
+    storage: string;
+    status: "running" | "done" | "error";
+    error: string | null;
+  } | null>(null);
+  const [virtioBusy, setVirtioBusy] = useState(false);
   const createdRef = useRef<{ hostId: string; node: string; vmid: number } | null>(null);
   const autoVmidRef = useRef(0);
+  const virtioDoneRef = useRef(false);
   const { data: options } = useCreateOptions(form.hostId, "dhcp", form.node);
 
   useEffect(() => {
@@ -76,6 +92,10 @@ export default function CreateVmPage() {
   const bridges = useMemo(
     () => (options?.bridges ?? []).map((b) => String(b.iface ?? "")).filter(Boolean),
     [options],
+  );
+  const needsVirtioDownload = useMemo(
+    () => Boolean(form.iso && isWindowsIso(form.iso) && !hasUsableVirtioIso(isos)),
+    [form.iso, isos],
   );
   const selectedStore = imageStores.find((s) => s.storage === form.diskStorage);
   const iscsi = selectedStore ? storageIsIscsi(selectedStore) : false;
@@ -107,7 +127,9 @@ export default function CreateVmPage() {
       const vmid = nextAutoVmid(f.vmid, options.nextid ?? 0, autoVmidRef.current);
       const isoList = (options.isos ?? []).map((i) => String(i.volid ?? "")).filter(Boolean);
       const iso = f.iso && isoList.includes(f.iso) ? f.iso : "";
-      const iso2 = f.iso2 && isoList.includes(f.iso2) && f.iso2 !== iso ? f.iso2 : "";
+      const keptIso2 = f.iso2 && isoList.includes(f.iso2) && f.iso2 !== iso ? f.iso2 : "";
+      const iso2 =
+        keptIso2 || (iso && isWindowsIso(iso) ? suggestVirtioIso(isoList, iso) : "");
       const next = { ...f, node, diskStorage, bridge, vmid, iso, iso2 };
       return next.node === f.node &&
         next.diskStorage === f.diskStorage &&
@@ -174,6 +196,67 @@ export default function CreateVmPage() {
 
   const progressRef = useRef(progress);
   progressRef.current = progress;
+
+  const virtioTask = useProxmoxTask({
+    hostId: form.hostId,
+    node: virtioDownload?.node ?? "",
+    upid: virtioDownload?.upid ?? null,
+    open: Boolean(virtioDownload && virtioDownload.status === "running"),
+    failedFallback: t("iso.downloadFailed"),
+  });
+
+  useEffect(() => {
+    if (!virtioDownload || virtioDownload.status !== "running") return;
+    if (virtioTask.errorMsg) {
+      setVirtioDownload((cur) => (cur ? { ...cur, status: "error", error: virtioTask.errorMsg } : cur));
+      setVirtioBusy(false);
+      return;
+    }
+    if (!virtioTask.finished || virtioDoneRef.current) return;
+    virtioDoneRef.current = true;
+    const expected = isoVolid(virtioDownload.storage, VIRTIO_WIN_CATALOG_ITEM.filename);
+    setForm((f) => ({ ...f, iso2: expected }));
+    setVirtioDownload((cur) => (cur ? { ...cur, status: "done", error: null } : cur));
+    setVirtioBusy(false);
+    toast.success(t("iso.downloadDone"));
+    void qc.invalidateQueries({ queryKey: ["options-media", form.hostId] });
+    void qc.invalidateQueries({ queryKey: ["options", form.hostId] });
+    void qc.invalidateQueries({ queryKey: ["iso-images", form.hostId] });
+  }, [virtioDownload, virtioTask.errorMsg, virtioTask.finished, form.hostId, qc, t]);
+
+  async function downloadVirtioIso() {
+    if (!form.hostId || virtioBusy) return;
+    setVirtioBusy(true);
+    virtioDoneRef.current = false;
+    setVirtioDownload(null);
+    try {
+      const nodeName = form.node || options?.nodes[0]?.node || "";
+      const q = nodeName ? `?node=${encodeURIComponent(nodeName)}` : "";
+      const catalog = await api<{ node: string; storages: string[] }>(`/api/hosts/${form.hostId}/isos${q}`);
+      const storage = catalog.storages[0];
+      if (!catalog.node || !storage) throw new Error(t("iso.noStorage"));
+      const res = await api<{ upid?: string; node?: string }>(`/api/hosts/${form.hostId}/isos`, {
+        method: "POST",
+        body: JSON.stringify({
+          node: catalog.node,
+          storage,
+          url: VIRTIO_WIN_CATALOG_ITEM.url,
+          filename: VIRTIO_WIN_CATALOG_ITEM.filename,
+        }),
+      });
+      if (!isUpid(res.upid)) throw new Error(t("common.failed"));
+      setVirtioDownload({
+        upid: res.upid,
+        node: res.node || catalog.node,
+        storage,
+        status: "running",
+        error: null,
+      });
+    } catch (e) {
+      setVirtioBusy(false);
+      toast.error(e instanceof Error ? e.message : t("common.failed"));
+    }
+  }
 
   const closeProgress = useCallback(() => {
     if (progressRef.current === "running") return;
@@ -334,6 +417,22 @@ export default function CreateVmPage() {
             {form.iso && isWindowsIso(form.iso) ? (
               <p className="mt-1 text-sm text-muted-foreground">{t("create.iso2Hint")}</p>
             ) : null}
+            {needsVirtioDownload ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={virtioBusy || Boolean(virtioDownload && virtioDownload.status === "running")}
+                  onClick={() => void downloadVirtioIso()}
+                >
+                  {virtioBusy || virtioDownload?.status === "running"
+                    ? t("create.virtioDownloading")
+                    : t("create.virtioDownload", { version: VIRTIO_WIN_CATALOG_ITEM.version })}
+                </Button>
+                <span className="text-xs text-muted-foreground">{t("create.virtioDownloadHint")}</span>
+              </div>
+            ) : null}
           </label>
           <label className="text-sm md:col-span-2">
             {t("create.storage")}
@@ -457,6 +556,19 @@ export default function CreateVmPage() {
         detail={form.name.trim() || t("create.progressVm")}
         lines={follow.logLines}
         onClose={closeProgress}
+      />
+      <CreateProgressDialog
+        open={Boolean(virtioDownload)}
+        locked={virtioDownload?.status === "running"}
+        finished={virtioDownload?.status === "done"}
+        error={virtioDownload?.error ?? null}
+        title={t("create.virtioDownloadTitle")}
+        detail={VIRTIO_WIN_CATALOG_ITEM.filename}
+        lines={virtioTask.logLines}
+        onClose={() => {
+          if (virtioDownload?.status === "running") return;
+          setVirtioDownload(null);
+        }}
       />
     </div>
   );

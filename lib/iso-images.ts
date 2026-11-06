@@ -22,6 +22,16 @@ export type IsoPackageRow = {
   updateAvailable: boolean;
 };
 
+/** Pinned VirtIO build — Proxmox flags 0.1.285 as problematic for Windows SCSI/Block. */
+export const VIRTIO_WIN_CATALOG_ITEM: IsoCatalogItem = {
+  id: "virtio-win-drivers",
+  headline: "VirtIO Windows drivers",
+  section: "windows",
+  filename: "virtio-win-0.1.271.iso",
+  url: "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.271-1/virtio-win-0.1.271.iso",
+  version: "0.1.271",
+};
+
 export const ISO_CATALOG: IsoCatalogItem[] = [
   {
     id: "debian-13-netinst-amd64",
@@ -39,6 +49,7 @@ export const ISO_CATALOG: IsoCatalogItem[] = [
     url: "https://releases.ubuntu.com/24.04/ubuntu-24.04.3-live-server-amd64.iso",
     version: "24.04.3",
   },
+  VIRTIO_WIN_CATALOG_ITEM,
 ];
 
 export function isoVolid(storage: string, filename: string): string {
@@ -63,6 +74,7 @@ export function isIsoRow(row: Record<string, unknown>): boolean {
 
 export function isoFamily(filename: string): string {
   const file = volidFilename(filename).toLowerCase();
+  if (/^virtio[-_]?win/i.test(file)) return "virtio-win";
   const debian = /^(debian(?:-edu|-mac)?)-(\d+)(?:\.\d+)*-([^-]+)-netinst\.iso$/.exec(file);
   if (debian) return `${debian[1]}-${debian[2]}-${debian[3]}-netinst`;
   const ubuntu = /^(ubuntu)-(\d+\.\d+)(?:\.\d+)?-(live-server|desktop)-([^.]+)\.iso$/.exec(file);
@@ -102,6 +114,11 @@ export function suggestVirtioIso(isos: string[], installIso: string): string {
   return preferred[0] ?? candidates[0] ?? "";
 }
 
+/** True when a non-known-bad VirtIO ISO is already on the host. */
+export function hasUsableVirtioIso(isos: string[]): boolean {
+  return isos.some((volid) => isVirtioIso(volid) && !isKnownBadVirtioIso(volid));
+}
+
 export function ostypeFromIso(volid: string): string | undefined {
   if (!isWindowsIso(volid)) return undefined;
   const file = volidFilename(volid).toLowerCase();
@@ -129,6 +146,8 @@ export function vmCdromDisks(iso?: string, iso2?: string): Record<string, string
 
 export function isoVersionFromFilename(filename: string): string {
   const file = volidFilename(filename);
+  const virtio = /virtio[-_]?win[-_]?(\d+\.\d+\.\d+)/i.exec(file);
+  if (virtio?.[1]) return virtio[1];
   const debian = /debian(?:-edu|-mac)?-(\d+(?:\.\d+)*)-/i.exec(file);
   if (debian?.[1]) return debian[1];
   const ubuntu = /ubuntu-(\d+\.\d+(?:\.\d+)?)-/i.exec(file);

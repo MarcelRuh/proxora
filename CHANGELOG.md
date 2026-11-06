@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.3.0] – 2026-11-06
+
+### Added
+
+- VirtIO Windows drivers (0.1.271) in the ISO catalog and a one-click download on VM create when a Windows ISO is selected and no usable VirtIO ISO is present.
+
 ## [2.2.28] – 2026-11-06
 
 ### Fixed

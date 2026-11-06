@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   filenameFromUrl,
+  hasUsableVirtioIso,
   isoFamily,
   isoVersionFromFilename,
   isoVolid,
@@ -11,6 +12,7 @@ import {
   mergeIsoCatalog,
   ostypeFromIso,
   suggestVirtioIso,
+  VIRTIO_WIN_CATALOG_ITEM,
   vmCdromDisks,
   windowsVmFirmware,
 } from "@/lib/iso-images";
@@ -21,11 +23,23 @@ describe("iso images", () => {
     expect(isoVolid("local", "debian-13.6.0-amd64-netinst.iso")).toBe("local:iso/debian-13.6.0-amd64-netinst.iso");
     expect(isoFamily("debian-13.1.0-amd64-netinst.iso")).toBe("debian-13-amd64-netinst");
     expect(isoFamily("debian-13.6.0-amd64-netinst.iso")).toBe("debian-13-amd64-netinst");
+    expect(isoFamily("virtio-win-0.1.285.iso")).toBe("virtio-win");
     expect(isoVersionFromFilename("debian-13.6.0-amd64-netinst.iso")).toBe("13.6.0");
     expect(isoVersionFromFilename("ubuntu-24.04.3-live-server-amd64.iso")).toBe("24.04.3");
+    expect(isoVersionFromFilename("virtio-win-0.1.271.iso")).toBe("0.1.271");
     expect(isIsoContentVolid("local:iso/debian-13.6.0-amd64-netinst.iso")).toBe(true);
     expect(isIsoContentVolid("local:backup/vzdump-qemu-100.vma.zst")).toBe(false);
     expect(isIsoContentVolid("local:iso/../backup/secret.iso")).toBe(false);
+  });
+
+  it("offers VirtIO 0.1.271 in the ISO catalog", () => {
+    expect(VIRTIO_WIN_CATALOG_ITEM.version).toBe("0.1.271");
+    const rows = mergeIsoCatalog(["local:iso/virtio-win-0.1.266.iso"]);
+    const virtio = rows.find((row) => row.key === VIRTIO_WIN_CATALOG_ITEM.id);
+    expect(virtio?.updateAvailable).toBe(true);
+    expect(virtio?.latestFilename).toBe("virtio-win-0.1.271.iso");
+    expect(hasUsableVirtioIso(["local:iso/virtio-win-0.1.285.iso"])).toBe(false);
+    expect(hasUsableVirtioIso(["local:iso/virtio-win-0.1.271.iso"])).toBe(true);
   });
 
   it("parses filenames from download URLs", () => {
