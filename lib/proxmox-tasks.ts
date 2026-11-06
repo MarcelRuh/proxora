@@ -91,14 +91,20 @@ export function taskKindGroup(type: string | undefined): TaskKindGroup {
   return "other";
 }
 
+/** Proxmox treats warning-only exits as success (`WARNINGS: 1`, `Warning`, …). */
+export function isSuccessfulTaskExit(exitstatus?: string | null): boolean {
+  const exit = (exitstatus ?? "").trim();
+  if (!exit || exit === "OK") return true;
+  return /^warnings?\b/i.test(exit);
+}
+
 export function taskRunState(task: TaskLike): TaskRunState {
   const status = (task.status ?? "").trim();
   const exit = (task.exitstatus ?? "").trim();
   if (!status || status === "running") return "running";
   if (status === "OK") return "ok";
   if (status === "stopped") {
-    if (!exit || exit === "OK") return "ok";
-    return "failed";
+    return isSuccessfulTaskExit(exit) ? "ok" : "failed";
   }
   return "failed";
 }

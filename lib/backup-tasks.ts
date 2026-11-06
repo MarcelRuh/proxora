@@ -1,4 +1,6 @@
-import { taskTypeLabel } from "@/lib/proxmox-tasks";
+import { isSuccessfulTaskExit, taskTypeLabel } from "@/lib/proxmox-tasks";
+
+export { isSuccessfulTaskExit } from "@/lib/proxmox-tasks";
 
 export type BackupTaskLike = {
   type?: string;
@@ -33,8 +35,7 @@ const GUEST_FAIL_TASK_TYPES = new Set([
 
 export function isFailedTaskExit(task: BackupTaskLike): boolean {
   if (task.status && task.status !== "stopped") return false;
-  const exit = (task.exitstatus ?? "").trim();
-  return Boolean(exit) && exit !== "OK";
+  return !isSuccessfulTaskExit(task.exitstatus);
 }
 
 export function failedTaskKind(task: BackupTaskLike): "backup" | "guest" | null {

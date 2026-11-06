@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   filterTasks,
+  isSuccessfulTaskExit,
   taskGuestHref,
   taskGuestLabel,
   taskKindGroup,
@@ -10,7 +11,7 @@ import {
   TASKS_POLL_IDLE_MS,
   taskTypeLabel,
 } from "@/lib/proxmox-tasks";
-import { guestTaskLabel } from "@/lib/backup-tasks";
+import { guestTaskLabel, isFailedTaskExit } from "@/lib/backup-tasks";
 
 describe("task labels and status", () => {
   it("uses readable labels instead of UPIDs", () => {
@@ -32,8 +33,13 @@ describe("task labels and status", () => {
     expect(taskRunState({})).toBe("running");
     expect(taskRunState({ status: "running" })).toBe("running");
     expect(taskRunState({ status: "stopped", exitstatus: "OK" })).toBe("ok");
+    expect(taskRunState({ status: "stopped", exitstatus: "WARNINGS: 1" })).toBe("ok");
     expect(taskRunState({ status: "stopped", exitstatus: "interrupted" })).toBe("failed");
     expect(taskRunState({ status: "OK" })).toBe("ok");
+    expect(isSuccessfulTaskExit("WARNINGS: 1")).toBe(true);
+    expect(isSuccessfulTaskExit("Warning")).toBe(true);
+    expect(isFailedTaskExit({ status: "stopped", exitstatus: "WARNINGS: 1" })).toBe(false);
+    expect(isFailedTaskExit({ status: "stopped", exitstatus: "command failed" })).toBe(true);
   });
 
   it("polls faster while a task is running", () => {

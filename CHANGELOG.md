@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.2.28] – 2026-11-06
+
+### Fixed
+
+- Proxmox tasks with `WARNINGS: N` (e.g. VirtIO ISO notice on Windows VM create) are treated as success instead of failure.
+- Windows create prefers a VirtIO ISO other than known-bad 0.1.285 when a safer version is available.
+
 ## [2.2.27] – 2026-11-06
 
 ### Changed

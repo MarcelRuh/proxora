@@ -74,6 +74,19 @@ export function isVirtioIso(volid: string): boolean {
   return /virtio/i.test(volidFilename(volid));
 }
 
+/** Versions Proxmox flags as problematic for Windows VirtIO SCSI/Block. */
+const VIRTIO_KNOWN_BAD = new Set(["0.1.285"]);
+
+export function virtioIsoVersion(volid: string): string | null {
+  const match = /virtio[-_]?win[-_]?(\d+\.\d+\.\d+)/i.exec(volidFilename(volid));
+  return match?.[1] ?? null;
+}
+
+export function isKnownBadVirtioIso(volid: string): boolean {
+  const version = virtioIsoVersion(volid);
+  return Boolean(version && VIRTIO_KNOWN_BAD.has(version));
+}
+
 export function isWindowsIso(volid: string): boolean {
   const file = volidFilename(volid).toLowerCase();
   return /windows|win(?:dows)?(?:10|11)|win(?:dows)?[-_]?server|server[-_]?20(?:1[69]|2[025])/.test(file);
@@ -81,7 +94,12 @@ export function isWindowsIso(volid: string): boolean {
 
 export function suggestVirtioIso(isos: string[], installIso: string): string {
   if (!installIso || !isWindowsIso(installIso)) return "";
-  return isos.find((volid) => volid !== installIso && isVirtioIso(volid)) ?? "";
+  const candidates = isos.filter((volid) => volid !== installIso && isVirtioIso(volid));
+  if (!candidates.length) return "";
+  const preferred = candidates
+    .filter((volid) => !isKnownBadVirtioIso(volid))
+    .sort((a, b) => compareTemplateVersion(virtioIsoVersion(b) ?? "", virtioIsoVersion(a) ?? ""));
+  return preferred[0] ?? candidates[0] ?? "";
 }
 
 export function ostypeFromIso(volid: string): string | undefined {

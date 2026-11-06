@@ -65,6 +65,16 @@ describe("iso images", () => {
       ),
     ).toBe("local:iso/virtio-win-0.1.266.iso");
     expect(
+      suggestVirtioIso(
+        [
+          "local:iso/Win11_24H2.iso",
+          "local:iso/virtio-win-0.1.285.iso",
+          "local:iso/virtio-win-0.1.271.iso",
+        ],
+        "local:iso/Win11_24H2.iso",
+      ),
+    ).toBe("local:iso/virtio-win-0.1.271.iso");
+    expect(
       vmCdromDisks("local:iso/Win11_24H2.iso", "local:iso/virtio-win-0.1.266.iso"),
     ).toEqual({
       ide2: "local:iso/Win11_24H2.iso,media=cdrom",

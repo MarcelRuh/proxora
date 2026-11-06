@@ -1,5 +1,6 @@
 import { ProxmoxApiError } from "@/lib/errors";
 import { isEmptyProxmoxTaskLogError, normalizeProxmoxTaskLog } from "@/lib/backup";
+import { isSuccessfulTaskExit } from "@/lib/proxmox-tasks";
 import type { ProxmoxHttpClient } from "@/server/proxmox/http";
 import type { ProxmoxAptUpdate, ProxmoxTask } from "@/server/proxmox/types";
 
@@ -45,7 +46,7 @@ export class TaskApi {
       const st = await this.status(node, upid);
       if (st.status && st.status !== "running") {
         const exit = st.exitstatus ?? "OK";
-        if (exit === "OK") return st;
+        if (isSuccessfulTaskExit(exit)) return st;
         throw new ProxmoxApiError(`Proxmox-Task fehlgeschlagen: ${exit}`, 502);
       }
       await sleep(intervalMs);
