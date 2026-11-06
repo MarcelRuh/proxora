@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.3.3] – 2026-11-06
+
+### Fixed
+
+- Self-update/CI: `package-lock.json` was corrupted by naive version sed replaces (`why-is-node-running@2.3.2` does not exist), so 2.3.1/2.3.2 images never built. Lockfile restored; bump only the app version fields.
+
 ## [2.3.2] – 2026-11-06
 
 ### Fixed
