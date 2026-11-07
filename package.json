@@ -1,8 +1,8 @@
 {
   "name": "proxora",
-  "version": "2.3.3",
+  "version": "2.3.4",
   "private": true,
-  "description": "Proxora \u2013 central management for independent Proxmox VE hosts",
+  "description": "Proxora – central management for independent Proxmox VE hosts",
   "license": "MIT",
   "repository": {
     "type": "git",

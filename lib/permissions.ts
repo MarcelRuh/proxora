@@ -463,6 +463,7 @@ export function permissionForGuestAction(kind: "vm" | "lxc", action: string): Pe
   switch (action) {
     case "start":
     case "sendkey":
+    case "nudge-cd-boot":
       return `${prefix}.start` as Permission;
     case "stop":
       return `${prefix}.force-stop` as Permission;

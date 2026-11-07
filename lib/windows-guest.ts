@@ -1,15 +1,16 @@
-import { isWindowsOstype } from "@/lib/iso-images";
+import { isWindowsOstype, WINDOWS_MACHINE_TYPE } from "@/lib/iso-images";
 
 /** Hardware used by a working Windows 11 guest (cursor-privat), with VGA kept for the console. */
 export const WINDOWS_GUEST_HARDWARE = {
   ostype: "win11",
   bios: "ovmf",
-  machine: "q35",
+  machine: WINDOWS_MACHINE_TYPE,
   cpu: "host",
   scsihw: "virtio-scsi-single",
   agent: "1",
   tablet: "1",
   onboot: "1",
+  vga: "std",
 } as const;
 
 export function withNetFirewall(spec: string, enabled = true): string {
@@ -32,7 +33,9 @@ export function applyWindowsGuestHardware(config: Record<string, string>): Recor
   next.agent = WINDOWS_GUEST_HARDWARE.agent;
   next.tablet = WINDOWS_GUEST_HARDWARE.tablet;
   next.onboot = WINDOWS_GUEST_HARDWARE.onboot;
-  if (next.vga?.split(",")[0]?.trim().toLowerCase() === "none") next.vga = "std";
+  if (!next.vga || next.vga.split(",")[0]?.trim().toLowerCase() === "none") {
+    next.vga = WINDOWS_GUEST_HARDWARE.vga;
+  }
   if (next.net0) next.net0 = withNetFirewall(next.net0, true);
   return next;
 }

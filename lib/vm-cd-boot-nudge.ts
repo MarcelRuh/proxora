@@ -1,16 +1,18 @@
-/** Keys QEMU accepts for "press any key to boot from CD". */
-export const CD_BOOT_NUDGE_KEYS = ["spc", "ret", "spc"] as const;
-
-export function cdBootNudgePlan(rounds = 4, roundDelayMs = 2_500, keyDelayMs = 350) {
+/**
+ * Windows UEFI ISOs sit on "Press any key to boot from CD or DVD...".
+ * Keys must land after OVMF draws that prompt (~5–15s after QEMU is up), not in a burst.
+ */
+export function cdBootNudgePlan(
+  rounds = 18,
+  firstDelayMs = 6_000,
+  roundDelayMs = 2_000,
+): Array<{ key: string; delayMs: number }> {
   const steps: Array<{ key: string; delayMs: number }> = [];
   for (let round = 0; round < rounds; round++) {
-    for (let i = 0; i < CD_BOOT_NUDGE_KEYS.length; i++) {
-      const key = CD_BOOT_NUDGE_KEYS[i]!;
-      steps.push({
-        key,
-        delayMs: round === 0 && i === 0 ? roundDelayMs : i === 0 ? roundDelayMs : keyDelayMs,
-      });
-    }
+    steps.push({
+      key: "spc",
+      delayMs: round === 0 ? firstDelayMs : roundDelayMs,
+    });
   }
   return steps;
 }

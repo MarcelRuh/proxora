@@ -107,7 +107,7 @@ describe("iso images", () => {
     expect(isVirtioIso("local:iso/virtio-win-0.1.266.iso")).toBe(true);
     expect(ostypeFromIso("local:iso/Win11_24H2.iso")).toBe("win11");
     expect(ostypeFromIso("local:iso/Win10_22H2.iso")).toBe("win10");
-    expect(windowsVmFirmware("win11")).toEqual({ bios: "ovmf", machine: "q35", cpu: "host" });
+    expect(windowsVmFirmware("win11")).toEqual({ bios: "ovmf", machine: "pc-q35-9.2", cpu: "host" });
     expect(windowsVmFirmware("l26")).toBeNull();
     expect(
       suggestVirtioIso(
@@ -129,11 +129,12 @@ describe("iso images", () => {
       vmCdromDisks("local:iso/Win11_24H2.iso", "local:iso/virtio-win-0.1.266.iso"),
     ).toEqual({
       ide2: "local:iso/Win11_24H2.iso,media=cdrom",
-      ide3: "local:iso/virtio-win-0.1.266.iso,media=cdrom",
+      sata1: "local:iso/virtio-win-0.1.266.iso,media=cdrom",
     });
     expect(vmCreateBootOrder({ diskBus: "scsi", hasInstallIso: true })).toBe("order=ide2;scsi0");
     expect(vmCreateBootOrder({ diskBus: "virtio", hasInstallIso: false })).toBe("order=virtio0");
-    expect(cdBootNudgePlan(1, 100, 10).map((s) => s.key)).toEqual(["spc", "ret", "spc"]);
+    expect(cdBootNudgePlan(3, 10, 5).map((s) => s.key)).toEqual(["spc", "spc", "spc"]);
+    expect(cdBootNudgePlan(3, 10, 5)[0]?.delayMs).toBe(10);
   });
 });
 

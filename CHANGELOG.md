@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.3.4] – 2026-11-07
+
+### Fixed
+
+- Windows VM create: pin `pc-q35-9.2` (instead of host-default 11.x), put VirtIO ISO on `sata1`, and run a longer server-side Space nudge after start so the UEFI "Press any key to boot from CD" prompt is actually cleared.
+
 ## [2.3.3] – 2026-11-06
 
 ### Fixed

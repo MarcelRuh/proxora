@@ -11,7 +11,7 @@ describe("windows guest hardware", () => {
     });
     expect(next.ostype).toBe("win11");
     expect(next.bios).toBe("ovmf");
-    expect(next.machine).toBe("q35");
+    expect(next.machine).toBe("pc-q35-9.2");
     expect(next.cpu).toBe("host");
     expect(next.scsihw).toBe("virtio-scsi-single");
     expect(next.agent).toBe("1");

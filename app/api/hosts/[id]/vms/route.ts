@@ -111,7 +111,10 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     serial0: "socket",
     tablet: 1,
   };
-  if (firmware) payload.onboot = 1;
+  if (firmware) {
+    payload.onboot = 1;
+    payload.vga = "std";
+  }
   if (body.diskBus === "virtio") payload.virtio0 = disk;
   else if (body.diskBus === "sata") payload.sata0 = disk;
   else if (body.diskBus === "ide") payload.ide0 = disk;

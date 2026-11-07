@@ -223,17 +223,26 @@ export function isWindowsOstype(ostype: string | undefined): boolean {
   return Boolean(ostype?.toLowerCase().startsWith("win"));
 }
 
-export function windowsVmFirmware(ostype: string): { bios: "ovmf"; machine: "q35"; cpu: "host" } | null {
+/** Pin a stable q35 revision — bare `q35` follows the host default (11.x) and breaks some Windows ISOs. */
+export const WINDOWS_MACHINE_TYPE = "pc-q35-9.2";
+
+export function windowsVmFirmware(
+  ostype: string,
+): { bios: "ovmf"; machine: typeof WINDOWS_MACHINE_TYPE; cpu: "host" } | null {
   if (!isWindowsOstype(ostype)) return null;
-  return { bios: "ovmf", machine: "q35", cpu: "host" };
+  return { bios: "ovmf", machine: WINDOWS_MACHINE_TYPE, cpu: "host" };
 }
 
 export function vmCdromDisks(iso?: string, iso2?: string): Record<string, string> {
   const first = iso?.trim() ?? "";
   const second = iso2?.trim() ?? "";
   const disks: Record<string, string> = {};
+  // Install ISO on ide2 (bootable). VirtIO drivers on sata1 so OVMF does not treat it as a second DVD boot target.
   if (first) disks.ide2 = `${first},media=cdrom`;
-  if (second && second !== first) disks[first ? "ide3" : "ide2"] = `${second},media=cdrom`;
+  if (second && second !== first) {
+    if (first) disks.sata1 = `${second},media=cdrom`;
+    else disks.ide2 = `${second},media=cdrom`;
+  }
   return disks;
 }
 

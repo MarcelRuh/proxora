@@ -3,20 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { isUpid } from "@/lib/guest-task";
-import { cdBootNudgePlan } from "@/lib/vm-cd-boot-nudge";
 import { useProxmoxTask } from "@/components/tasks/use-proxmox-task";
 
 export type CreateTaskPhase = "create" | "start";
 
 async function nudgeCdBoot(hostId: string, node: string, vmid: number) {
   const path = `/api/hosts/${hostId}/vms/${encodeURIComponent(node)}/${vmid}`;
-  for (const step of cdBootNudgePlan()) {
-    await new Promise((resolve) => window.setTimeout(resolve, step.delayMs));
-    await api(path, {
-      method: "POST",
-      body: JSON.stringify({ action: "sendkey", key: step.key, wait: false }),
-    }).catch(() => undefined);
-  }
+  await api(path, {
+    method: "POST",
+    body: JSON.stringify({ action: "nudge-cd-boot", wait: false }),
+  });
 }
 
 export function useCreateTaskFollow({

@@ -21,6 +21,7 @@ import { parseAgentNetworkIps, parseGuestConfigIps } from "@/lib/create-ip";
 import { invalidateInventoryCache, loadHostInventory } from "@/server/services/inventory-cache";
 import { guestIsRunning, inventoryNodesForMigrate, migrateTargetAllowed, qemuMigrateParams } from "@/lib/guest-migrate";
 import { shutdownThenDeleteGuest, startGuestDelete } from "@/server/services/guest-delete";
+import { scheduleVmCdBootNudge } from "@/server/services/vm-cd-boot-nudge";
 
 export const maxDuration = 800;
 
@@ -42,6 +43,7 @@ const actionSchema = z.object({
     "config",
     "resize",
     "sendkey",
+    "nudge-cd-boot",
   ]),
   confirm: z.boolean().optional(),
   confirmId: z.number().int().positive().optional(),
@@ -157,6 +159,9 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
         await vm.sendkey(node, vmid, body.key?.trim() || "spc");
         // No UPID — return immediately without task wait.
         return { ok: true };
+      case "nudge-cd-boot":
+        scheduleVmCdBootNudge(client, node, vmid);
+        return { ok: true, scheduled: true };
 
       case "stop":
         result = await vm.stop(node, vmid);
@@ -268,9 +273,10 @@ export const POST = apiRoute("vm.view", async (req, session, params) => {
     }
     throw error;
   }
-  if (body.action !== "sendkey") invalidateInventoryCache(params.id);
+  if (body.action !== "sendkey" && body.action !== "nudge-cd-boot") invalidateInventoryCache(params.id);
   if (
     body.action !== "sendkey" &&
+    body.action !== "nudge-cd-boot" &&
     !(body.action === "delete" && body.wait === false && deletePhase && deletePhase !== "delete")
   ) {
     await writeAuditLog({
