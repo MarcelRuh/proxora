@@ -110,6 +110,8 @@ export const POST = apiRoute("vm.create", async (req, session, params) => {
     agent: "1",
     serial0: "socket",
     tablet: 1,
+    // PVE defaults to en-us when unset — breaks Y/Z and umlauts in the VGA console.
+    keyboard: "de",
   };
   if (firmware) {
     payload.onboot = 1;

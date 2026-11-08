@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { WebConsole } from "@/components/console/web-console";
 import { VncConsole } from "@/components/console/vnc-console";
@@ -21,9 +21,11 @@ type GuestPayload = {
 
 export function GuestConsoleWindow({ kind }: { kind: "vm" | "lxc" }) {
   const { t } = useI18n();
+  const qc = useQueryClient();
   const params = useParams<{ hostId: string; node: string; vmid: string }>();
   const guest = { hostId: params.hostId, kind, vmid: Number(params.vmid) };
   const can = useCan(kind === "vm" ? "vm.console" : "lxc.console", params.hostId, guest);
+  const canConfig = useCan("vm.config", params.hostId, guest);
   const [mode, setMode] = useState<"vga" | "serial">(kind === "vm" ? "vga" : "serial");
   const path = `/api/hosts/${params.hostId}/${kind === "vm" ? "vms" : "lxc"}/${params.node}/${params.vmid}`;
   const { data, isLoading, error, refetch } = useQuery({
@@ -110,6 +112,22 @@ export function GuestConsoleWindow({ kind }: { kind: "vm" | "lxc" }) {
                 vmid={Number(params.vmid)}
                 running={running || paused}
                 fill
+                keyboard={typeof config.keyboard === "string" ? config.keyboard : ""}
+                canSetKeyboard={canConfig}
+                onKeyboardChange={
+                  canConfig
+                    ? async (layout) => {
+                        await api(path, {
+                          method: "POST",
+                          body: JSON.stringify({ action: "config", config: { keyboard: layout } }),
+                        });
+                        void refetch();
+                        void qc.invalidateQueries({
+                          queryKey: ["guest-live", kind, params.hostId, params.node, params.vmid],
+                        });
+                      }
+                    : undefined
+                }
               />
             ) : (
               <WebConsole hostId={params.hostId} node={params.node} kind={kind} vmid={Number(params.vmid)} fill />

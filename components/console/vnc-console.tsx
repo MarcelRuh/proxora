@@ -6,6 +6,7 @@ import { ClipboardCopy, Maximize2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { disableQemuExtendedKeys, grabRfbKeyboard, rfbKeysymFromKeyboardEvent, sendClipboardAsKeys } from "@/lib/vnc-input";
+import { parseQemuKeyboard, QEMU_KEYBOARD_LAYOUTS } from "@/lib/guest-console";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -14,6 +15,9 @@ type Props = {
   vmid: number;
   running: boolean;
   fill?: boolean;
+  keyboard?: string;
+  canSetKeyboard?: boolean;
+  onKeyboardChange?: (layout: string) => Promise<void>;
 };
 
 type RfbInstance = InstanceType<typeof import("@novnc/novnc/lib/rfb.js").default>;
@@ -30,7 +34,19 @@ function focusRfb(container: HTMLElement | null, rfb: RfbInstance | null) {
   rfb.focus();
 }
 
-export function VncConsole({ hostId, node, vmid, running, fill }: Props) {
+const toolbarSelectClass =
+  "h-7 max-w-[11rem] rounded border border-white/15 bg-transparent px-1.5 text-[11px] text-slate-300 disabled:opacity-50";
+
+export function VncConsole({
+  hostId,
+  node,
+  vmid,
+  running,
+  fill,
+  keyboard,
+  canSetKeyboard,
+  onKeyboardChange,
+}: Props) {
   const { t } = useI18n();
   const shellRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -40,6 +56,8 @@ export function VncConsole({ hostId, node, vmid, running, fill }: Props) {
   const [status, setStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
   const [detail, setDetail] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
+  const [savingKeyboard, setSavingKeyboard] = useState(false);
+  const layout = parseQemuKeyboard(keyboard);
 
   useEffect(() => {
     if (!running) {
@@ -188,6 +206,19 @@ export function VncConsole({ hostId, node, vmid, running, fill }: Props) {
     };
   }, [hostId, node, vmid, nonce, running]);
 
+  async function changeKeyboard(next: string) {
+    if (!onKeyboardChange || next === layout) return;
+    setSavingKeyboard(true);
+    try {
+      await onKeyboardChange(next);
+      toast.success(t("guest.consoleKeyboardSaved"));
+    } catch {
+      toast.error(t("guest.consoleError"));
+    } finally {
+      setSavingKeyboard(false);
+    }
+  }
+
   async function pasteIntoGuest(rfb: RfbInstance) {
     try {
       const text = await navigator.clipboard.readText();
@@ -258,6 +289,22 @@ export function VncConsole({ hostId, node, vmid, running, fill }: Props) {
         ) : null}
         {detail && status === "error" ? <span className="text-red-400">{detail}</span> : null}
         <div className="ml-auto flex flex-wrap items-center gap-1">
+          <label className="flex items-center gap-1 text-slate-400">
+            <span className="sr-only">{t("guest.consoleLayout")}</span>
+            <select
+              className={toolbarSelectClass}
+              value={layout}
+              title={t("guest.consoleLayout")}
+              disabled={!canSetKeyboard || savingKeyboard || !onKeyboardChange}
+              onChange={(e) => void changeKeyboard(e.target.value)}
+            >
+              {QEMU_KEYBOARD_LAYOUTS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <Button
             size="sm"
             variant="ghost"

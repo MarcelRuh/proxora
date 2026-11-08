@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.10] – 2026-11-08
+
+### Fixed
+
+- VGA console keyboard: new VMs default to QEMU `keyboard=de`, Windows profile sets German layout, and the console toolbar / hardware config can change the layout (restart VM to fully apply).
+
 ## [2.4.9] – 2026-11-08
 
 ### Added

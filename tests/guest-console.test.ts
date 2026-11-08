@@ -1,7 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { isTermproxySerialError, vmHasGraphics, vmHasSerialSocket, vmHasTablet } from "@/lib/guest-console";
+import {
+  DEFAULT_QEMU_KEYBOARD,
+  isTermproxySerialError,
+  parseQemuKeyboard,
+  vmHasGraphics,
+  vmHasSerialSocket,
+  vmHasTablet,
+} from "@/lib/guest-console";
 
 describe("guest console helpers", () => {
+  it("maps QEMU keyboard layouts and defaults missing values to en-us", () => {
+    expect(DEFAULT_QEMU_KEYBOARD).toBe("de");
+    expect(parseQemuKeyboard("de")).toBe("de");
+    expect(parseQemuKeyboard("DE-CH")).toBe("de-ch");
+    expect(parseQemuKeyboard(undefined)).toBe("en-us");
+    expect(parseQemuKeyboard("")).toBe("en-us");
+    expect(parseQemuKeyboard("nope")).toBe("en-us");
+  });
+
   it("treats unset VGA as a display and vga=none as headless", () => {
     expect(vmHasGraphics(undefined)).toBe(true);
     expect(vmHasGraphics("std")).toBe(true);

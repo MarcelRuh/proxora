@@ -1,3 +1,4 @@
+import { DEFAULT_QEMU_KEYBOARD } from "@/lib/guest-console";
 import { isWindowsOstype, WINDOWS_MACHINE_TYPE } from "@/lib/iso-images";
 
 /** Hardware used by a working Windows 11 guest (cursor-privat), with VGA kept for the console. */
@@ -11,6 +12,7 @@ export const WINDOWS_GUEST_HARDWARE = {
   tablet: "1",
   onboot: "1",
   vga: "std",
+  keyboard: DEFAULT_QEMU_KEYBOARD,
 } as const;
 
 export function withNetFirewall(spec: string, enabled = true): string {
@@ -33,6 +35,7 @@ export function applyWindowsGuestHardware(config: Record<string, string>): Recor
   next.agent = WINDOWS_GUEST_HARDWARE.agent;
   next.tablet = WINDOWS_GUEST_HARDWARE.tablet;
   next.onboot = WINDOWS_GUEST_HARDWARE.onboot;
+  next.keyboard = WINDOWS_GUEST_HARDWARE.keyboard;
   if (!next.vga || next.vga.split(",")[0]?.trim().toLowerCase() === "none") {
     next.vga = WINDOWS_GUEST_HARDWARE.vga;
   }
