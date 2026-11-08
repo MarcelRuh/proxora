@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -150,6 +150,7 @@ export function WireguardSection() {
   const [confIn, setConfIn] = useState("");
   const [diagBusy, setDiagBusy] = useState(false);
   const [liveDiag, setLiveDiag] = useState<Diagnostics | null>(null);
+  const bgProbeAt = useRef(0);
 
   const iface = wg?.interface;
   const peers = (wg?.peers ?? []).filter((p) => p.kind === "PROXORA");
@@ -173,6 +174,27 @@ export function WireguardSection() {
     await qc.invalidateQueries({ queryKey: ["hosts"] });
     return res;
   }
+
+  // Light background HTTP probe every ~2 minutes while peers exist (no button click).
+  useEffect(() => {
+    if (!can || peers.length === 0) return;
+    const tick = () => {
+      const now = Date.now();
+      if (now - bgProbeAt.current < 120_000) return;
+      bgProbeAt.current = now;
+      void api<{ diagnostics?: Diagnostics }>("/api/wireguard", {
+        method: "POST",
+        body: JSON.stringify({ action: "diagnose" }),
+      })
+        .then((res) => {
+          if (res.diagnostics) setLiveDiag(res.diagnostics);
+        })
+        .catch(() => undefined);
+    };
+    tick();
+    const id = window.setInterval(tick, 30_000);
+    return () => window.clearInterval(id);
+  }, [can, peers.length]);
 
   if (!can) return null;
 

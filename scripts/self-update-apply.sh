@@ -386,9 +386,11 @@ free_docker_space() {
   docker image prune -af >/dev/null 2>&1 || true
   avail="$(disk_avail_kb)"
   echo " disk available: ${avail:-?}K"
-  if [ "${avail:-0}" -lt 4194304 ]; then
-    write_progress 0 error "Not enough disk space (${avail}K free, need 4G+)"
-    echo "ERROR: not enough disk space after cleanup (${avail}K free, need at least 4G)" >&2
+  # Keep the install disk small: require ~2.0G free after pruning old Proxora tags
+  # (one app image ≈1.5G; pull reuses shared layers when possible).
+  if [ "${avail:-0}" -lt 2097152 ]; then
+    write_progress 0 error "Not enough disk space (${avail}K free, need 2G+)"
+    echo "ERROR: not enough disk space after cleanup (${avail}K free, need at least 2G)" >&2
     exit 1
   fi
 }
@@ -579,6 +581,28 @@ image_present() {
   [ -n "$VER" ] && docker image inspect "$IMAGE_REF" >/dev/null 2>&1
 }
 
+ensure_wireguard_image() {
+  if docker image inspect proxora-proxora-wireguard:latest >/dev/null 2>&1 \
+    || docker image inspect proxora-proxora-wireguard >/dev/null 2>&1; then
+    echo "==> WireGuard sidecar image already present" >> "$TMP/compose.log"
+    write_progress 81 build "Sidecar present"
+    return 0
+  fi
+  echo "==> Building WireGuard sidecar" >> "$TMP/compose.log"
+  write_progress 80 build "Building WireGuard sidecar"
+  set +e
+  run_watched build "$BUILD_TIMEOUT_SEC" "WireGuard sidecar build" \
+    docker compose -f "$COMPOSE_FILE" build proxora-wireguard
+  BUILD_RC=$?
+  set -e
+  if [ "$BUILD_RC" -eq 124 ]; then
+    fail_compose "WireGuard sidecar build timed out after ${BUILD_TIMEOUT_SEC}s"
+  fi
+  if [ "$BUILD_RC" -ne 0 ]; then
+    fail_compose "WireGuard sidecar build failed"
+  fi
+}
+
 if [ "${PROXORA_BUILD:-0}" = "1" ]; then
   pin_env_version
   set +e
@@ -587,15 +611,23 @@ if [ "${PROXORA_BUILD:-0}" = "1" ]; then
   COMPOSE_RC=$?
   set -e
 else
+  PULL_SCRIPT="${INSTALL_DIR}/scripts/docker-pull-progress.sh"
+  chmod +x "$PULL_SCRIPT" 2>/dev/null || true
+  write_progress 32 pull "Pulling image"
   set +e
-  run_watched pull "$PULL_TIMEOUT_SEC" "image pull" \
-    docker compose --progress=plain -f "$COMPOSE_FILE" pull proxora
-  PULL_RC=$?
+  if [ -f "$PULL_SCRIPT" ]; then
+    # Real layer progress → progress file; also tee into compose log.
+    sh "$PULL_SCRIPT" "$IMAGE_REF" "$PROGRESS_FILE" >> "$TMP/compose.log" 2>&1
+    PULL_RC=$?
+  else
+    run_watched pull "$PULL_TIMEOUT_SEC" "image pull" \
+      docker compose --progress=plain -f "$COMPOSE_FILE" pull proxora
+    PULL_RC=$?
+  fi
   set -e
   if [ "$PULL_RC" -eq 124 ]; then
     fail_compose "Image pull timed out after ${PULL_TIMEOUT_SEC}s — check network to ghcr.io and retry"
   fi
-  # Compose often exits 0 on "manifest unknown"; require the image to exist.
   PULL_OK=0
   if [ "$PULL_RC" -eq 0 ] && image_present; then
     PULL_OK=1
@@ -606,21 +638,7 @@ else
   if [ "$PULL_OK" -eq 1 ]; then
     pin_env_version
     write_progress 78 pull "App image ready"
-    # Sidecar is build-only (no GHCR tag). --no-build would leave Proxora Created
-    # and the stack dead if proxora-proxora-wireguard:latest is missing.
-    echo "==> Building WireGuard sidecar" >> "$TMP/compose.log"
-    write_progress 80 build "Building WireGuard sidecar"
-    set +e
-    run_watched build "$BUILD_TIMEOUT_SEC" "WireGuard sidecar build" \
-      docker compose -f "$COMPOSE_FILE" build proxora-wireguard
-    BUILD_RC=$?
-    set -e
-    if [ "$BUILD_RC" -eq 124 ]; then
-      fail_compose "WireGuard sidecar build timed out after ${BUILD_TIMEOUT_SEC}s"
-    fi
-    if [ "$BUILD_RC" -ne 0 ]; then
-      fail_compose "WireGuard sidecar build failed"
-    fi
+    ensure_wireguard_image
     write_progress 82 pull "Image ready"
     set +e
     run_watched up "$UP_TIMEOUT_SEC" "compose up" \
@@ -659,7 +677,12 @@ if [ "${COMPOSE_RC:-1}" -ne 0 ]; then
 fi
 
 echo "==> Reattaching WireGuard to the new Proxora network"
-docker compose -f "$COMPOSE_FILE" up -d --build --no-deps --force-recreate proxora-wireguard >> "$TMP/compose.log" 2>&1 || true
+if docker image inspect proxora-proxora-wireguard:latest >/dev/null 2>&1 \
+  || docker image inspect proxora-proxora-wireguard >/dev/null 2>&1; then
+  docker compose -f "$COMPOSE_FILE" up -d --no-build --no-deps --force-recreate proxora-wireguard >> "$TMP/compose.log" 2>&1 || true
+else
+  docker compose -f "$COMPOSE_FILE" up -d --build --no-deps --force-recreate proxora-wireguard >> "$TMP/compose.log" 2>&1 || true
+fi
 
 printf '%s\n' "$SHA" > "${INSTALL_DIR}/.proxora-revision"
 if [ -n "$SIGNAL_DIR" ] && [ -d "$SIGNAL_DIR" ]; then

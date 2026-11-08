@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.8] – 2026-11-08
+
+### Added
+
+- Self-update shows real pull progress (MiB downloaded) instead of a fake 32→74% creep.
+- WireGuard runs a light background peer probe about every two minutes while colleagues are configured.
+- CI keeps GitHub Releases in draft until the GHCR image is pullable, then publishes; desktop updater smoke checks `latest.json`.
+
+### Changed
+
+- Docker image reuses pruned production `node_modules` from the builder (no second `npm ci`) and strips docs/tests from dependencies to shrink pulls.
+- Self-update keeps the install disk small: 2G free threshold after pruning old Proxora tags, skip WireGuard rebuild when the sidecar image already exists.
+
 ## [2.4.7] – 2026-11-08
 
 ### Added
