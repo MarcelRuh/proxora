@@ -396,6 +396,10 @@ export async function loadWireguardDiagnostics(opts?: { probe?: boolean }): Prom
     loadWireguardInterface(),
   ]);
   const reachability = opts?.probe ? await probeProxoraPeers() : [];
+  if (opts?.probe && reachability.length > 0) {
+    const { notifyWireguardUnreachable } = await import("@/server/notifications/ops-alerts");
+    notifyWireguardUnreachable(reachability);
+  }
   const proxoraPeers = await prisma.wireguardPeer.findMany({
     where: { kind: WireguardPeerKind.PROXORA },
     select: { id: true, name: true, address: true },

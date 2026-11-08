@@ -9,7 +9,15 @@
   <string name="setup_invalid">Invalid URL. Use http:// or https:// only.</string>
   <string name="menu_reload">Reload</string>
   <string name="menu_server">Change server</string>
+  <string name="menu_update">Check for app update</string>
   <string name="menu_close">Close</string>
+  <string name="setup_version">App version %1$s</string>
+  <string name="update_available">Update %1$s available — download now?</string>
+  <string name="update_current">App is up to date (%1$s).</string>
+  <string name="update_none">No APK found in the GitHub release.</string>
+  <string name="update_failed">Update check failed: %1$s</string>
+  <string name="update_download">Download</string>
+  <string name="update_dismiss">Later</string>
   <string name="download_started">Download: %1$s</string>
   <string name="download_failed">Download failed.</string>
   <string name="ssl_blocked">Certificate rejected. Long-press the app icon → Change server, then allow self-signed certificates.</string>

@@ -39,6 +39,8 @@ const TOPIC_LABELS: Record<NotificationTopic | "test", string> = {
   "host.cpu.hot": "CPU zu heiß",
   "zfs.degraded": "ZFS-Pool beeinträchtigt",
   "peer.update": "Proxora-Update",
+  "proxora.update.failed": "Self-Update fehlgeschlagen",
+  "wireguard.peer.unreachable": "WireGuard-Peer unerreichbar",
   test: "Test",
 };
 
@@ -106,7 +108,9 @@ export function buildDiscordWebhookPayload(
   const version = opts?.version ?? APP_VERSION;
   const description = clip(event.message, 4096);
   const fields: DiscordEmbedField[] =
-    event.topic === "peer.update"
+    event.topic === "peer.update" ||
+    event.topic === "proxora.update.failed" ||
+    event.topic === "wireguard.peer.unreachable"
       ? [
           ...(event.name ? [identityField("Peer", event.name)] : []),
           { name: "Ereignis", value: TOPIC_LABELS[event.topic], inline: true },

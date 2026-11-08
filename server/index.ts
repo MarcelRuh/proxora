@@ -14,6 +14,7 @@ import { startBackupWatchScheduler } from "@/server/services/backup-watch";
 import { startCpuTempWatchScheduler } from "@/server/services/cpu-temp-watch";
 import { startDiskWatchScheduler } from "@/server/services/disk-watch";
 import { startZfsWatchScheduler } from "@/server/services/zfs-watch";
+import { startWireguardProbeWatchScheduler } from "@/server/services/wireguard-probe-watch";
 import { startHostReconnectScheduler } from "@/server/services/host-reconnect";
 import { startPeerSyncScheduler } from "@/server/services/peer-sync";
 import { announcePeerUpdateToPeers } from "@/server/services/peer-update";
@@ -103,6 +104,7 @@ async function main() {
     startDiskWatchScheduler();
     startCpuTempWatchScheduler();
     startZfsWatchScheduler();
+    startWireguardProbeWatchScheduler();
     void announcePeerUpdateToPeers({ updating: false }).catch((error) =>
       logger.warn({ err: error }, "Peer update recovery announce failed"),
     );

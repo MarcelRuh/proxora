@@ -25,12 +25,20 @@ ENV SESSION_SECRET="build-time-placeholder-not-a-real-session-secret"
 RUN npx prisma generate \
   && npm run build \
   && npm prune --omit=dev \
-  && rm -rf /root/.npm /tmp/* \
+  && rm -rf /root/.npm /tmp/* .next/cache .next/dev \
+  && find .next -type f -name '*.map' -delete 2>/dev/null || true \
   && find node_modules -type f \( \
        -name '*.md' -o -name '*.markdown' -o -name 'CHANGELOG*' -o -name 'LICENSE*' -o -name '*.map' \
      \) -delete 2>/dev/null || true \
   && find node_modules -type d \( -name 'test' -o -name 'tests' -o -name '__tests__' -o -name 'docs' \) \
-       -prune -exec rm -rf {} + 2>/dev/null || true
+       -prune -exec rm -rf {} + 2>/dev/null || true \
+  && rm -rf \
+       node_modules/@next/swc-linux-x64-musl \
+       node_modules/@img/sharp-libvips-linuxmusl-x64 \
+       node_modules/@img/sharp-linuxmusl-x64 \
+       node_modules/@img/sharp-wasm32 \
+       node_modules/typescript \
+    2>/dev/null || true
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
@@ -52,7 +60,6 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/next.config.ts ./
-COPY --from=builder /app/tsconfig.json ./
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh \
   && find /app/scripts -type f -name '*.sh' -exec chmod +x {} +

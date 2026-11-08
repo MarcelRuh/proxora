@@ -93,6 +93,12 @@ class SetupActivity : AppCompatActivity() {
       addView(insecure.apply { setPadding(0, dp(12), 0, dp(8)) })
       addView(biometric.apply { setPadding(0, dp(4), 0, dp(16)) })
       addView(connect, buttonRowParams())
+      addView(TextView(this@SetupActivity).apply {
+        text = getString(R.string.setup_version, BuildConfig.VERSION_NAME)
+        setTextColor(getColor(R.color.proxora_muted))
+        setPadding(0, dp(18), 0, 0)
+        textSize = 12f
+      })
     }
 
     val statusSpacer = View(this).apply {

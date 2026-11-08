@@ -34,8 +34,11 @@ describe("notification topic filters", () => {
     expect(eventsWithNewTopics(["host.updates"], LEGACY_EVENTS_SEEN)).toContain("disk.full");
     expect(eventsWithNewTopics(["host.updates"], LEGACY_EVENTS_SEEN)).toContain("zfs.degraded");
     expect(eventsWithNewTopics(["host.updates"], LEGACY_EVENTS_SEEN)).toContain("peer.update");
+    expect(eventsWithNewTopics(["host.updates"], LEGACY_EVENTS_SEEN)).toContain("proxora.update.failed");
+    expect(eventsWithNewTopics(["host.updates"], LEGACY_EVENTS_SEEN)).toContain("wireguard.peer.unreachable");
     expect(channelAllowsTopic(["host.updates"], "zfs.degraded")).toBe(true);
     expect(channelAllowsTopic(["host.updates"], "peer.update")).toBe(true);
+    expect(channelAllowsTopic(["host.updates"], "proxora.update.failed")).toBe(true);
   });
 });
 

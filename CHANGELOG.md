@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.9] – 2026-11-08
+
+### Added
+
+- Discord/notification topics for failed Proxora self-updates and unreachable WireGuard Proxora peers (server-side probe every ~2 minutes).
+- Postgres dump→restore smoke script (`scripts/postgres-backup-smoke.sh`).
+- Android: native GitHub APK update check from the quick-actions menu, app version on the setup screen, and insecure-TLS bypass scoped to the configured server host.
+
+### Changed
+
+- Docker image drops `.next/cache`, source maps, TypeScript, and unused musl/native packages after build; removes unused `@xterm/addon-web-links`.
+- Desktop updater smoke also HEAD-checks platform download URLs and counts `.sig` assets.
+
 ## [2.4.8] – 2026-11-08
 
 ### Added

@@ -34,6 +34,7 @@ import {
   REVISION_FILE,
   type SelfUpdateProgress,
 } from "@/server/services/self-update-progress";
+import { maybeNotifySelfUpdateFailed } from "@/server/notifications/ops-alerts";
 
 const execFileAsync = promisify(execFile);
 const APPLY_TIMEOUT_MS = 20 * 60 * 1000;
@@ -241,6 +242,7 @@ async function withProgress(status: SelfUpdateStatus): Promise<SelfUpdateStatus>
   const file = readProgressFromDir(dir);
   const logs = status.updating ? parseUpdaterLogs(readComposeLogsFromDir(dir) ?? "") : null;
   const progress = mergeProgress(file, logs);
+  maybeNotifySelfUpdateFailed(progress);
   if (progress && status.updating && progress.step === "done") {
     return { ...status, progress };
   }

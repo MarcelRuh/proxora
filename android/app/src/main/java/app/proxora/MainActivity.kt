@@ -347,6 +347,10 @@ class MainActivity : AppCompatActivity() {
       dialog.dismiss()
       reloadPage()
     }
+    val update = proxoraOutlinedButton(getString(R.string.menu_update)) {
+      dialog.dismiss()
+      checkAppUpdate()
+    }
     val change = proxoraOutlinedButton(getString(R.string.menu_server)) {
       dialog.dismiss()
       setupLauncher.launch(Intent(this, SetupActivity::class.java))
@@ -356,6 +360,7 @@ class MainActivity : AppCompatActivity() {
       setBackgroundResource(R.drawable.quick_actions_card)
       setPadding(dp(20), dp(20), dp(20), dp(20))
       addView(reload, buttonRowParams())
+      addView(update, buttonRowParams(dp(12)))
       addView(change, buttonRowParams(dp(12)))
     }
     val scrim = FrameLayout(this).apply {
@@ -435,7 +440,9 @@ class MainActivity : AppCompatActivity() {
       }
 
       override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: android.net.http.SslError) {
-        if (Prefs.allowInsecureTls(this@MainActivity)) {
+        val allow = Prefs.allowInsecureTls(this@MainActivity) &&
+          TlsScope.allowsInsecureHost(Prefs.serverUrl(this@MainActivity), error.url)
+        if (allow) {
           handler.proceed()
         } else {
           handler.cancel()
@@ -599,6 +606,34 @@ class MainActivity : AppCompatActivity() {
       },
       {
         finish()
+      },
+    )
+  }
+
+  private fun checkAppUpdate() {
+    Toast.makeText(this, R.string.menu_update, Toast.LENGTH_SHORT).show()
+    AndroidUpdateChecker.check(
+      this,
+      onResult = { apk ->
+        if (apk == null) {
+          Toast.makeText(
+            this,
+            getString(R.string.update_current, BuildConfig.VERSION_NAME),
+            Toast.LENGTH_LONG,
+          ).show()
+          return@check
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+          .setTitle(R.string.menu_update)
+          .setMessage(getString(R.string.update_available, apk.version))
+          .setPositiveButton(R.string.update_download) { _, _ ->
+            pendingApkId = AndroidUpdateChecker.downloadApk(this, apk)
+          }
+          .setNegativeButton(R.string.update_dismiss, null)
+          .show()
+      },
+      onError = { message ->
+        Toast.makeText(this, getString(R.string.update_failed, message), Toast.LENGTH_LONG).show()
       },
     )
   }

@@ -14,6 +14,8 @@ export const NOTIFICATION_TOPICS = [
   "host.cpu.hot",
   "zfs.degraded",
   "peer.update",
+  "proxora.update.failed",
+  "wireguard.peer.unreachable",
 ] as const;
 
 export type NotificationTopic = (typeof NOTIFICATION_TOPICS)[number];

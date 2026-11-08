@@ -152,3 +152,25 @@ object ServerUrl {
     return "$scheme://$host$port$path"
   }
 }
+
+/** Limits insecure TLS bypass to the configured Proxora origin (not arbitrary sites). */
+object TlsScope {
+  fun allowsInsecureHost(serverUrl: String?, requestUrl: String?): Boolean {
+    if (serverUrl.isNullOrBlank() || requestUrl.isNullOrBlank()) return false
+    val server = Uri.parse(serverUrl)
+    val request = Uri.parse(requestUrl)
+    val serverHost = server.host?.lowercase()?.trim('.') ?: return false
+    val requestHost = request.host?.lowercase()?.trim('.') ?: return false
+    if (serverHost != requestHost) return false
+    val serverPort = if (server.port != -1) server.port else defaultPort(server.scheme)
+    val requestPort = if (request.port != -1) request.port else defaultPort(request.scheme)
+    return serverPort == requestPort
+  }
+
+  private fun defaultPort(scheme: String?): Int =
+    when (scheme?.lowercase()) {
+      "https" -> 443
+      "http" -> 80
+      else -> -1
+    }
+}
