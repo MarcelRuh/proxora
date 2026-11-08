@@ -399,6 +399,27 @@ else
   kill "$PWATCH" 2>/dev/null || true
   wait "$PWATCH" 2>/dev/null || true
   if [ "$PULL_RC" -eq 0 ]; then
+    write_progress 78 pull "App image ready"
+    # Sidecar is build-only (no GHCR tag). --no-build would leave Proxora Created
+    # and the stack dead if proxora-proxora-wireguard:latest is missing.
+    echo "==> Building WireGuard sidecar" >> "$TMP/compose.log"
+    write_progress 80 build "Building WireGuard sidecar"
+    docker compose -f "$COMPOSE_FILE" build proxora-wireguard >> "$TMP/compose.log" 2>&1 &
+    BPID=$!
+    watch_compose_log "$BPID" "$TMP/compose.log" &
+    BWATCH=$!
+    set +e
+    wait "$BPID"
+    BUILD_RC=$?
+    set -e
+    kill "$BWATCH" 2>/dev/null || true
+    wait "$BWATCH" 2>/dev/null || true
+    if [ "$BUILD_RC" -ne 0 ]; then
+      write_progress 0 error "WireGuard sidecar build failed"
+      echo "ERROR: WireGuard sidecar build failed (see ${COMPOSE_LOG_FILE})" >&2
+      cp "$TMP/compose.log" "$COMPOSE_LOG_FILE" 2>/dev/null || true
+      exit "$BUILD_RC"
+    fi
     write_progress 82 pull "Image ready"
     docker compose -f "$COMPOSE_FILE" up -d --no-build --remove-orphans >> "$TMP/compose.log" 2>&1 &
   else
@@ -435,7 +456,7 @@ if [ "$COMPOSE_RC" -ne 0 ]; then
 fi
 
 echo "==> Reattaching WireGuard to the new Proxora network"
-docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate proxora-wireguard >> "$TMP/compose.log" 2>&1 || true
+docker compose -f "$COMPOSE_FILE" up -d --build --no-deps --force-recreate proxora-wireguard >> "$TMP/compose.log" 2>&1 || true
 
 printf '%s\n' "$SHA" > "${INSTALL_DIR}/.proxora-revision"
 if [ -n "$SIGNAL_DIR" ] && [ -d "$SIGNAL_DIR" ]; then

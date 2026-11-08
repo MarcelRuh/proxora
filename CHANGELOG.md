@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.3.6] – 2026-11-08
+
+### Fixed
+
+- Self-update: build the WireGuard sidecar before `compose up --no-build`, so a missing `proxora-proxora-wireguard` image no longer leaves Proxora stuck in `Created` (Bad Gateway).
+
+## [2.3.5] – 2026-11-08
+
+### Added
+
+- WireGuard diagnostics in the UI: tunnel status, handshakes, apply log, peer-sync errors, optional HTTP probe.
+
 ## [2.3.4] – 2026-11-07
 
 ### Fixed
