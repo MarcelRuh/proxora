@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.1] – 2026-11-08
+
+### Fixed
+
+- Desktop Windows NSIS installer installs per-machine into Program Files instead of `%LOCALAPPDATA%\Proxora`.
+
 ## [2.4.0] – 2026-11-08
 
 ### Added

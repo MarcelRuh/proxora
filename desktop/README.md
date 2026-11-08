@@ -12,7 +12,7 @@ Tagged GitHub releases ship Linux packages:
 - `Proxora_<version>_amd64.deb`
 - `Proxora-<version>-1.x86_64.rpm`
 
-Windows builds (`.msi` / `.exe`) are produced when the Windows CI runner is available for a tag; you can also build locally on Windows (see below).
+Windows builds (`.msi` / NSIS `.exe`) are produced on tagged releases. The NSIS installer uses **per-machine** mode (`C:\Program Files\Proxora`, admin required).
 
 ## Use
 
