@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.5] – 2026-11-08
+
+### Fixed
+
+- Self-update progress no longer jumps to ~94% from a leftover compose “Healthy” log while the image pull is still running, and the pull phase keeps a live heartbeat instead of freezing at 74%.
+
 ## [2.4.4] – 2026-11-08
 
 ### Added

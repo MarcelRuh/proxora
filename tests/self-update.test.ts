@@ -113,6 +113,12 @@ describe("progress parser", () => {
     expect(p?.percent).toBeGreaterThanOrEqual(90);
     expect(mergeProgress({ percent: 100, step: "done", detail: null }, { percent: 12, step: "resolve", detail: null })?.percent).toBe(12);
   });
+
+  it("prefers the live progress file over a stale compose Healthy tail", () => {
+    const file = { percent: 74, step: "pull", detail: "Pulling image" };
+    const staleLogs = { percent: 94, step: "startWeb", detail: "Container proxora Healthy" };
+    expect(mergeProgress(file, staleLogs)).toEqual(file);
+  });
 });
 
 describe("update signal files", () => {

@@ -19,6 +19,12 @@ PULL_TIMEOUT_SEC="${PROXORA_PULL_TIMEOUT_SEC:-900}"
 BUILD_TIMEOUT_SEC="${PROXORA_BUILD_TIMEOUT_SEC:-900}"
 UP_TIMEOUT_SEC="${PROXORA_UP_TIMEOUT_SEC:-600}"
 rm -f "$PROGRESS_FILE"
+# Drop leftover compose logs so the UI cannot reuse a previous "Healthy"/94% tail.
+rm -f "$COMPOSE_LOG_FILE"
+if [ -n "$SIGNAL_DIR" ] && [ -d "$SIGNAL_DIR" ]; then
+  rm -f "${SIGNAL_DIR}/.proxora-update-progress"
+  rm -f "${SIGNAL_DIR}/.proxora-update-compose.log"
+fi
 
 mirror_progress() {
   if [ -n "$SIGNAL_DIR" ] && [ -d "$SIGNAL_DIR" ] && [ -f "$PROGRESS_FILE" ]; then
@@ -75,6 +81,7 @@ write_progress() {
 }
 
 creep_pull() {
+  elapsed="${1:-0}"
   last=0
   if [ -f "$PROGRESS_FILE" ]; then
     parsed="$(sed -n 's/^percent=\([0-9][0-9]*\).*/\1/p' "$PROGRESS_FILE" | head -1)"
@@ -83,7 +90,11 @@ creep_pull() {
   next=$((last + 1))
   if [ "$next" -lt 32 ]; then next=32; fi
   if [ "$next" -gt 74 ]; then next=74; fi
-  write_progress "$next" pull "Pulling image"
+  if [ "$elapsed" -ge 60 ]; then
+    write_progress "$next" pull "Still downloading layers (${elapsed}s)…"
+  else
+    write_progress "$next" pull "Pulling image"
+  fi
 }
 
 file_size() {
@@ -152,9 +163,11 @@ watch_compose_log() {
           *"Pulled"*|*"Downloaded newer image"*|*"Image is up to date"*)
             write_progress 76 pull "Image ready"
             ;;
-          *"Pulling"*|*"Downloading"*|*"Extracting"*|*"Retrying"*|*"Verifying Checksum"*|*"Download complete"*)
+          *)
+            # Compose often prints little until layers finish; keep a heartbeat so
+            # the UI does not look frozen at 74% on slow links.
             ticks=$((ticks + 1))
-            if [ $((ticks % 3)) -eq 0 ]; then creep_pull; fi
+            if [ $((ticks % 3)) -eq 0 ]; then creep_pull "$ticks"; fi
             ;;
         esac
         ;;
@@ -520,7 +533,7 @@ if [ "${PROXORA_BUILD:-0}" = "1" ]; then
 else
   set +e
   run_watched pull "$PULL_TIMEOUT_SEC" "image pull" \
-    docker compose -f "$COMPOSE_FILE" pull proxora
+    docker compose --progress=plain -f "$COMPOSE_FILE" pull proxora
   PULL_RC=$?
   set -e
   if [ "$PULL_RC" -eq 124 ]; then

@@ -74,6 +74,11 @@ export function mergeProgress(
   file: SelfUpdateProgress | null,
   logs: SelfUpdateProgress | null,
 ): SelfUpdateProgress | null {
+  // Live progress file is authoritative while an update is mid-flight. A stale
+  // compose log from the previous run often still ends with "Healthy" / 94% and
+  // would otherwise jump the UI past the current pull/build phase.
+  if (file && file.step !== "done" && file.step !== "error") return file;
+  // New run already logging, but leftover "done" file not cleared yet.
   if (file?.step === "done" && file.percent >= 100 && logs && logs.percent < 100) return logs;
   if (!file) return logs;
   if (!logs) return file;
