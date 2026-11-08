@@ -358,12 +358,31 @@ disk_avail_kb() {
   df -Pk "$INSTALL_DIR" 2>/dev/null | awk 'NR==2 {print $4}'
 }
 
+# Remove every ghcr.io/marcelruh/proxora tag except the ones listed (space-separated).
+prune_old_proxora_images() {
+  keep_list=" $* "
+  docker images ghcr.io/marcelruh/proxora --format '{{.Tag}}' 2>/dev/null | while read -r tag; do
+    [ -z "$tag" ] && continue
+    [ "$tag" = "<none>" ] && continue
+    case "$keep_list" in
+      *" ${tag} "*) continue ;;
+    esac
+    echo " removing ghcr.io/marcelruh/proxora:${tag}"
+    docker rmi "ghcr.io/marcelruh/proxora:${tag}" >/dev/null 2>&1 || true
+  done
+}
+
 free_docker_space() {
   percent="${1:-6}"
+  keep_tag="${2:-}"
   echo "==> Cleaning Docker leftovers"
   write_progress "$percent" cleanup "Pruning unused images and build cache"
   docker container prune -f >/dev/null 2>&1 || true
   docker builder prune -af >/dev/null 2>&1 || true
+  # Drop previous Proxora app tags (layers shared with the running tag stay cheap).
+  # Keep the currently running tag so compose does not lose its base mid-update.
+  running_tag="$(docker inspect proxora --format '{{index .Config.Image}}' 2>/dev/null | sed -n 's|.*:||p' || true)"
+  prune_old_proxora_images ${keep_tag:-} ${running_tag:-}
   docker image prune -af >/dev/null 2>&1 || true
   avail="$(disk_avail_kb)"
   echo " disk available: ${avail:-?}K"
@@ -648,6 +667,10 @@ if [ -n "$SIGNAL_DIR" ] && [ -d "$SIGNAL_DIR" ]; then
 fi
 echo " wrote .proxora-revision"
 write_progress 96 finalize "Revision saved"
+# Keep only the version we just started; drop every older Proxora app tag.
+if [ -n "${VER:-}" ]; then
+  prune_old_proxora_images "$VER"
+fi
 docker builder prune -af >/dev/null 2>&1 || true
 docker image prune -af >/dev/null 2>&1 || true
 write_progress 100 done "Update complete"

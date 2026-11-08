@@ -99,8 +99,37 @@ function shortKey(key: string): string {
   return `${key.slice(0, 8)}…${key.slice(-6)}`;
 }
 
+function formatRelativePast(iso: string | null | undefined, locale: string): string | null {
+  if (!iso) return null;
+  const at = new Date(iso).getTime();
+  if (!Number.isFinite(at)) return null;
+  const sec = Math.max(0, Math.round((Date.now() - at) / 1000));
+  const rtf = new Intl.RelativeTimeFormat(locale.startsWith("de") ? "de" : "en", { numeric: "auto" });
+  if (sec < 60) return rtf.format(-sec, "second");
+  if (sec < 3600) return rtf.format(-Math.round(sec / 60), "minute");
+  if (sec < 86400) return rtf.format(-Math.round(sec / 3600), "hour");
+  return rtf.format(-Math.round(sec / 86400), "day");
+}
+
+function peerPresence(
+  peer: PeerRow,
+  diagnostics: Diagnostics | null,
+): { online: boolean; sinceIso: string | null } {
+  const runtime = diagnostics?.peers.find((p) => p.publicKey && p.publicKey === peer.publicKey);
+  const reach = diagnostics?.reachability.find((r) => r.peerId === peer.id);
+  if (runtime?.handshakeOk || reach?.ok) return { online: true, sinceIso: null };
+  const sinceIso = runtime?.latestHandshakeAt ?? peer.lastSeenAt ?? null;
+  return { online: false, sinceIso };
+}
+
+function randomPairingSecret(): string {
+  const bytes = new Uint8Array(18);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export function WireguardSection() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const can = useCan("peers.manage");
   const qc = useQueryClient();
   const { data: wg } = useQuery({
@@ -402,30 +431,61 @@ export function WireguardSection() {
             </div>
             <div className="space-y-1 sm:col-span-2">
               <Label>{t("peers.pairingSecret")}</Label>
-              <Input
-                type="password"
-                autoComplete="new-password"
-                placeholder={t("peers.pairingSecretHint")}
-                value={peerSecret}
-                onChange={(e) => setPeerSecret(e.target.value)}
-              />
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  type="text"
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  placeholder={t("peers.pairingSecretHint")}
+                  value={peerSecret}
+                  onChange={(e) => setPeerSecret(e.target.value)}
+                  className="min-w-[12rem] flex-1 font-mono text-sm"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPeerSecret(randomPairingSecret())}
+                >
+                  {t("peers.generateSecret")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!peerSecret.trim()}
+                  onClick={() => {
+                    void navigator.clipboard.writeText(peerSecret).then(
+                      () => toast.success(t("peers.secretCopied")),
+                      () => toast.error(t("common.failed")),
+                    );
+                  }}
+                >
+                  {t("peers.copySecret")}
+                </Button>
+              </div>
             </div>
           </div>
           <Button
             type="button"
             onClick={async () => {
               try {
+                const secret = peerSecret.trim() || randomPairingSecret();
+                if (!peerSecret.trim()) setPeerSecret(secret);
                 await post({
                   action: "create-peer",
                   name: peerName || "Kollege",
                   address: peerIp,
                   proxoraPort: 3000,
-                  pairingSecret: peerSecret,
+                  pairingSecret: secret,
                 });
                 setPeerName("");
                 setPeerIp("");
-                setPeerSecret("");
                 toast.success(t("peers.peerCreated"));
+                void navigator.clipboard.writeText(secret).then(
+                  () => toast.success(t("peers.secretCopied")),
+                  () => undefined,
+                );
               } catch (e) {
                 toast.error(e instanceof Error ? e.message : t("common.failed"));
               }
@@ -440,6 +500,8 @@ export function WireguardSection() {
         <PeerCard
           key={peer.id}
           peer={peer}
+          presence={peerPresence(peer, diagnostics)}
+          locale={locale}
           localHosts={localHosts}
           onUpdate={async (patch) => {
             await post({ action: "update-peer", peerId: peer.id, ...patch });
@@ -476,12 +538,16 @@ function Field({ label, value, onBlur }: { label: string; value: string; onBlur:
 
 function PeerCard({
   peer,
+  presence,
+  locale,
   localHosts,
   onUpdate,
   onShares,
   onDelete,
 }: {
   peer: PeerRow;
+  presence: { online: boolean; sinceIso: string | null };
+  locale: string;
   localHosts: PublicHost[];
   onUpdate: (patch: { name?: string; address?: string; proxoraPort?: number; pairingSecret?: string }) => Promise<void>;
   onShares: (shares: Array<{ hostId: string; level: string; permissions?: string[] | null }>) => Promise<void>;
@@ -490,6 +556,12 @@ function PeerCard({
   const { t } = useI18n();
   const [secret, setSecret] = useState("");
   const [openHost, setOpenHost] = useState<string | null>(null);
+  const relative = formatRelativePast(presence.sinceIso, locale);
+  const presenceLabel = presence.online
+    ? t("peers.online")
+    : relative
+      ? t("peers.offlineSince", { when: relative })
+      : t("peers.offlineUnknown");
   const [levels, setLevels] = useState<Record<string, ShareLevel | "">>(() => {
     const next: Record<string, ShareLevel | ""> = {};
     for (const host of localHosts) {
@@ -528,6 +600,8 @@ function PeerCard({
             <p className="font-medium">{peer.name}</p>
             <p className="text-xs text-muted-foreground">
               {peer.paired ? t("peers.paired") : t("peers.waiting")}
+              {" · "}
+              <span className={presence.online ? "text-emerald-400" : "text-amber-300"}>{presenceLabel}</span>
               {peer.lastSeenAt ? ` · ${new Date(peer.lastSeenAt).toLocaleString()}` : ""}
             </p>
           </div>

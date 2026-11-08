@@ -80,4 +80,14 @@ write(
   ),
 );
 
+const [maj, min, pat] = version.split(".").map((n) => Number.parseInt(n, 10));
+const versionCode = maj * 1000 + min * 100 + pat;
+const androidGradle = resolve(root, "android/app/build.gradle.kts");
+write(
+  "android/app/build.gradle.kts",
+  readFileSync(androidGradle, "utf8")
+    .replace(/versionCode\s*=\s*\d+/, `versionCode = ${versionCode}`)
+    .replace(/versionName\s*=\s*"[^"]+"/, `versionName = "${version}"`),
+);
+
 console.log(`bumped to ${version}`);

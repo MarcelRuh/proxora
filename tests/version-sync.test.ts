@@ -10,4 +10,14 @@ describe("APP_VERSION sync", () => {
     };
     expect(APP_VERSION).toBe(pkg.version);
   });
+
+  it("keeps the Android app versionName in sync", () => {
+    const gradle = readFileSync(path.join(process.cwd(), "android/app/build.gradle.kts"), "utf8");
+    const name = /versionName\s*=\s*"([^"]+)"/.exec(gradle)?.[1];
+    expect(name).toBe(APP_VERSION);
+    const [maj, min, pat] = APP_VERSION.split(".").map((n) => Number.parseInt(n, 10));
+    const expectedCode = maj * 1000 + min * 100 + pat;
+    const code = Number(/versionCode\s*=\s*(\d+)/.exec(gradle)?.[1]);
+    expect(code).toBe(expectedCode);
+  });
 });

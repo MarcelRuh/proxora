@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.7] – 2026-11-08
+
+### Added
+
+- Self-update waits until the GHCR image for the target tag exists (“Image still building…”) instead of failing mid-pull.
+- WireGuard peer cards show online / “offline since …”, and colleague pairing can generate/copy a shared secret in one click.
+
+### Fixed
+
+- Self-update cleanup now removes previous `ghcr.io/marcelruh/proxora` tags (not only dangling layers) before/after apply.
+- Android `versionName` / `versionCode` stay in sync with the Proxora release via `bump-version.mjs`.
+
 ## [2.4.6] – 2026-11-08
 
 ### Fixed

@@ -31,6 +31,8 @@ export type SelfUpdateStatus = {
   progress: { percent: number; step: string; detail: string | null } | null;
   changelog: string | null;
   targetVersion: string | null;
+  imageReady?: boolean | null;
+  imageRef?: string | null;
 };
 
 function shortRev(value: string | null | undefined): string {
@@ -57,7 +59,12 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
   const { data: status } = useQuery({
     queryKey: ["self-update"],
     queryFn: () => api<SelfUpdateStatus>("/api/system/self-update"),
-    refetchInterval: (q) => (busy || q.state.data?.updating ? 1500 : 60_000),
+    refetchInterval: (q) => {
+      if (busy || q.state.data?.updating) return 1500;
+      // Poll faster while waiting for GHCR to publish the release image.
+      if (q.state.data?.updateAvailable && q.state.data.imageReady === false) return 15_000;
+      return 60_000;
+    },
   });
 
   const handleApply = async () => {
@@ -138,7 +145,11 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
                 </Button>
               ) : null}
               {canApply ? (
-                status.updateAvailable ? (
+                status.updateAvailable && status.imageReady === false ? (
+                  <Button size="sm" disabled title={status.message}>
+                    {t("proxora.waitingImage")}
+                  </Button>
+                ) : status.updateAvailable ? (
                   <ConfirmAction
                     title={t("proxora.confirmTitle")}
                     description={`${t("proxora.confirmBody", {
@@ -148,7 +159,10 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
                     actionLabel={t("proxora.apply")}
                     onConfirm={handleApply}
                   >
-                    <Button size="sm" disabled={busy || status.updating || status.sidecar === "missing"}>
+                    <Button
+                      size="sm"
+                      disabled={busy || status.updating || status.sidecar === "missing"}
+                    >
                       {busy || status.updating ? t("proxora.applying") : t("proxora.apply")}
                     </Button>
                   </ConfirmAction>

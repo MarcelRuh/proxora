@@ -10,6 +10,7 @@ import {
   writeUpdateRequest,
   writeUpdateTarget,
 } from "@/lib/self-update-signal";
+import { ghcrImageTagExists } from "@/lib/ghcr";
 import {
   APP_VERSION,
   DEFAULT_GITHUB_BRANCH,
@@ -59,6 +60,9 @@ export interface SelfUpdateStatus {
   progress: SelfUpdateProgress | null;
   changelog: string | null;
   targetVersion: string | null;
+  /** null = not checked (no target); true/false = GHCR manifest probe */
+  imageReady: boolean | null;
+  imageRef: string | null;
 }
 
 let applyInFlight = false;
@@ -144,6 +148,8 @@ export async function getSelfUpdateStatus(): Promise<SelfUpdateStatus> {
     progress: null,
     changelog: null,
     targetVersion: null,
+    imageReady: null,
+    imageRef: null,
   };
 
   if (!enabled || sidecar === "missing") return withProgress(base);
@@ -193,6 +199,17 @@ export async function getSelfUpdateStatus(): Promise<SelfUpdateStatus> {
     }
   }
 
+  const imageRepo = "marcelruh/proxora";
+  const imageRef = targetVersion ? `ghcr.io/${imageRepo}:${targetVersion}` : null;
+  let imageReady: boolean | null = null;
+  if (updateAvailable && targetVersion) {
+    try {
+      imageReady = await ghcrImageTagExists(imageRepo, targetVersion);
+    } catch {
+      imageReady = false;
+    }
+  }
+
   return withProgress({
     ...base,
     remoteVersion,
@@ -201,15 +218,21 @@ export async function getSelfUpdateStatus(): Promise<SelfUpdateStatus> {
     updateAvailable,
     targetVersion,
     changelog,
+    imageReady,
+    imageRef,
     message: updating
       ? "Update running…"
       : shaError && !updateAvailable
         ? `GitHub check failed: ${shaError}`
-        : updateAvailable
+        : updateAvailable && imageReady === false
           ? targetVersion
-            ? `Update available — ${APP_VERSION} → ${targetVersion}`
-            : "Update available from GitHub"
-          : "Up to date",
+            ? `Release ${targetVersion} is tagged, but the container image is not on GHCR yet (CI still publishing). Retry shortly.`
+            : "Container image not on GHCR yet — retry shortly."
+          : updateAvailable
+            ? targetVersion
+              ? `Update available — ${APP_VERSION} → ${targetVersion}`
+              : "Update available from GitHub"
+            : "Up to date",
   });
 }
 
@@ -247,6 +270,15 @@ export async function applySelfUpdate(): Promise<{ ok: boolean; message: string;
     if (!status.enabled) return { ok: false, message: status.message, mode: status.mode };
     if (!status.updateAvailable) {
       return { ok: false, message: status.message, mode: status.mode };
+    }
+    if (status.imageReady === false) {
+      return {
+        ok: false,
+        message:
+          status.message ||
+          "Container image is not on GHCR yet (CI still publishing). Wait a few minutes and retry.",
+        mode: status.mode,
+      };
     }
     if (status.sidecar === "missing") {
       return { ok: false, message: status.message, mode: status.mode };
