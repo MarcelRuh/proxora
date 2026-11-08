@@ -109,6 +109,29 @@ h1 {
   font-size: 0.88rem;
 }
 
+.banner {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 107, 138, 0.35);
+  border-radius: 4px;
+  background: rgba(255, 107, 138, 0.08);
+  color: #ffb3c2;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.banner-info {
+  border-color: rgba(61, 224, 255, 0.35);
+  background: rgba(61, 224, 255, 0.08);
+  color: #b8f3ff;
+}
+
+.banner-error {
+  border-color: rgba(255, 107, 138, 0.35);
+  background: rgba(255, 107, 138, 0.08);
+  color: #ffb3c2;
+}
+
 button {
   width: 100%;
   border: 0;

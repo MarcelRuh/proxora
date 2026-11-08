@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.4] – 2026-11-08
+
+### Added
+
+- WireGuard diagnostics: actionable hints (handshake, AllowedIPs, peer-sync, HTTP, version skew) and auto-expand AllowedIPs when a colleague IP is missing.
+- Desktop auto-update via signed Tauri updater (`latest.json` on GitHub Releases) plus a setup/menu check and a warning when an old `%LOCALAPPDATA%\\Proxora` install is still present.
+
 ## [2.4.3] – 2026-11-08
 
 ### Fixed

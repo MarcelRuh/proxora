@@ -15,6 +15,8 @@ import {
   parseWgShowDump,
   type WireguardRuntimeStatus,
 } from "@/lib/wireguard-status";
+import { buildWireguardHints, type WireguardHint } from "@/lib/wireguard-hints";
+import { APP_VERSION } from "@/lib/version";
 import { hostClientCache } from "@/server/proxmox/client-cache";
 
 export const WG_SETTING_KEY = "wireguard";
@@ -30,7 +32,17 @@ export type PeerSyncDiag = {
 
 export type WireguardDiagnostics = WireguardRuntimeStatus & {
   peerSync: PeerSyncDiag;
-  reachability: Array<{ peerId: string; name: string; url: string; ok: boolean; error: string | null; ms: number | null }>;
+  reachability: Array<{
+    peerId: string;
+    name: string;
+    url: string;
+    ok: boolean;
+    error: string | null;
+    ms: number | null;
+    version: string | null;
+  }>;
+  hints: WireguardHint[];
+  healedAllowedIps: boolean;
 };
 
 export type WireguardInterfaceSettings = {
@@ -313,6 +325,7 @@ export async function probeProxoraPeers(): Promise<WireguardDiagnostics["reachab
         ok: false,
         error: "no address",
         ms: null,
+        version: null,
       });
       continue;
     }
@@ -325,9 +338,26 @@ export async function probeProxoraPeers(): Promise<WireguardDiagnostics["reachab
       });
       const ms = Date.now() - started;
       if (!res.ok) {
-        out.push({ peerId: peer.id, name: peer.name, url, ok: false, error: `HTTP ${res.status}`, ms });
+        out.push({
+          peerId: peer.id,
+          name: peer.name,
+          url,
+          ok: false,
+          error: `HTTP ${res.status}`,
+          ms,
+          version: null,
+        });
       } else {
-        out.push({ peerId: peer.id, name: peer.name, url, ok: true, error: null, ms });
+        const json = (await res.json().catch(() => null)) as { version?: string } | null;
+        out.push({
+          peerId: peer.id,
+          name: peer.name,
+          url,
+          ok: true,
+          error: null,
+          ms,
+          version: typeof json?.version === "string" ? json.version : null,
+        });
       }
     } catch (error) {
       out.push({
@@ -337,16 +367,53 @@ export async function probeProxoraPeers(): Promise<WireguardDiagnostics["reachab
         ok: false,
         error: error instanceof Error ? error.message : String(error),
         ms: Date.now() - started,
+        version: null,
       });
     }
   }
   return out;
 }
 
+/** Ensure every Proxora peer IP is covered by AllowedIPs and rewrite wg0.conf if needed. */
+export async function healWireguardAllowedIps(): Promise<boolean> {
+  const cfg = await loadWireguardInterface();
+  let allowed = cfg.allowedIPs;
+  const peers = await prisma.wireguardPeer.findMany({ where: { kind: WireguardPeerKind.PROXORA } });
+  for (const peer of peers) {
+    if (peer.address) allowed = ensureIpInAllowedIps(allowed, peer.address);
+  }
+  if (allowed === cfg.allowedIPs) return false;
+  await saveInterface({ ...cfg, allowedIPs: allowed });
+  await writeWireguardConfig();
+  return true;
+}
+
 export async function loadWireguardDiagnostics(opts?: { probe?: boolean }): Promise<WireguardDiagnostics> {
-  const [runtime, peerSync] = await Promise.all([readWireguardRuntimeStatus(), readPeerSyncDiagnostics()]);
+  const healedAllowedIps = opts?.probe ? await healWireguardAllowedIps().catch(() => false) : false;
+  const [runtime, peerSync, cfg] = await Promise.all([
+    readWireguardRuntimeStatus(),
+    readPeerSyncDiagnostics(),
+    loadWireguardInterface(),
+  ]);
   const reachability = opts?.probe ? await probeProxoraPeers() : [];
-  return { ...runtime, peerSync, reachability };
+  const proxoraPeers = await prisma.wireguardPeer.findMany({
+    where: { kind: WireguardPeerKind.PROXORA },
+    select: { id: true, name: true, address: true },
+    orderBy: { name: "asc" },
+  });
+  const hints = buildWireguardHints({
+    enabled: cfg.enabled,
+    up: runtime.up,
+    error: runtime.error,
+    allowedIPs: cfg.allowedIPs,
+    runtimePeers: runtime.peers,
+    proxoraPeers,
+    peerSync: peerSync.peers,
+    reachability,
+    localVersion: APP_VERSION,
+    healedAllowedIps,
+  });
+  return { ...runtime, peerSync, reachability, hints, healedAllowedIps };
 }
 
 export function buildInvite(cfg: WireguardInterfaceSettings, token: string) {

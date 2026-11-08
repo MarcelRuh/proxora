@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default capabilities for the Proxora desktop shell","local":true,"windows":["main"],"permissions":["core:default","core:webview:allow-set-webview-focus","core:window:allow-set-title","opener:default"]}}
+{"default":{"identifier":"default","description":"Default capabilities for the Proxora desktop shell","local":true,"windows":["main"],"permissions":["core:default","core:webview:allow-set-webview-focus","core:window:allow-set-title","opener:default","updater:default"]}}

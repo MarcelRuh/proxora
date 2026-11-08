@@ -40,6 +40,12 @@ type RuntimePeer = {
   handshakeOk: boolean;
 };
 
+type DiagHint = {
+  level: "info" | "warn" | "error";
+  code: string;
+  params?: Record<string, string>;
+};
+
 type Diagnostics = {
   up: boolean;
   error: string | null;
@@ -57,7 +63,10 @@ type Diagnostics = {
     ok: boolean;
     error: string | null;
     ms: number | null;
+    version?: string | null;
   }>;
+  hints?: DiagHint[];
+  healedAllowedIps?: boolean;
 };
 
 type WgPayload = {
@@ -193,6 +202,24 @@ export function WireguardSection() {
                   </span>
                 ) : null}
               </div>
+              {diagnostics.hints?.length ? (
+                <ul className="space-y-1.5">
+                  {diagnostics.hints.map((hint, i) => {
+                    const key = `peers.hint.${hint.code}` as Parameters<typeof t>[0];
+                    const color =
+                      hint.level === "error"
+                        ? "text-rose-300"
+                        : hint.level === "warn"
+                          ? "text-amber-300"
+                          : "text-muted-foreground";
+                    return (
+                      <li key={`${hint.code}-${i}`} className={`text-xs ${color}`}>
+                        {t(key, hint.params)}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
               {diagnostics.peers.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t("peers.diagNoPeers")}</p>
               ) : (
@@ -250,6 +277,7 @@ export function WireguardSection() {
                         {reach.ok
                           ? t("peers.diagReachOk", { ms: String(reach.ms ?? "—") })
                           : t("peers.diagReachFail", { error: reach.error ?? "—" })}
+                        {reach.version ? ` · v${reach.version}` : ""}
                         {reach.url ? ` · ${reach.url}` : ""}
                       </p>
                     ) : null}

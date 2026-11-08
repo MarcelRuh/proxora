@@ -11,7 +11,7 @@
 [![Active](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FMarcelRuh%2Fproxora%2Fusage%2Fusage.json&query=%24%5B-1%5D.active7d&label=active%207d)](https://github.com/MarcelRuh/proxora/tree/usage)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-> Status: **v2.4.3** – self-hosted Proxmox control plane with Android and desktop clients.
+> Status: **v2.4.4** – self-hosted Proxmox control plane with Android and desktop clients.
 
 Proxora talks to each node through the official **Proxmox VE API**. No cluster required.
 
@@ -99,7 +99,7 @@ Installs and running copies send an anonymous ping to the GitHub `stats` prerele
 - Append-only audit log, global search (`Ctrl+K`)
 - Dark neon UI (Dockora-inspired)
 - **Android app** (`android/`) — full UI in a WebView against your instance
-- **Desktop app** (`desktop/`) — Rust / Tauri 2 WebView client (Linux packages on releases)
+- **Desktop app** (`desktop/`) — Rust / Tauri 2 WebView client with signed auto-update (Linux/Windows packages on releases)
 - **In-app self-update** from GitHub with version + progress bar (sidecar owns `docker.sock`)
 
 ## Stack

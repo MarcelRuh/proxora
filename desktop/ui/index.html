@@ -14,6 +14,8 @@
         <p class="hint">
           Enter the URL of your self-hosted Proxora. Sign-in, cookies and roles stay on the server — same as the Android client.
         </p>
+        <div id="legacy" class="banner" hidden></div>
+        <div id="update" class="banner banner-info" hidden></div>
         <label class="field">
           <span>Server URL</span>
           <input id="url" type="url" spellcheck="false" autocomplete="url" placeholder="https://proxora.home.arpa" />
@@ -24,7 +26,7 @@
         </label>
         <p id="error" class="error" hidden></p>
         <button id="connect" type="button">Connect</button>
-        <p class="foot">Menu: Reload · Change server</p>
+        <p class="foot">Menu: Reload · Change server · Check for updates <span id="ver"></span></p>
       </div>
     </main>
     <script type="module" src="setup.js"></script>

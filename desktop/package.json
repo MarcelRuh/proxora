@@ -1,6 +1,6 @@
 {
   "name": "proxora-desktop",
-  "version": "2.4.3",
+  "version": "2.4.4",
   "private": true,
   "description": "Proxora desktop client (Tauri 2 WebView shell)",
   "type": "module",
