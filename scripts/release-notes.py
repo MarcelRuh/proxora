@@ -3,7 +3,7 @@ import re
 import sys
 
 ver = sys.argv[1]
-text = pathlib.Path("CHANGELOG.md").read_text()
+text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
 wanted = re.compile(r"\[" + re.escape(ver) + r"\]")
 body = ""
 for part in text.split("\n## ")[1:]:

@@ -126,8 +126,8 @@ jobs:
         run: |
           ver="$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
           tag="v${ver}"
-          python3 scripts/release-notes.py "$ver" > /tmp/proxora-release-notes.md
           if ! gh release view "$tag" >/dev/null 2>&1; then
+            python3 scripts/release-notes.py "$ver" > /tmp/proxora-release-notes.md
             gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --notes-file /tmp/proxora-release-notes.md
           fi
           shopt -s nullglob
@@ -169,11 +169,12 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PYTHONUTF8: "1"
         run: |
-          ver="$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
+          ver="$(python3 -c 'import json; print(json.load(open("package.json", encoding="utf-8"))["version"])')"
           tag="v${ver}"
-          python3 scripts/release-notes.py "$ver" > /tmp/proxora-release-notes.md
           if ! gh release view "$tag" >/dev/null 2>&1; then
+            python3 scripts/release-notes.py "$ver" > /tmp/proxora-release-notes.md
             gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --notes-file /tmp/proxora-release-notes.md
           fi
           shopt -s nullglob
