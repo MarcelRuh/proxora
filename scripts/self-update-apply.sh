@@ -14,6 +14,10 @@ PROGRESS_FILE="${INSTALL_DIR}/.proxora-update-progress"
 LOCK_DIR="${INSTALL_DIR}/.proxora-update.lock"
 COMPOSE_LOG_FILE="${INSTALL_DIR}/.proxora-update-compose.log"
 SIGNAL_DIR="${PROXORA_UPDATE_SIGNAL_DIR:-}"
+# Slow links / large layers: override with PROXORA_*_TIMEOUT_SEC if needed.
+PULL_TIMEOUT_SEC="${PROXORA_PULL_TIMEOUT_SEC:-900}"
+BUILD_TIMEOUT_SEC="${PROXORA_BUILD_TIMEOUT_SEC:-900}"
+UP_TIMEOUT_SEC="${PROXORA_UP_TIMEOUT_SEC:-600}"
 rm -f "$PROGRESS_FILE"
 
 mirror_progress() {
@@ -82,27 +86,139 @@ creep_pull() {
   write_progress "$next" pull "Pulling image"
 }
 
+file_size() {
+  wc -c < "$1" 2>/dev/null | tr -d ' ' || echo 0
+}
+
+# Read only bytes appended after phase_start so earlier phases cannot fake progress
+# (e.g. old "Container … Started" while a new pull is still running).
+phase_log_tail() {
+  logf="$1"
+  start="$2"
+  size="$(file_size "$logf")"
+  if [ -z "$size" ] || [ "$size" -le "$start" ]; then
+    printf ''
+    return 0
+  fi
+  # Portable slice of new bytes, then keep a trailing window for matching.
+  dd if="$logf" bs=1 skip="$start" 2>/dev/null | tail -c 16000 || true
+}
+
+kill_tree() {
+  pid="$1"
+  if [ -z "$pid" ]; then return 0; fi
+  # Children first (compose plugin / docker pull). BusyBox/procps pgrep preferred.
+  if command -v pgrep >/dev/null 2>&1; then
+    for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+      kill_tree "$child"
+    done
+  fi
+  kill "$pid" 2>/dev/null || true
+  sleep 1
+  kill -9 "$pid" 2>/dev/null || true
+}
+
+wait_pid_timeout() {
+  pid="$1"
+  timeout_sec="$2"
+  label="$3"
+  elapsed=0
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$elapsed" -ge "$timeout_sec" ]; then
+      echo "ERROR: ${label} timed out after ${timeout_sec}s" >&2
+      kill_tree "$pid"
+      wait "$pid" 2>/dev/null || true
+      return 124
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+  wait "$pid"
+  return $?
+}
+
+# phase: pull | build | up | fullbuild — only that phase's markers update progress.
 watch_compose_log() {
   pid="$1"
   logf="$2"
+  phase="$3"
+  start_size="$(file_size "$logf")"
   ticks=0
   while kill -0 "$pid" 2>/dev/null; do
-    log="$(tail -c 16000 "$logf" 2>/dev/null || true)"
-    case "$log" in
-      *"Container proxora"*"Healthy"*) write_progress 94 startWeb "Container healthy" ;;
-      *"Container proxora"*"Started"*) write_progress 90 startWeb "Container starting" ;;
-      *"Image proxora Built"*|*"naming to"*"proxora"*) write_progress 80 buildWeb "Image built" ;;
-      *"exporting to image"*) write_progress 72 export "Exporting image" ;;
-      *"Compiled successfully"*) write_progress 64 buildWeb "Web compiled" ;;
-      *"proxora Building"*|*" Building web"*|*" Building proxora"*) write_progress 42 buildWeb "Building image" ;;
-      *"Pulled"*|*"Downloaded newer image"*|*"Image is up to date"*) write_progress 82 pull "Image ready" ;;
-      *"Pulling"*|*"Downloading"*|*"Extracting"*)
-        ticks=$((ticks + 1))
-        if [ $((ticks % 3)) -eq 0 ]; then creep_pull; fi
+    log="$(phase_log_tail "$logf" "$start_size")"
+    case "$phase" in
+      pull)
+        case "$log" in
+          *"Pulled"*|*"Downloaded newer image"*|*"Image is up to date"*)
+            write_progress 76 pull "Image ready"
+            ;;
+          *"Pulling"*|*"Downloading"*|*"Extracting"*|*"Retrying"*|*"Verifying Checksum"*|*"Download complete"*)
+            ticks=$((ticks + 1))
+            if [ $((ticks % 3)) -eq 0 ]; then creep_pull; fi
+            ;;
+        esac
+        ;;
+      build)
+        case "$log" in
+          *"Built"*|*"naming to"*)
+            write_progress 81 build "Sidecar built"
+            ;;
+          *"exporting to image"*)
+            write_progress 80 build "Exporting sidecar"
+            ;;
+          *"Building"*|*"RUN "*|*"CACHED"*|*"load build"*)
+            write_progress 79 build "Building WireGuard sidecar"
+            ;;
+        esac
+        ;;
+      up)
+        case "$log" in
+          *"Container proxora"*"Healthy"*)
+            write_progress 94 startWeb "Container healthy"
+            ;;
+          *"Container proxora"*"Started"*)
+            write_progress 90 startWeb "Container starting"
+            ;;
+          *"Container proxora"*"Recreated"*|*"Container proxora"*"Created"*)
+            write_progress 86 startWeb "Container recreated"
+            ;;
+          *"Starting"*|*"Waiting"*|*"Healthy"*)
+            write_progress 84 startWeb "Starting stack"
+            ;;
+        esac
+        ;;
+      fullbuild)
+        case "$log" in
+          *"Container proxora"*"Healthy"*) write_progress 94 startWeb "Container healthy" ;;
+          *"Container proxora"*"Started"*) write_progress 90 startWeb "Container starting" ;;
+          *"Image proxora Built"*|*"naming to"*"proxora"*) write_progress 80 buildWeb "Image built" ;;
+          *"exporting to image"*) write_progress 72 export "Exporting image" ;;
+          *"Compiled successfully"*) write_progress 64 buildWeb "Web compiled" ;;
+          *"proxora Building"*|*" Building web"*|*" Building proxora"*) write_progress 42 buildWeb "Building image" ;;
+        esac
         ;;
     esac
     sleep 1
   done
+}
+
+# Run a background command, watch phase-scoped progress, enforce timeout.
+run_watched() {
+  phase="$1"
+  timeout_sec="$2"
+  label="$3"
+  shift 3
+  "$@" >> "$TMP/compose.log" 2>&1 &
+  cmd_pid=$!
+  watch_compose_log "$cmd_pid" "$TMP/compose.log" "$phase" &
+  watch_pid=$!
+  set +e
+  wait_pid_timeout "$cmd_pid" "$timeout_sec" "$label"
+  cmd_rc=$?
+  set -e
+  kill "$watch_pid" 2>/dev/null || true
+  wait "$watch_pid" 2>/dev/null || true
+  return "$cmd_rc"
 }
 
 need() {
@@ -384,75 +500,83 @@ export COMPOSE_BAKE=false
 COMPOSE_FILE="docker-compose.yml"
 if [ -f docker-compose.prod.yml ]; then COMPOSE_FILE="docker-compose.prod.yml"; fi
 : > "$TMP/compose.log"
+fail_compose() {
+  reason="$1"
+  cp "$TMP/compose.log" "$COMPOSE_LOG_FILE" 2>/dev/null || true
+  if [ -n "$SIGNAL_DIR" ] && [ -d "$SIGNAL_DIR" ]; then
+    cp "$TMP/compose.log" "${SIGNAL_DIR}/.proxora-update-compose.log" 2>/dev/null || true
+  fi
+  write_progress 0 error "$reason"
+  echo "ERROR: ${reason} (see ${COMPOSE_LOG_FILE})" >&2
+  exit 1
+}
+
 if [ "${PROXORA_BUILD:-0}" = "1" ]; then
-  docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans >> "$TMP/compose.log" 2>&1 &
-  CPID=$!
-else
-  docker compose -f "$COMPOSE_FILE" pull proxora >> "$TMP/compose.log" 2>&1 &
-  PULLPID=$!
-  watch_compose_log "$PULLPID" "$TMP/compose.log" &
-  PWATCH=$!
   set +e
-  wait "$PULLPID"
+  run_watched fullbuild "$UP_TIMEOUT_SEC" "compose up --build" \
+    docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans
+  COMPOSE_RC=$?
+  set -e
+else
+  set +e
+  run_watched pull "$PULL_TIMEOUT_SEC" "image pull" \
+    docker compose -f "$COMPOSE_FILE" pull proxora
   PULL_RC=$?
   set -e
-  kill "$PWATCH" 2>/dev/null || true
-  wait "$PWATCH" 2>/dev/null || true
+  if [ "$PULL_RC" -eq 124 ]; then
+    fail_compose "Image pull timed out after ${PULL_TIMEOUT_SEC}s — check network to ghcr.io and retry"
+  fi
   if [ "$PULL_RC" -eq 0 ]; then
     write_progress 78 pull "App image ready"
     # Sidecar is build-only (no GHCR tag). --no-build would leave Proxora Created
     # and the stack dead if proxora-proxora-wireguard:latest is missing.
     echo "==> Building WireGuard sidecar" >> "$TMP/compose.log"
     write_progress 80 build "Building WireGuard sidecar"
-    docker compose -f "$COMPOSE_FILE" build proxora-wireguard >> "$TMP/compose.log" 2>&1 &
-    BPID=$!
-    watch_compose_log "$BPID" "$TMP/compose.log" &
-    BWATCH=$!
     set +e
-    wait "$BPID"
+    run_watched build "$BUILD_TIMEOUT_SEC" "WireGuard sidecar build" \
+      docker compose -f "$COMPOSE_FILE" build proxora-wireguard
     BUILD_RC=$?
     set -e
-    kill "$BWATCH" 2>/dev/null || true
-    wait "$BWATCH" 2>/dev/null || true
+    if [ "$BUILD_RC" -eq 124 ]; then
+      fail_compose "WireGuard sidecar build timed out after ${BUILD_TIMEOUT_SEC}s"
+    fi
     if [ "$BUILD_RC" -ne 0 ]; then
-      write_progress 0 error "WireGuard sidecar build failed"
-      echo "ERROR: WireGuard sidecar build failed (see ${COMPOSE_LOG_FILE})" >&2
-      cp "$TMP/compose.log" "$COMPOSE_LOG_FILE" 2>/dev/null || true
-      exit "$BUILD_RC"
+      fail_compose "WireGuard sidecar build failed"
     fi
     write_progress 82 pull "Image ready"
-    docker compose -f "$COMPOSE_FILE" up -d --no-build --remove-orphans >> "$TMP/compose.log" 2>&1 &
+    set +e
+    run_watched up "$UP_TIMEOUT_SEC" "compose up" \
+      docker compose -f "$COMPOSE_FILE" up -d --no-build --remove-orphans
+    COMPOSE_RC=$?
+    set -e
   else
-    echo "==> Image pull failed, building locally" >> "$TMP/compose.log"
-    docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans >> "$TMP/compose.log" 2>&1 &
+    echo "==> Image pull failed (exit ${PULL_RC}), building locally" >> "$TMP/compose.log"
+    write_progress 40 buildWeb "Pull failed — building locally"
+    set +e
+    run_watched fullbuild "$UP_TIMEOUT_SEC" "compose up --build" \
+      docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans
+    COMPOSE_RC=$?
+    set -e
   fi
-  CPID=$!
 fi
-watch_compose_log "$CPID" "$TMP/compose.log" &
-WATCH=$!
-set +e
-wait "$CPID"
-COMPOSE_RC=$?
-set -e
-kill "$WATCH" 2>/dev/null || true
-wait "$WATCH" 2>/dev/null || true
 cat "$TMP/compose.log" || true
 cp "$TMP/compose.log" "$COMPOSE_LOG_FILE" 2>/dev/null || true
 if [ -n "$SIGNAL_DIR" ] && [ -d "$SIGNAL_DIR" ]; then
   cp "$TMP/compose.log" "${SIGNAL_DIR}/.proxora-update-compose.log" 2>/dev/null || true
 fi
-if [ "$COMPOSE_RC" -ne 0 ]; then
+if [ "${COMPOSE_RC:-1}" -eq 124 ]; then
+  fail_compose "Stack start timed out after ${UP_TIMEOUT_SEC}s"
+fi
+if [ "${COMPOSE_RC:-1}" -ne 0 ]; then
   if grep -q 'unable to upgrade to tcp' "$TMP/compose.log"; then
     err="Docker-Socket-Proxy blockiert den Image-Build (403). Einmal auf dem Host: docker compose -f docker-compose.prod.yml up -d --build --remove-orphans"
   else
-    err="$(grep -Ei 'ERROR|error:|failed|ELIFECYCLE|no space|forbidden' "$TMP/compose.log" | grep -viE 'COMPOSE_BAKE|better performances' | tail -1 | tr '\n' ' ' | cut -c1-180)"
+    err="$(grep -Ei 'ERROR|error:|failed|ELIFECYCLE|no space|forbidden|timed out' "$TMP/compose.log" | grep -viE 'COMPOSE_BAKE|better performances' | tail -1 | tr '\n' ' ' | cut -c1-180)"
   fi
   if [ -z "$err" ]; then
     err="$(tail -8 "$TMP/compose.log" | grep -viE 'COMPOSE_BAKE|better performances' | tr '\n' ' ' | cut -c1-180)"
   fi
-  write_progress 0 error "${err:-Compose rebuild failed}"
-  echo "ERROR: compose rebuild failed (see ${COMPOSE_LOG_FILE})" >&2
-  exit "$COMPOSE_RC"
+  fail_compose "${err:-Compose rebuild failed}"
 fi
 
 echo "==> Reattaching WireGuard to the new Proxora network"

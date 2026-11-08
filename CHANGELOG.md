@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.2] – 2026-11-08
+
+### Fixed
+
+- Self-update: image pull / build / compose up time out with a clear error instead of hanging forever.
+- Self-update progress only reads log output from the current phase, so stale “Container Started” lines no longer jump the bar to 90% while a pull is still running.
+
 ## [2.4.1] – 2026-11-08
 
 ### Fixed
