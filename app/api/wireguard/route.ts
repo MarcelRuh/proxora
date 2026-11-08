@@ -10,6 +10,7 @@ import {
   importWireguardInvite,
   inviteForPeer,
   listPeersWithShares,
+  loadWireguardDiagnostics,
   loadWireguardInterface,
   patchWireguardInterface,
   publicInterface,
@@ -21,9 +22,11 @@ import { requestPeerSync } from "@/server/services/peer-sync";
 export const GET = apiRoute("peers.manage", async () => {
   const cfg = await loadWireguardInterface();
   const peers = (await listPeersWithShares()).filter((p) => p.kind === "PROXORA");
+  const diagnostics = await loadWireguardDiagnostics();
   return json({
     interface: publicInterface(cfg),
     peers,
+    diagnostics,
   });
 });
 
@@ -35,7 +38,17 @@ export const PATCH = apiRoute("peers.manage", async (req) => {
 export const POST = apiRoute("peers.manage", async (req) => {
   const body = z
     .object({
-      action: z.enum(["create-peer", "import", "import-conf", "gateway", "invite", "shares", "delete-peer", "update-peer"]),
+      action: z.enum([
+        "create-peer",
+        "import",
+        "import-conf",
+        "gateway",
+        "invite",
+        "shares",
+        "delete-peer",
+        "update-peer",
+        "diagnose",
+      ]),
       name: z.string().optional(),
       invite: z.string().optional(),
       config: z.string().optional(),
@@ -111,6 +124,10 @@ export const POST = apiRoute("peers.manage", async (req) => {
     if (!body.peerId) throw new ValidationError("peerId required");
     await deletePeer(body.peerId);
     return json({ ok: true });
+  }
+  if (body.action === "diagnose") {
+    requestPeerSync();
+    return json({ diagnostics: await loadWireguardDiagnostics({ probe: true }) });
   }
   return json({ error: "Unknown action" }, 400);
 });

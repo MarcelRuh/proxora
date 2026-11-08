@@ -1,4 +1,4 @@
-import { mkdir, writeFile, unlink } from "node:fs/promises";
+import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { PeerShareLevel, WireguardPeerKind, type WireguardPeer } from "@prisma/client";
 import { z } from "zod";
@@ -10,10 +10,28 @@ import { permissionsForShareLevel, shareLevelFromPermissions, type ShareLevel } 
 import { encodeWireguardInvite, parseWireguardInvite } from "@/lib/wireguard-invite";
 import { buildWg0Conf, ensureIpInAllowedIps, parseWgQuickConf, sanitizeClientAllowedIps, serverPeerSnippet } from "@/lib/wireguard-conf";
 import { generateWireguardKeypair, interfaceIpv4, isWireguardKey, peerAllowedIps, publicKeyFromPrivate } from "@/lib/wireguard-keys";
+import {
+  emptyWireguardRuntimeStatus,
+  parseWgShowDump,
+  type WireguardRuntimeStatus,
+} from "@/lib/wireguard-status";
 import { hostClientCache } from "@/server/proxmox/client-cache";
 
 export const WG_SETTING_KEY = "wireguard";
 export const WG_CONFIG_DIR = process.env.WG_CONFIG_DIR ?? "/wireguard";
+export const WG_STATUS_PATH = path.join(WG_CONFIG_DIR, "status.json");
+export const WG_APPLY_LOG_PATH = path.join(WG_CONFIG_DIR, "apply.log");
+export const WG_PEER_SYNC_PATH = path.join(WG_CONFIG_DIR, "peer-sync.json");
+
+export type PeerSyncDiag = {
+  updatedAt: string | null;
+  peers: Record<string, { ok: boolean; at: string; error: string | null }>;
+};
+
+export type WireguardDiagnostics = WireguardRuntimeStatus & {
+  peerSync: PeerSyncDiag;
+  reachability: Array<{ peerId: string; name: string; url: string; ok: boolean; error: string | null; ms: number | null }>;
+};
 
 export type WireguardInterfaceSettings = {
   enabled: boolean;
@@ -225,6 +243,110 @@ export function serializePeer(peer: WireguardPeer) {
     paired: Boolean(peer.encryptedOutboundToken),
     lastSeenAt: peer.lastSeenAt?.toISOString() ?? null,
   };
+}
+
+async function readJsonFile<T>(filePath: string): Promise<T | null> {
+  try {
+    const raw = await readFile(filePath, "utf8");
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+export async function readPeerSyncDiagnostics(): Promise<PeerSyncDiag> {
+  const data = await readJsonFile<PeerSyncDiag>(WG_PEER_SYNC_PATH);
+  if (!data || typeof data !== "object") return { updatedAt: null, peers: {} };
+  return {
+    updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : null,
+    peers: data.peers && typeof data.peers === "object" ? data.peers : {},
+  };
+}
+
+export async function writePeerSyncResult(peerId: string, ok: boolean, error: string | null) {
+  await mkdir(WG_CONFIG_DIR, { recursive: true });
+  const current = await readPeerSyncDiagnostics();
+  const at = new Date().toISOString();
+  current.updatedAt = at;
+  current.peers[peerId] = { ok, at, error: ok ? null : (error ?? "unknown") };
+  await writeFile(WG_PEER_SYNC_PATH, `${JSON.stringify(current)}\n`, "utf8");
+}
+
+export async function readWireguardRuntimeStatus(): Promise<WireguardRuntimeStatus> {
+  const status = await readJsonFile<{
+    up?: boolean;
+    error?: string | null;
+    checkedAt?: string | null;
+    dump?: string | null;
+  }>(WG_STATUS_PATH);
+  const logRaw = await readFile(WG_APPLY_LOG_PATH, "utf8").catch(() => "");
+  const log = logRaw
+    .split(/\r?\n/)
+    .map((l) => l.trimEnd())
+    .filter(Boolean)
+    .slice(-80);
+  if (!status) {
+    return { ...emptyWireguardRuntimeStatus(), log };
+  }
+  return {
+    up: Boolean(status.up),
+    error: typeof status.error === "string" ? status.error : null,
+    checkedAt: typeof status.checkedAt === "string" ? status.checkedAt : null,
+    peers: parseWgShowDump(typeof status.dump === "string" ? status.dump : null),
+    log,
+  };
+}
+
+/** Optional live HTTP probe of paired Proxora peers (for the diagnose button). */
+export async function probeProxoraPeers(): Promise<WireguardDiagnostics["reachability"]> {
+  const peers = await prisma.wireguardPeer.findMany({
+    where: { kind: WireguardPeerKind.PROXORA },
+    orderBy: { name: "asc" },
+  });
+  const out: WireguardDiagnostics["reachability"] = [];
+  for (const peer of peers) {
+    if (!peer.address) {
+      out.push({
+        peerId: peer.id,
+        name: peer.name,
+        url: "",
+        ok: false,
+        error: "no address",
+        ms: null,
+      });
+      continue;
+    }
+    const url = `${peerHttpBase(peer)}/api/health`;
+    const started = Date.now();
+    try {
+      const res = await fetch(url, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(8_000),
+      });
+      const ms = Date.now() - started;
+      if (!res.ok) {
+        out.push({ peerId: peer.id, name: peer.name, url, ok: false, error: `HTTP ${res.status}`, ms });
+      } else {
+        out.push({ peerId: peer.id, name: peer.name, url, ok: true, error: null, ms });
+      }
+    } catch (error) {
+      out.push({
+        peerId: peer.id,
+        name: peer.name,
+        url,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+        ms: Date.now() - started,
+      });
+    }
+  }
+  return out;
+}
+
+export async function loadWireguardDiagnostics(opts?: { probe?: boolean }): Promise<WireguardDiagnostics> {
+  const [runtime, peerSync] = await Promise.all([readWireguardRuntimeStatus(), readPeerSyncDiagnostics()]);
+  const reachability = opts?.probe ? await probeProxoraPeers() : [];
+  return { ...runtime, peerSync, reachability };
 }
 
 export function buildInvite(cfg: WireguardInterfaceSettings, token: string) {

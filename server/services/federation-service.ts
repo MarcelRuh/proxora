@@ -19,7 +19,12 @@ import {
   forgetPeerHostNetworks,
   loadGuestIpSettings,
 } from "@/server/services/guest-ip-settings";
-import { findPeerByInboundToken, outboundToken, peerHttpBase } from "@/server/services/wireguard-service";
+import {
+  findPeerByInboundToken,
+  outboundToken,
+  peerHttpBase,
+  writePeerSyncResult,
+} from "@/server/services/wireguard-service";
 import { clientForHost } from "@/server/services/host-service";
 import { finishPeerUpdate } from "@/server/services/peer-update";
 import type { WireguardPeer } from "@prisma/client";
@@ -176,13 +181,16 @@ export async function syncPeerHosts() {
         if (nets.length) await cachePeerHostNetworks(host.id, nets);
       }
       await prisma.wireguardPeer.update({ where: { id: peer.id }, data: { lastSeenAt: new Date() } });
+      await writePeerSyncResult(peer.id, true, null).catch(() => undefined);
       if (peer.updatingUntil) await finishPeerUpdate(peer, "recovered");
     } catch (error) {
       if (isPeerUpdating(peer.updatingUntil)) {
         logger.info({ peer: peer.name }, "Peer host sync skipped (peer updating)");
         continue;
       }
-      logger.warn({ peer: peer.name, err: error instanceof Error ? error.message : error }, "Peer host sync failed");
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn({ peer: peer.name, err: message }, "Peer host sync failed");
+      await writePeerSyncResult(peer.id, false, message).catch(() => undefined);
     }
   }
 }

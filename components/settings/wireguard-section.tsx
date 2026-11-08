@@ -28,6 +28,38 @@ type PeerRow = {
   shares: Array<{ hostId: string; level: string; permissions?: string[] | null }>;
 };
 
+type RuntimePeer = {
+  publicKey: string;
+  endpoint: string;
+  allowedIps: string;
+  latestHandshakeAt: string | null;
+  latestHandshakeAgeSec: number | null;
+  transferRx: number;
+  transferTx: number;
+  persistentKeepalive: number;
+  handshakeOk: boolean;
+};
+
+type Diagnostics = {
+  up: boolean;
+  error: string | null;
+  checkedAt: string | null;
+  peers: RuntimePeer[];
+  log: string[];
+  peerSync: {
+    updatedAt: string | null;
+    peers: Record<string, { ok: boolean; at: string; error: string | null }>;
+  };
+  reachability: Array<{
+    peerId: string;
+    name: string;
+    url: string;
+    ok: boolean;
+    error: string | null;
+    ms: number | null;
+  }>;
+};
+
 type WgPayload = {
   interface: {
     enabled: boolean;
@@ -42,7 +74,21 @@ type WgPayload = {
     serverPeerSnippet: string;
   };
   peers: PeerRow[];
+  diagnostics?: Diagnostics;
 };
+
+function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return "0 B";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KiB`;
+  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MiB`;
+  return `${(n / 1024 ** 3).toFixed(2)} GiB`;
+}
+
+function shortKey(key: string): string {
+  if (key.length <= 16) return key;
+  return `${key.slice(0, 8)}…${key.slice(-6)}`;
+}
 
 export function WireguardSection() {
   const { t } = useI18n();
@@ -52,6 +98,7 @@ export function WireguardSection() {
     queryKey: ["wireguard"],
     enabled: can,
     queryFn: () => api<WgPayload>("/api/wireguard"),
+    refetchInterval: 5_000,
   });
   const { data: hostData } = useQuery({
     queryKey: ["hosts"],
@@ -63,9 +110,12 @@ export function WireguardSection() {
   const [peerIp, setPeerIp] = useState("");
   const [peerSecret, setPeerSecret] = useState("");
   const [confIn, setConfIn] = useState("");
+  const [diagBusy, setDiagBusy] = useState(false);
+  const [liveDiag, setLiveDiag] = useState<Diagnostics | null>(null);
 
   const iface = wg?.interface;
   const peers = (wg?.peers ?? []).filter((p) => p.kind === "PROXORA");
+  const diagnostics = liveDiag ?? wg?.diagnostics ?? null;
 
   async function patch(body: Record<string, unknown>) {
     await api("/api/wireguard", { method: "PATCH", body: JSON.stringify(body) });
@@ -74,10 +124,13 @@ export function WireguardSection() {
   }
 
   async function post(body: Record<string, unknown>) {
-    const res = await api<{ invite?: string; peer?: PeerRow; peers?: PeerRow[] }>("/api/wireguard", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
+    const res = await api<{ invite?: string; peer?: PeerRow; peers?: PeerRow[]; diagnostics?: Diagnostics }>(
+      "/api/wireguard",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    );
     await qc.invalidateQueries({ queryKey: ["wireguard"] });
     await qc.invalidateQueries({ queryKey: ["hosts"] });
     return res;
@@ -87,6 +140,139 @@ export function WireguardSection() {
 
   return (
     <div className="space-y-6">
+      <Card>
+        <CardContent className="space-y-4 pt-6">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium">{t("peers.diagTitle")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{t("peers.diagBody")}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={diagBusy}
+                onClick={() => {
+                  setLiveDiag(null);
+                  void qc.invalidateQueries({ queryKey: ["wireguard"] });
+                }}
+              >
+                {t("peers.diagRefresh")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={diagBusy}
+                onClick={() => {
+                  setDiagBusy(true);
+                  void post({ action: "diagnose" })
+                    .then((res) => {
+                      if (res.diagnostics) setLiveDiag(res.diagnostics);
+                    })
+                    .catch((e) => toast.error(e instanceof Error ? e.message : t("common.failed")))
+                    .finally(() => setDiagBusy(false));
+                }}
+              >
+                {t("peers.diagProbe")}
+              </Button>
+            </div>
+          </div>
+          {diagnostics ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className={diagnostics.up ? "text-emerald-400" : "text-rose-400"}>
+                  {diagnostics.up ? t("peers.diagUp") : t("peers.diagDown")}
+                </span>
+                {diagnostics.error ? (
+                  <span className="text-xs text-rose-300">{t("peers.diagError", { error: diagnostics.error })}</span>
+                ) : null}
+                {diagnostics.checkedAt ? (
+                  <span className="text-xs text-muted-foreground">
+                    {t("peers.diagChecked", { at: new Date(diagnostics.checkedAt).toLocaleString() })}
+                  </span>
+                ) : null}
+              </div>
+              {diagnostics.peers.length === 0 ? (
+                <p className="text-xs text-muted-foreground">{t("peers.diagNoPeers")}</p>
+              ) : (
+                <ul className="space-y-2">
+                  {diagnostics.peers.map((rp) => (
+                    <li key={rp.publicKey} className="rounded-[4px] border border-border p-2 text-xs">
+                      <p className="font-mono">{shortKey(rp.publicKey)}</p>
+                      <p className="mt-1 text-muted-foreground">
+                        {t("peers.diagHandshake")}:{" "}
+                        {rp.latestHandshakeAgeSec == null
+                          ? t("peers.diagHandshakeNever")
+                          : t("peers.diagHandshakeAge", { sec: String(rp.latestHandshakeAgeSec) })}
+                        {" · "}
+                        <span className={rp.handshakeOk ? "text-emerald-400" : "text-amber-300"}>
+                          {rp.handshakeOk ? t("peers.diagHandshakeOk") : t("peers.diagHandshakeStale")}
+                        </span>
+                      </p>
+                      {rp.endpoint ? (
+                        <p className="text-muted-foreground">
+                          {t("peers.diagEndpoint")}: {rp.endpoint}
+                        </p>
+                      ) : null}
+                      {rp.allowedIps ? (
+                        <p className="text-muted-foreground">
+                          {t("peers.diagAllowed")}: {rp.allowedIps}
+                        </p>
+                      ) : null}
+                      <p className="text-muted-foreground">
+                        {t("peers.diagTransfer", {
+                          rx: formatBytes(rp.transferRx),
+                          tx: formatBytes(rp.transferTx),
+                        })}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {peers.map((peer) => {
+                const sync = diagnostics.peerSync.peers[peer.id];
+                const reach = diagnostics.reachability.find((r) => r.peerId === peer.id);
+                if (!sync && !reach) return null;
+                return (
+                  <div key={`sync-${peer.id}`} className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">{peer.name}</span>
+                    {sync ? (
+                      <p>
+                        {sync.ok
+                          ? t("peers.diagSyncOk")
+                          : t("peers.diagSyncFail", { error: sync.error ?? "—" })}
+                        {sync.at ? ` · ${new Date(sync.at).toLocaleString()}` : ""}
+                      </p>
+                    ) : null}
+                    {reach ? (
+                      <p>
+                        {reach.ok
+                          ? t("peers.diagReachOk", { ms: String(reach.ms ?? "—") })
+                          : t("peers.diagReachFail", { error: reach.error ?? "—" })}
+                        {reach.url ? ` · ${reach.url}` : ""}
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
+              <div>
+                <p className="mb-1 text-xs font-medium">{t("peers.diagLog")}</p>
+                {diagnostics.log.length ? (
+                  <pre className="max-h-48 overflow-auto rounded-[4px] border border-border bg-black/30 p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                    {diagnostics.log.join("\n")}
+                  </pre>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{t("peers.diagLogEmpty")}</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">{t("peers.diagLogEmpty")}</p>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardContent className="space-y-4 pt-6">
           <div>
