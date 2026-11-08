@@ -59,7 +59,20 @@ if ! acquire_update_lock; then
   mirror_progress
   exit 1
 fi
-trap 'rm -rf "$LOCK_DIR"' EXIT
+UPDATE_FINISHED=0
+mark_update_finished() { UPDATE_FINISHED=1; }
+on_exit() {
+  rc=$?
+  if [ "$UPDATE_FINISHED" -ne 1 ] && [ -f "$PROGRESS_FILE" ]; then
+    step="$(sed -n 's/^step=\(.*\)$/\1/p' "$PROGRESS_FILE" | head -1)"
+    if [ "$step" != "done" ] && [ "$step" != "error" ]; then
+      printf 'percent=%s\nstep=%s\ndetail=%s\n' "${rc:-1}" error "Update aborted (exit ${rc})" > "$PROGRESS_FILE"
+      mirror_progress
+    fi
+  fi
+  rm -rf "$LOCK_DIR"
+}
+trap on_exit EXIT
 
 write_progress() {
   percent="$1"
@@ -486,6 +499,7 @@ if [ "$SKIP_COMPOSE" = "1" ]; then
   fi
   echo " wrote .proxora-revision"
   write_progress 100 done "Files updated"
+  mark_update_finished
   echo "==> Done. Restart Proxora if it does not hot-reload."
   exit 0
 fi
@@ -497,14 +511,17 @@ write_progress 28 build "Stack update starting"
 cd "$INSTALL_DIR"
 sync_app_url_if_localhost "${INSTALL_DIR}/.env"
 VER="$(sed -n 's/^  "version": "\([^"]*\)".*/\1/p' package.json | head -1)"
-if [ -n "$VER" ] && [ -f .env ]; then
-  if grep -q '^PROXORA_VERSION=' .env; then
-    sed -i "s|^PROXORA_VERSION=.*|PROXORA_VERSION=${VER}|" .env
-  else
-    printf 'PROXORA_VERSION=%s\n' "$VER" >> .env
-  fi
+# Pin PROXORA_VERSION for compose interpolation, but only write .env after the
+# target image is actually present — otherwise a missing GHCR tag leaves the
+# install pinned ahead of the running container.
+PREV_PROXORA_VERSION=""
+if [ -f .env ]; then
+  PREV_PROXORA_VERSION="$(sed -n 's/^PROXORA_VERSION=//p' .env | head -1)"
+fi
+if [ -n "$VER" ]; then
   export PROXORA_VERSION="$VER"
 fi
+IMAGE_REF="ghcr.io/marcelruh/proxora:${VER:-latest}"
 # Compose/BuildKit hijack fails through docker-socket-proxy (403). Prefer the unix socket.
 if [ -S /var/run/docker.sock ]; then
   unset DOCKER_HOST
@@ -515,16 +532,36 @@ if [ -f docker-compose.prod.yml ]; then COMPOSE_FILE="docker-compose.prod.yml"; 
 : > "$TMP/compose.log"
 fail_compose() {
   reason="$1"
+  # Roll back the in-memory pin; .env is only written after a successful pull.
+  if [ -n "${PREV_PROXORA_VERSION}" ]; then
+    export PROXORA_VERSION="$PREV_PROXORA_VERSION"
+  fi
   cp "$TMP/compose.log" "$COMPOSE_LOG_FILE" 2>/dev/null || true
   if [ -n "$SIGNAL_DIR" ] && [ -d "$SIGNAL_DIR" ]; then
     cp "$TMP/compose.log" "${SIGNAL_DIR}/.proxora-update-compose.log" 2>/dev/null || true
   fi
   write_progress 0 error "$reason"
+  mark_update_finished
   echo "ERROR: ${reason} (see ${COMPOSE_LOG_FILE})" >&2
   exit 1
 }
 
+pin_env_version() {
+  if [ -z "$VER" ] || [ ! -f .env ]; then return 0; fi
+  if grep -q '^PROXORA_VERSION=' .env; then
+    sed -i "s|^PROXORA_VERSION=.*|PROXORA_VERSION=${VER}|" .env
+  else
+    printf 'PROXORA_VERSION=%s\n' "$VER" >> .env
+  fi
+  export PROXORA_VERSION="$VER"
+}
+
+image_present() {
+  [ -n "$VER" ] && docker image inspect "$IMAGE_REF" >/dev/null 2>&1
+}
+
 if [ "${PROXORA_BUILD:-0}" = "1" ]; then
+  pin_env_version
   set +e
   run_watched fullbuild "$UP_TIMEOUT_SEC" "compose up --build" \
     docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans
@@ -539,7 +576,16 @@ else
   if [ "$PULL_RC" -eq 124 ]; then
     fail_compose "Image pull timed out after ${PULL_TIMEOUT_SEC}s — check network to ghcr.io and retry"
   fi
-  if [ "$PULL_RC" -eq 0 ]; then
+  # Compose often exits 0 on "manifest unknown"; require the image to exist.
+  PULL_OK=0
+  if [ "$PULL_RC" -eq 0 ] && image_present; then
+    PULL_OK=1
+  fi
+  if [ "$PULL_OK" -ne 1 ] && grep -qi 'manifest unknown\|not found' "$TMP/compose.log" 2>/dev/null; then
+    fail_compose "Image ${IMAGE_REF} is not on GHCR yet (CI still publishing). Wait a few minutes and retry."
+  fi
+  if [ "$PULL_OK" -eq 1 ]; then
+    pin_env_version
     write_progress 78 pull "App image ready"
     # Sidecar is build-only (no GHCR tag). --no-build would leave Proxora Created
     # and the stack dead if proxora-proxora-wireguard:latest is missing.
@@ -564,6 +610,7 @@ else
     set -e
   else
     echo "==> Image pull failed (exit ${PULL_RC}), building locally" >> "$TMP/compose.log"
+    pin_env_version
     write_progress 40 buildWeb "Pull failed — building locally"
     set +e
     run_watched fullbuild "$UP_TIMEOUT_SEC" "compose up --build" \
@@ -604,4 +651,5 @@ write_progress 96 finalize "Revision saved"
 docker builder prune -af >/dev/null 2>&1 || true
 docker image prune -af >/dev/null 2>&1 || true
 write_progress 100 done "Update complete"
+mark_update_finished
 echo "==> Done. Proxora should come back shortly."

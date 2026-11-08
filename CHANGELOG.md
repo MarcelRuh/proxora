@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.6] – 2026-11-08
+
+### Fixed
+
+- Self-update: treat Compose “manifest unknown” as a real pull failure (Compose can exit 0), pin `PROXORA_VERSION` in `.env` only after the GHCR image exists, and mark aborted runs as errors instead of leaving a stuck mid-progress bar.
+
 ## [2.4.5] – 2026-11-08
 
 ### Fixed
