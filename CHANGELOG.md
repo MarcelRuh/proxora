@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.3] – 2026-11-08
+
+### Fixed
+
+- Quiet expected Proxmox noise: missing CPU sensor API (501) and “guest agent not running” log at debug, not warn.
+- Hosts without a temperature API show “no sensors” instead of a failed temperature read.
+
 ## [2.4.2] – 2026-11-08
 
 ### Fixed

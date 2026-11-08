@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ProxmoxApiError } from "@/lib/errors";
 import type { ProxmoxClient } from "@/server/proxmox/client";
 import {
   CPU_TEMP_CACHE_MS,
@@ -59,6 +60,15 @@ describe("cpu temperature cache", () => {
     vi.spyOn(Date, "now").mockReturnValue(9_000 + 61_000);
     expect(peekNodeCpuTemp(api, "pve")).toBeNull();
     expect(peekNodeCpuTempOutcome(api, "pve")).toBe("failed");
+  });
+
+  it("treats unimplemented Proxmox sensor API as no sensors", async () => {
+    const api = client("https://cache-501.example", async () => {
+      throw new ProxmoxApiError("Method not implemented", 501);
+    });
+    vi.spyOn(Date, "now").mockReturnValue(11_000);
+    await expect(readNodeCpuTemp(api, "pve")).resolves.toBeNull();
+    expect(peekNodeCpuTempOutcome(api, "pve")).toBe("none");
   });
 
   it("does not turn a finished empty read into a later failure", () => {

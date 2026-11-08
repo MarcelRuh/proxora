@@ -60,12 +60,14 @@ async function readUncached(
   client: ProxmoxClient,
   node: string,
 ): Promise<{ reading: CpuTempReading | null; outcome: CpuTempOutcome }> {
+  let sensorApiMissing = false;
   try {
     const rows = await client.nodes.cpuTemperature(node);
     const fromApi = cpuTempFromSensorRows(rows) ?? cpuTempFromSensorsJson(rows);
     if (fromApi) return { reading: fromApi, outcome: "value" };
   } catch (error) {
-    if (!missingSensor(error) && !(error instanceof ProxmoxApiError)) return { reading: null, outcome: "failed" };
+    if (missingSensor(error)) sensorApiMissing = true;
+    else if (!(error instanceof ProxmoxApiError)) return { reading: null, outcome: "failed" };
   }
   try {
     const status = await client.nodes.status(node);
@@ -77,6 +79,8 @@ async function readUncached(
   const hwmon = await readNodeHwmon(client, node);
   if (hwmon.outcome === "value") return { reading: hwmon.reading, outcome: "value" };
   if (hwmon.outcome === "none") return { reading: null, outcome: "none" };
+  // Stock Proxmox often has no sensor API and no usable hwmon via shell — show "no sensors", not failure.
+  if (sensorApiMissing) return { reading: null, outcome: "none" };
   return { reading: null, outcome: "failed" };
 }
 

@@ -1,8 +1,25 @@
 import { Agent, fetch as undiciFetch, type RequestInit as UndiciRequestInit } from "undici";
 import { ProxmoxApiError } from "@/lib/errors";
+import { isExpectedProxmoxApiNoise } from "@/lib/proxmox-expected-errors";
 import { logger } from "@/lib/logger";
 import type { ProxmoxConnectionConfig } from "@/server/proxmox/types";
 import { normalizeProxmoxUsername } from "@/server/proxmox/username";
+
+function logProxmoxFailure(
+  kind: "direct" | "federation",
+  fields: Record<string, unknown>,
+  path: string,
+  status: number,
+  message: string | null | undefined,
+) {
+  const expected = isExpectedProxmoxApiNoise(path, status, message);
+  const label = kind === "federation" ? "Federation PVE proxy failed" : "Proxmox API request failed";
+  if (expected) {
+    logger.debug(fields, label);
+  } else {
+    logger.warn(fields, label);
+  }
+}
 
 type Query = Record<string, string | number | boolean | undefined | null>;
 
@@ -214,9 +231,12 @@ export class ProxmoxHttpClient {
     if (!response.ok) {
       const message = proxmoxErrorMessage(parsed, response.status);
       if (isPlainNoContent(message)) return undefined as T;
-      logger.warn(
+      logProxmoxFailure(
+        "direct",
         { path, method, status: response.status, message },
-        "Proxmox API request failed",
+        path,
+        response.status,
+        message,
       );
       throw new ProxmoxApiError(message, response.status, undefined, parsed.errors);
     }
@@ -266,11 +286,15 @@ export class ProxmoxHttpClient {
     }
     if (!response.ok) {
       if (isPlainNoContent(parsed.error ?? "")) return undefined as T;
-      logger.warn(
+      const message = parsed.error || `Peer Proxora error (${response.status})`;
+      logProxmoxFailure(
+        "federation",
         { url, status: response.status, error: parsed.error, code: parsed.code, pvePath: path },
-        "Federation PVE proxy failed",
+        path,
+        response.status,
+        message,
       );
-      throw new ProxmoxApiError(parsed.error || `Peer Proxora error (${response.status})`, response.status);
+      throw new ProxmoxApiError(message, response.status);
     }
     return (parsed.data as T) ?? (undefined as T);
   }
