@@ -43,6 +43,10 @@ next-env.d.ts
 .proxora-update.lock
 /data
 
+# Desktop (Tauri)
+desktop/node_modules/
+desktop/src-tauri/target/
+
 # Android
 android/.gradle/
 android/build/

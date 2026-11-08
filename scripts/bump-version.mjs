@@ -59,4 +59,25 @@ write(
     .replace(/printf 'PROXORA_VERSION=%s\\n' "\d+\.\d+\.\d+"/, `printf 'PROXORA_VERSION=%s\\n' "${version}"`),
 );
 
+const desktopPkgPath = resolve(root, "desktop/package.json");
+const desktopPkg = JSON.parse(readFileSync(desktopPkgPath, "utf8"));
+desktopPkg.version = version;
+write("desktop/package.json", `${JSON.stringify(desktopPkg, null, 2)}\n`);
+
+write(
+  "desktop/src-tauri/Cargo.toml",
+  readFileSync(resolve(root, "desktop/src-tauri/Cargo.toml"), "utf8").replace(
+    /^version = "[^"]+"/m,
+    `version = "${version}"`,
+  ),
+);
+
+write(
+  "desktop/src-tauri/tauri.conf.json",
+  readFileSync(resolve(root, "desktop/src-tauri/tauri.conf.json"), "utf8").replace(
+    /"version": "[^"]+"/,
+    `"version": "${version}"`,
+  ),
+);
+
 console.log(`bumped to ${version}`);

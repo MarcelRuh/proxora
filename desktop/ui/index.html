@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Proxora</title>
+    <link rel="stylesheet" href="setup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <div class="card">
+        <p class="kicker">Proxora Desktop</p>
+        <h1>Connect to your server</h1>
+        <p class="hint">
+          Enter the URL of your self-hosted Proxora. Sign-in, cookies and roles stay on the server — same as the Android client.
+        </p>
+        <label class="field">
+          <span>Server URL</span>
+          <input id="url" type="url" spellcheck="false" autocomplete="url" placeholder="https://proxora.home.arpa" />
+        </label>
+        <label class="check">
+          <input id="insecure" type="checkbox" />
+          <span>Allow insecure TLS (self-signed / LAN)</span>
+        </label>
+        <p id="error" class="error" hidden></p>
+        <button id="connect" type="button">Connect</button>
+        <p class="foot">Menu: Reload · Change server</p>
+      </div>
+    </main>
+    <script type="module" src="setup.js"></script>
+  </body>
+</html>

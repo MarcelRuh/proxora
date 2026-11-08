@@ -1,0 +1,134 @@
+:root {
+  color-scheme: dark;
+  --bg: #07070c;
+  --card: #101018;
+  --fg: #f4f4f8;
+  --muted: #9a9ab0;
+  --accent: #c44cff;
+  --accent-2: #3de0ff;
+  --danger: #ff6b8a;
+  --border: rgba(255, 255, 255, 0.08);
+  --font: "Segoe UI", "IBM Plex Sans", "Helvetica Neue", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: var(--font);
+  background:
+    radial-gradient(900px 420px at 10% -10%, rgba(196, 76, 255, 0.22), transparent 55%),
+    radial-gradient(800px 480px at 100% 0%, rgba(61, 224, 255, 0.14), transparent 50%),
+    var(--bg);
+  color: var(--fg);
+}
+
+.shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+}
+
+.card {
+  width: min(440px, 100%);
+  padding: 28px 28px 24px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 40%), var(--card);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.kicker {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.55rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.hint {
+  margin: 12px 0 22px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.field input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--fg);
+  padding: 12px 14px;
+  font: inherit;
+  font-size: 0.98rem;
+}
+
+.field input:focus {
+  outline: 2px solid rgba(196, 76, 255, 0.45);
+  border-color: transparent;
+}
+
+.check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 4px 0 18px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.check input {
+  margin-top: 3px;
+}
+
+.error {
+  margin: 0 0 14px;
+  color: var(--danger);
+  font-size: 0.88rem;
+}
+
+button {
+  width: 100%;
+  border: 0;
+  border-radius: 4px;
+  padding: 12px 16px;
+  font: inherit;
+  font-weight: 600;
+  color: #0a0a10;
+  cursor: pointer;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.foot {
+  margin: 16px 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.78rem;
+}

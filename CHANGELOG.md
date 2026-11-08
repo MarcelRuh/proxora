@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.0] – 2026-11-08
+
+### Added
+
+- Desktop client (`desktop/`): Rust / Tauri 2 WebView shell with setup URL, optional insecure TLS, Reload / Change server menu — same feature surface as the Android client.
+- CI builds Linux AppImage/deb/rpm (and Windows MSI/NSIS on tags) and uploads them to GitHub releases.
+
 ## [2.3.6] – 2026-11-08
 
 ### Fixed
