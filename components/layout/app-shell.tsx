@@ -20,6 +20,7 @@ import {
   ArrowUpCircle,
   Library,
   Network,
+  ScrollText,
   Users,
   X,
 } from "lucide-react";
@@ -59,6 +60,13 @@ const NAV: Array<{
   { href: "/vms", labelKey: "nav.vms", group: "operate", icon: Boxes, anyOf: ["vm.view"] },
   { href: "/containers", labelKey: "nav.containers", group: "operate", icon: Box, anyOf: ["lxc.view"] },
   { href: "/templates", labelKey: "nav.templates", group: "operate", icon: Library, anyOf: ["lxc.create", "vm.create"] },
+  {
+    href: "/community-scripts",
+    labelKey: "nav.communityScripts",
+    group: "operate",
+    icon: ScrollText,
+    anyOf: ["hosts.view", "hosts.console"],
+  },
   { href: "/tasks", labelKey: "nav.tasks", group: "operate", icon: Activity, anyOf: ["tasks.view"] },
   { href: "/storage", labelKey: "nav.storage", group: "data", icon: HardDrive, anyOf: ["storage.view", "zfs.view"] },
   { href: "/backups", labelKey: "nav.backups", group: "data", icon: Archive, anyOf: ["backup.view"] },

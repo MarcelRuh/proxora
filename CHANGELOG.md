@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.11] – 2026-11-09
+
+### Added
+
+- Community Scripts browser (`/community-scripts`): catalog from community-scripts.org with search/filters and one-click install via the Proxmox host console.
+
 ## [2.4.10] – 2026-11-08
 
 ### Fixed

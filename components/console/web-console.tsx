@@ -18,11 +18,13 @@ type Props = {
   kind: "vm" | "lxc" | "node";
   vmid?: number;
   cmd?: "upgrade";
+  /** Sent once after the shell prompt is ready (e.g. community-scripts install). */
+  initialInput?: string;
   fill?: boolean;
   onDisconnected?: () => void;
 };
 
-export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected }: Props) {
+export function WebConsole({ hostId, node, kind, vmid, cmd, initialInput, fill, onDisconnected }: Props) {
   const { t } = useI18n();
   const tRef = useRef(t);
   const onDisconnectedRef = useRef(onDisconnected);
@@ -39,15 +41,19 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
   const sshBufRef = useRef("");
   const captureRef = useRef(false);
   const sawOutputRef = useRef(false);
+  const initialInputRef = useRef(initialInput);
+  const initialSentRef = useRef(false);
 
   useEffect(() => {
     tRef.current = t;
     onDisconnectedRef.current = onDisconnected;
     fontSizeRef.current = fontSize;
+    initialInputRef.current = initialInput;
   });
 
   useEffect(() => {
     if (!containerRef.current) return;
+    initialSentRef.current = false;
     const term = new Terminal({
       cursorBlink: true,
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
@@ -158,6 +164,18 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
     }, 30_000);
     const onResize = () => fit.fit();
     window.addEventListener("resize", onResize);
+    const injectTimer = setInterval(() => {
+      const pending = initialInputRef.current?.trim();
+      if (!pending || initialSentRef.current || ws.readyState !== WebSocket.OPEN) return;
+      const buffer = term.buffer.active;
+      const row = buffer.getLine(buffer.baseY + buffer.cursorY)?.translateToString(true) ?? "";
+      if (!lxcShellPrompt(row)) return;
+      initialSentRef.current = true;
+      const payload = pending.endsWith("\r") || pending.endsWith("\n") ? pending : `${pending}\r`;
+      ws.send(JSON.stringify({ type: "input", data: payload }));
+      clearInterval(injectTimer);
+    }, 400);
+
     const probeTimer = setInterval(() => {
       if (kind !== "lxc" || ws.readyState !== WebSocket.OPEN) return;
       const buffer = term.buffer.active;
@@ -177,6 +195,7 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
       disposable.dispose();
       resizeDisp.dispose();
       clearInterval(ping);
+      clearInterval(injectTimer);
       clearInterval(probeTimer);
       window.removeEventListener("resize", onResize);
       ws.close();
@@ -186,7 +205,7 @@ export function WebConsole({ hostId, node, kind, vmid, cmd, fill, onDisconnected
       captureRef.current = false;
       sawOutputRef.current = false;
     };
-  }, [hostId, node, kind, vmid, cmd, nonce]);
+  }, [hostId, node, kind, vmid, cmd, initialInput, nonce]);
 
   useEffect(() => {
     const term = termRef.current;

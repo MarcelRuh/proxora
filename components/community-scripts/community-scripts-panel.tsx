@@ -1,0 +1,311 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { ExternalLink, Play, RefreshCw, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { WebConsole } from "@/components/console/web-console";
+import { api } from "@/lib/api";
+import { useI18n } from "@/components/i18n/locale-provider";
+import { useCan } from "@/components/auth/session-user";
+import { peerHostAllowsPermission } from "@/lib/federation-access";
+import type { PublicHost } from "@/lib/types";
+import type {
+  CommunityScriptCategory,
+  CommunityScriptKind,
+  CommunityScriptSummary,
+} from "@/lib/community-scripts";
+import {
+  COMMUNITY_SCRIPTS_SITE,
+  communityScriptInstallCommand,
+} from "@/lib/community-scripts";
+import { cn } from "@/lib/utils";
+
+type CatalogResponse = {
+  scripts: CommunityScriptSummary[];
+  categories: CommunityScriptCategory[];
+  fetchedAt: number;
+  total: number;
+};
+
+type RunResponse = {
+  mode: "console";
+  node: string;
+  command: string;
+  pageUrl: string;
+  script: CommunityScriptSummary;
+};
+
+const KIND_OPTIONS: Array<CommunityScriptKind | "all"> = ["all", "lxc", "vm", "addon", "pve", "turnkey"];
+
+function resourcesLabel(script: CommunityScriptSummary): string | null {
+  const parts: string[] = [];
+  if (script.defaultCpu) parts.push(`${script.defaultCpu} CPU`);
+  if (script.defaultRamMb) parts.push(`${script.defaultRamMb} MB`);
+  if (script.defaultDiskGb) parts.push(`${script.defaultDiskGb} GB`);
+  if (script.defaultOs) parts.push(script.defaultOs);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+export function CommunityScriptsPanel({
+  hosts,
+  hostId,
+  onHostChange,
+}: {
+  hosts: PublicHost[];
+  hostId: string;
+  onHostChange: (id: string) => void;
+}) {
+  const { t } = useI18n();
+  const canConsole = useCan("hosts.console", hostId || undefined);
+  const [query, setQuery] = useState("");
+  const [debounced, setDebounced] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [kind, setKind] = useState<CommunityScriptKind | "all">("all");
+  const [selected, setSelected] = useState<CommunityScriptSummary | null>(null);
+  const [running, setRunning] = useState(false);
+  const [shell, setShell] = useState<{ hostId: string; node: string; command: string; name: string } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebounced(query.trim()), 200);
+    return () => window.clearTimeout(id);
+  }, [query]);
+
+  const activeHost = hosts.find((host) => host.id === hostId) ?? null;
+  const hostOnline = activeHost?.connectionState === "ONLINE";
+  const peerOk = activeHost ? peerHostAllowsPermission(activeHost, "hosts.console") : true;
+  const canRun = Boolean(canConsole && hostOnline && peerOk && hostId);
+
+  const catalogKey = ["community-scripts", debounced, categoryId, kind] as const;
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: catalogKey,
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (debounced) params.set("q", debounced);
+      if (categoryId) params.set("category", categoryId);
+      if (kind !== "all") params.set("kind", kind);
+      const qs = params.toString();
+      return api<CatalogResponse>(`/api/community-scripts${qs ? `?${qs}` : ""}`);
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const scripts = data?.scripts ?? [];
+  const categories = data?.categories ?? [];
+  const categoryName = useMemo(() => {
+    const map = new Map(categories.map((item) => [item.id, item.name]));
+    return (ids: string[]) => ids.map((id) => map.get(id)).filter(Boolean).join(", ");
+  }, [categories]);
+
+  async function startInstall(script: CommunityScriptSummary) {
+    if (!canRun || running) return;
+    setRunning(true);
+    try {
+      const result = await api<RunResponse>(`/api/hosts/${hostId}/community-scripts/run`, {
+        method: "POST",
+        body: JSON.stringify({ slug: script.slug, confirm: true }),
+      });
+      setSelected(null);
+      setShell({
+        hostId,
+        node: result.node,
+        command: result.command,
+        name: result.script.name,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("common.failed"));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {hosts.length > 1 ? (
+          <select
+            className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+            value={hostId}
+            onChange={(e) => onHostChange(e.target.value)}
+          >
+            {hosts.map((host) => (
+              <option key={host.id} value={host.id}>
+                {host.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        <div className="relative min-w-[14rem] flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-8"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("cs.search")}
+          />
+        </div>
+        <select
+          className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+          value={kind}
+          onChange={(e) => setKind(e.target.value as CommunityScriptKind | "all")}
+        >
+          {KIND_OPTIONS.map((item) => (
+            <option key={item} value={item}>
+              {t(`cs.kind.${item}`)}
+            </option>
+          ))}
+        </select>
+        <select
+          className="h-9 max-w-[16rem] rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
+        >
+          <option value="">{t("cs.allCategories")}</option>
+          {categories.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          title={t("cs.refresh")}
+          disabled={isFetching}
+          onClick={() => void refetch()}
+        >
+          <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+        </Button>
+        <a
+          href={COMMUNITY_SCRIPTS_SITE}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-9 items-center gap-1 rounded-[4px] border border-input px-3 text-sm text-muted-foreground hover:text-foreground"
+        >
+          community-scripts.org
+          <ExternalLink className="h-3.5 w-3.5" />
+        </a>
+      </div>
+
+      {!canRun ? (
+        <p className="text-sm text-muted-foreground">
+          {!hostId
+            ? t("cs.noHost")
+            : !hostOnline
+              ? t("cs.hostOffline")
+              : !canConsole || !peerOk
+                ? t("cs.noConsole")
+                : null}
+        </p>
+      ) : null}
+
+      {error ? <p className="text-sm text-destructive">{t("cs.loadFailed")}</p> : null}
+      {isLoading ? <p className="text-sm text-muted-foreground">{t("common.loading")}</p> : null}
+
+      {!isLoading && scripts.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t("cs.empty")}</p>
+      ) : null}
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {scripts.map((script) => {
+          const resources = resourcesLabel(script);
+          return (
+            <Card key={script.id} className="overflow-hidden">
+              <CardContent className="flex h-full flex-col gap-3 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[4px] bg-white/[0.04]">
+                    {script.logo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={script.logo} alt="" className="h-full w-full object-contain p-1" loading="lazy" />
+                    ) : null}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{script.name}</p>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      {t(`cs.kind.${script.kind}`)}
+                      {categoryName(script.categoryIds) ? ` · ${categoryName(script.categoryIds)}` : ""}
+                    </p>
+                  </div>
+                </div>
+                <p className="line-clamp-3 flex-1 text-xs text-muted-foreground">{script.description || "—"}</p>
+                {resources ? <p className="text-[11px] text-muted-foreground">{resources}</p> : null}
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" disabled={!canRun || running} onClick={() => setSelected(script)}>
+                    <Play className="mr-1 h-3.5 w-3.5" />
+                    {t("cs.install")}
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" asChild>
+                    <a href={`${COMMUNITY_SCRIPTS_SITE}/scripts/${script.slug}`} target="_blank" rel="noreferrer">
+                      {t("cs.details")}
+                    </a>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {data ? (
+        <p className="text-xs text-muted-foreground">
+          {t("cs.count", { shown: String(scripts.length), total: String(data.total) })}
+        </p>
+      ) : null}
+
+      <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{selected?.name}</DialogTitle>
+            <DialogDescription>{t("cs.confirmBody")}</DialogDescription>
+          </DialogHeader>
+          {selected ? (
+            <div className="space-y-3 text-sm">
+              <p className="text-muted-foreground">{selected.description}</p>
+              <p className="break-all rounded-[4px] border border-border bg-white/[0.03] p-2 font-mono text-[11px]">
+                {communityScriptInstallCommand(selected.kind, selected.slug)}
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setSelected(null)}>
+                  {t("common.cancel")}
+                </Button>
+                <Button type="button" disabled={!canRun || running} onClick={() => void startInstall(selected)}>
+                  {running ? t("common.loading") : t("cs.runOnHost")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(shell)} onOpenChange={(open) => !open && setShell(null)}>
+        <DialogContent className="max-w-5xl p-0 overflow-hidden">
+          <DialogHeader className="border-b border-border px-4 py-3">
+            <DialogTitle>
+              {shell ? t("cs.shellTitle", { name: shell.name, node: shell.node }) : t("cs.install")}
+            </DialogTitle>
+            <DialogDescription>{t("cs.shellBody")}</DialogDescription>
+          </DialogHeader>
+          {shell ? (
+            <div className="h-[min(70vh,640px)] p-2">
+              <WebConsole
+                hostId={shell.hostId}
+                node={shell.node}
+                kind="node"
+                initialInput={shell.command}
+                fill
+                onDisconnected={() => setShell(null)}
+              />
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
