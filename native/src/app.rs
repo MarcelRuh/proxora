@@ -86,6 +86,7 @@ pub struct ProxoraApp {
 
 impl ProxoraApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        egui_extras::install_image_loaders(&cc.egui_ctx);
         theme::apply(&cc.egui_ctx);
         let prefs = prefs::load();
         let (msg_tx, rx) = mpsc::channel();
@@ -218,32 +219,41 @@ impl ProxoraApp {
             bar.bottom() - 0.5,
             Stroke::new(1.0_f32, c::BORDER_SOFT),
         );
+        // Brand stripe: pink → purple (desktop chrome difference vs web)
         ui.painter().rect_filled(
             Rect::from_min_max(
                 Pos2::new(bar.left(), bar.bottom() - 2.0),
-                Pos2::new(bar.left() + 72.0, bar.bottom()),
+                Pos2::new(bar.left() + 48.0, bar.bottom()),
             ),
             CornerRadius::ZERO,
-            c::ACCENT,
+            c::PINK,
+        );
+        ui.painter().rect_filled(
+            Rect::from_min_max(
+                Pos2::new(bar.left() + 48.0, bar.bottom() - 2.0),
+                Pos2::new(bar.left() + 96.0, bar.bottom()),
+            ),
+            CornerRadius::ZERO,
+            c::PURPLE,
         );
 
         ui.horizontal_centered(|ui| {
             ui.add_space(12.0);
             ui.label(
                 RichText::new("PROXORA")
-                    .font(FontId::proportional(15.0))
-                    .color(c::ACCENT)
+                    .font(FontId::proportional(14.0))
+                    .color(c::PINK)
                     .strong(),
             );
             ui.label(
                 RichText::new("NATIVE")
-                    .font(FontId::proportional(11.0))
-                    .color(c::FAINT),
+                    .font(FontId::proportional(10.5))
+                    .color(c::CYAN),
             );
             ui.label(
                 RichText::new(format!("v{APP_VERSION}"))
                     .font(FontId::monospace(11.0))
-                    .color(c::FAINT),
+                    .color(c::MUTED),
             );
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -264,7 +274,6 @@ impl ProxoraApp {
             });
         });
 
-        // Drag region excludes window controls (~120px).
         let drag = Rect::from_min_max(bar.left_top(), Pos2::new(bar.right() - 120.0, bar.bottom()));
         let response = ui.interact(drag, ui.id().with("title_drag"), Sense::click_and_drag());
         if response.double_clicked() {
@@ -276,20 +285,42 @@ impl ProxoraApp {
     }
 
     fn paint_sidebar(&mut self, ui: &mut Ui) {
+        // Brand block — mirrors web AppShell header, with Native subtitle.
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::Image::new(egui::include_image!("../assets/proxora-icon.png"))
+                    .fit_to_exact_size(Vec2::splat(40.0))
+                    .corner_radius(6.0),
+            );
+            ui.add_space(8.0);
+            ui.vertical(|ui| {
+                ui.label(
+                    RichText::new("PROXORA")
+                        .font(FontId::proportional(16.0))
+                        .color(c::TEXT)
+                        .strong(),
+                );
+                ui.label(
+                    RichText::new("NATIVE DESKTOP")
+                        .font(FontId::proportional(9.5))
+                        .color(c::SIDEBAR_MUTED),
+                );
+            });
+        });
+        ui.add_space(16.0);
+
         ui.label(
-            RichText::new("NAVIGATION")
+            RichText::new("OPERATE")
                 .font(FontId::proportional(10.5))
-                .color(c::FAINT),
+                .color(c::CYAN),
         );
-        ui.add_space(10.0);
+        ui.add_space(8.0);
 
         if self.screen == Screen::Home {
             nav_item(ui, &mut self.tab, HomeTab::Overview, "Übersicht", "Cluster & Ressourcen");
             nav_item(ui, &mut self.tab, HomeTab::Hosts, "Hosts", "Proxmox-Knoten");
             nav_item(ui, &mut self.tab, HomeTab::Guests, "Gäste", "VMs & Container");
             ui.add_space(14.0);
-            ui.separator();
-            ui.add_space(10.0);
             if ui.add(ghost_btn("Aktualisieren")).clicked() {
                 self.enqueue(JobKind::Refresh);
             }
@@ -304,23 +335,26 @@ impl ProxoraApp {
                 ui.label(
                     RichText::new(&self.prefs.server_url)
                         .font(FontId::monospace(11.0))
-                        .color(c::FAINT),
+                        .color(c::MUTED),
                 );
             }
         }
 
-        // Footer pinned to bottom via remaining-space allocation.
         let footer_h = 88.0;
         let gap = (ui.available_height() - footer_h).max(8.0);
         ui.add_space(gap);
 
-        ui.separator();
-        ui.add_space(8.0);
+        ui.painter().hline(
+            ui.max_rect().x_range(),
+            ui.cursor().top(),
+            Stroke::new(1.0_f32, c::BORDER_SOFT),
+        );
+        ui.add_space(10.0);
         if let Some(user) = &self.user {
             Frame::new()
-                .fill(c::PANEL)
+                .fill(c::PANEL_2)
                 .stroke(Stroke::new(1.0_f32, c::BORDER))
-                .corner_radius(CornerRadius::same(6))
+                .corner_radius(CornerRadius::same(4))
                 .inner_margin(10.0)
                 .show(ui, |ui| {
                     ui.set_min_width(ui.available_width());
@@ -333,14 +367,14 @@ impl ProxoraApp {
                     ui.label(
                         RichText::new(&user.role.name)
                             .size(11.5)
-                            .color(c::ACCENT),
+                            .color(c::PINK),
                     );
                 });
         } else {
             ui.label(
                 RichText::new("Nicht angemeldet")
                     .size(12.0)
-                    .color(c::FAINT),
+                    .color(c::MUTED),
             );
         }
         ui.add_space(4.0);
@@ -366,13 +400,13 @@ impl ProxoraApp {
         match &self.update_state.clone() {
             UpdateState::Available(info) => {
                 Frame::new()
-                    .fill(Color32::from_rgb(14, 32, 26))
+                    .fill(Color32::from_rgba_unmultiplied(0xff, 0x00, 0x6e, 18))
                     .inner_margin(Margin::symmetric(16, 8))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             ui.label(
                                 RichText::new(format!("●  Update v{} verfügbar", info.version))
-                                    .color(c::ACCENT)
+                                    .color(c::PINK)
                                     .size(13.0),
                             );
                             ui.label(
@@ -408,7 +442,7 @@ impl ProxoraApp {
                         ui.add(
                             egui::ProgressBar::new(p)
                                 .desired_width(ui.available_width())
-                                .fill(c::ACCENT),
+                                .fill(c::PINK),
                         );
                     });
             }
@@ -416,7 +450,7 @@ impl ProxoraApp {
                 let path = path.clone();
                 let ver = info.version.clone();
                 Frame::new()
-                    .fill(Color32::from_rgb(32, 28, 14))
+                    .fill(Color32::from_rgba_unmultiplied(0xff, 0xd6, 0x0a, 20))
                     .inner_margin(Margin::symmetric(16, 8))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
@@ -434,7 +468,7 @@ impl ProxoraApp {
             }
             UpdateState::Error(err) => {
                 Frame::new()
-                    .fill(Color32::from_rgb(36, 16, 16))
+                    .fill(Color32::from_rgba_unmultiplied(0xff, 0x54, 0x00, 28))
                     .inner_margin(Margin::symmetric(16, 8))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
@@ -506,39 +540,32 @@ fn title_btn(ui: &mut Ui, ctx: &egui::Context, label: &str, action: TitleAction,
 fn nav_item(ui: &mut Ui, current: &mut HomeTab, tab: HomeTab, title: &str, subtitle: &str) {
     let selected = *current == tab;
     let fill = if selected {
-        Color32::from_rgba_unmultiplied(46, 230, 166, 22)
+        c::NAV_ACTIVE_BG
     } else {
         Color32::TRANSPARENT
     };
-    let stroke = if selected {
-        Stroke::new(1.0_f32, c::ACCENT_DIM)
-    } else {
-        Stroke::NONE
-    };
     let resp = Frame::new()
         .fill(fill)
-        .stroke(stroke)
-        .corner_radius(CornerRadius::same(6))
-        .inner_margin(Margin::symmetric(10, 8))
+        .corner_radius(CornerRadius::ZERO)
+        .inner_margin(Margin::symmetric(10, 9))
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             ui.horizontal(|ui| {
+                // Web-like inset pink bar when active
+                let (r, _) = ui.allocate_exact_size(Vec2::new(3.0, 28.0), Sense::hover());
                 if selected {
-                    let (r, _) = ui.allocate_exact_size(Vec2::new(3.0, 28.0), Sense::hover());
                     ui.painter()
-                        .rect_filled(r, CornerRadius::same(2), c::ACCENT);
-                    ui.add_space(6.0);
-                } else {
-                    ui.add_space(9.0);
+                        .rect_filled(r, CornerRadius::ZERO, c::PINK);
                 }
+                ui.add_space(8.0);
                 ui.vertical(|ui| {
                     ui.label(
                         RichText::new(title)
                             .size(13.5)
-                            .color(if selected { c::ACCENT } else { c::TEXT })
+                            .color(if selected { c::PINK } else { c::TEXT })
                             .strong(),
                     );
-                    ui.label(RichText::new(subtitle).size(11.0).color(c::FAINT));
+                    ui.label(RichText::new(subtitle).size(11.0).color(c::MUTED));
                 });
             });
         })
@@ -547,29 +574,29 @@ fn nav_item(ui: &mut Ui, current: &mut HomeTab, tab: HomeTab, title: &str, subti
     if resp.hovered() && !selected {
         ui.painter().rect_filled(
             resp.rect,
-            CornerRadius::same(6),
-            Color32::from_rgba_unmultiplied(255, 255, 255, 6),
+            CornerRadius::ZERO,
+            Color32::from_rgba_unmultiplied(255, 255, 255, 8),
         );
     }
     if resp.clicked() {
         *current = tab;
     }
-    ui.add_space(4.0);
+    ui.add_space(2.0);
 }
 
 fn primary_btn(label: &str) -> egui::Button<'static> {
-    egui::Button::new(RichText::new(label).color(c::BG).strong())
-        .fill(c::ACCENT)
+    egui::Button::new(RichText::new(label).color(Color32::WHITE).strong())
+        .fill(c::PINK)
         .stroke(Stroke::NONE)
-        .corner_radius(CornerRadius::same(5))
+        .corner_radius(CornerRadius::same(4))
 }
 
 fn ghost_btn(label: &str) -> egui::Button<'static> {
     egui::Button::new(RichText::new(label).color(c::TEXT))
-        .fill(c::PANEL)
+        .fill(c::PANEL_2)
         .stroke(Stroke::new(1.0_f32, c::BORDER))
-        .corner_radius(CornerRadius::same(5))
-        .min_size(Vec2::new(SIDEBAR_W - 40.0, 28.0))
+        .corner_radius(CornerRadius::same(4))
+        .min_size(Vec2::new(SIDEBAR_W - 48.0, 28.0))
 }
 
 impl eframe::App for ProxoraApp {
@@ -673,7 +700,7 @@ impl ProxoraApp {
         auth_shell(ui, "Anmelden", &format!("Verbunden mit {server}"), |ui| {
             if ui
                 .add(
-                    egui::Button::new(RichText::new("← Server ändern").color(c::ACCENT).size(12.5))
+                    egui::Button::new(RichText::new("← Server ändern").color(c::CYAN).size(12.5))
                         .fill(Color32::TRANSPARENT)
                         .stroke(Stroke::NONE),
                 )
@@ -764,7 +791,7 @@ impl ProxoraApp {
         };
 
         ui.horizontal_wrapped(|ui| {
-            metric_card(ui, "Hosts online", &format!("{}/{}", dash.hosts.online, dash.hosts.total), c::ACCENT);
+            metric_card(ui, "Hosts online", &format!("{}/{}", dash.hosts.online, dash.hosts.total), c::PINK);
             metric_card(ui, "VMs", &dash.virtualization.vms.to_string(), c::TEXT);
             metric_card(ui, "LXC", &dash.virtualization.lxc.to_string(), c::TEXT);
             metric_card(ui, "Running", &dash.virtualization.running.to_string(), c::OK);
@@ -774,7 +801,7 @@ impl ProxoraApp {
         Frame::new()
             .fill(c::PANEL)
             .stroke(Stroke::new(1.0_f32, c::BORDER))
-            .corner_radius(CornerRadius::same(8))
+            .corner_radius(CornerRadius::same(4))
             .inner_margin(16.0)
             .show(ui, |ui| {
                 ui.label(RichText::new("Ressourcen").strong().size(14.0));
@@ -878,7 +905,7 @@ impl ProxoraApp {
         Frame::new()
             .fill(c::PANEL)
             .stroke(Stroke::new(1.0_f32, c::BORDER))
-            .corner_radius(CornerRadius::same(7))
+            .corner_radius(CornerRadius::same(4))
             .inner_margin(Margin::symmetric(12, 10))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -899,7 +926,7 @@ impl ProxoraApp {
                             ui.label(
                                 RichText::new(kind.to_uppercase())
                                     .size(11.0)
-                                    .color(c::ACCENT),
+                                    .color(c::CYAN),
                             );
                         });
                         ui.label(
@@ -977,11 +1004,10 @@ fn action_btn(ui: &mut Ui, busy: bool, label: &str, color: Color32, on_click: im
 }
 
 fn auth_shell(ui: &mut Ui, title: &str, subtitle: &str, add_contents: impl FnOnce(&mut Ui)) {
-    let card_w = 440.0_f32;
-    // Center card in the available central panel area.
+    let card_w = 420.0_f32;
     let avail = ui.available_rect_before_wrap();
     let left = avail.left() + ((avail.width() - card_w) * 0.5).max(0.0);
-    let top = avail.top() + (avail.height() * 0.12).clamp(24.0, 120.0);
+    let top = avail.top() + (avail.height() * 0.10).clamp(20.0, 100.0);
     ui.scope_builder(
         egui::UiBuilder::new().max_rect(Rect::from_min_size(
             Pos2::new(left, top),
@@ -991,19 +1017,27 @@ fn auth_shell(ui: &mut Ui, title: &str, subtitle: &str, add_contents: impl FnOnc
             Frame::new()
                 .fill(c::PANEL)
                 .stroke(Stroke::new(1.0_f32, c::BORDER))
-                .corner_radius(CornerRadius::same(10))
+                .corner_radius(CornerRadius::same(4))
                 .shadow(Shadow {
-                    offset: [0, 8],
-                    blur: 24,
+                    offset: [0, 12],
+                    blur: 40,
                     spread: 0,
-                    color: Color32::from_black_alpha(80),
+                    color: Color32::from_rgba_unmultiplied(0x83, 0x38, 0xec, 40),
                 })
                 .inner_margin(Margin::symmetric(28, 24))
                 .show(ui, |ui| {
                     ui.set_width(card_w.min(avail.width()) - 4.0);
-                    ui.label(RichText::new(title).size(22.0).strong().color(c::TEXT));
-                    ui.label(RichText::new(subtitle).size(13.0).color(c::MUTED));
-                    ui.add_space(16.0);
+                    ui.vertical_centered(|ui| {
+                        ui.add(
+                            egui::Image::new(egui::include_image!("../assets/proxora-icon.png"))
+                                .fit_to_exact_size(Vec2::splat(56.0))
+                                .corner_radius(8.0),
+                        );
+                        ui.add_space(10.0);
+                        ui.label(RichText::new(title).size(20.0).strong().color(c::TEXT));
+                        ui.label(RichText::new(subtitle).size(12.5).color(c::MUTED));
+                    });
+                    ui.add_space(18.0);
                     add_contents(ui);
                 });
         },
@@ -1018,12 +1052,12 @@ fn labeled_field(ui: &mut Ui, label: &str, add_contents: impl FnOnce(&mut Ui)) {
 }
 
 fn section_header(ui: &mut Ui, title: &str, subtitle: &str) {
-    ui.horizontal(|ui| {
-        ui.vertical(|ui| {
-            ui.label(RichText::new(title).size(20.0).strong().color(c::TEXT));
-            ui.label(RichText::new(subtitle).size(12.5).color(c::MUTED));
-        });
-    });
+    ui.label(
+        RichText::new(subtitle.to_uppercase())
+            .size(11.0)
+            .color(c::CYAN),
+    );
+    ui.label(RichText::new(title).size(22.0).strong().color(c::TEXT));
     ui.add_space(14.0);
 }
 
@@ -1031,7 +1065,7 @@ fn empty_state(ui: &mut Ui, title: &str, hint: &str) {
     Frame::new()
         .fill(c::PANEL)
         .stroke(Stroke::new(1.0_f32, c::BORDER))
-        .corner_radius(CornerRadius::same(8))
+        .corner_radius(CornerRadius::same(4))
         .inner_margin(24.0)
         .show(ui, |ui| {
             ui.label(RichText::new(title).size(15.0).color(c::TEXT));
@@ -1043,7 +1077,7 @@ fn metric_card(ui: &mut Ui, label: &str, value: &str, value_color: Color32) {
     Frame::new()
         .fill(c::PANEL)
         .stroke(Stroke::new(1.0_f32, c::BORDER))
-        .corner_radius(CornerRadius::same(8))
+        .corner_radius(CornerRadius::same(4))
         .inner_margin(Margin::symmetric(16, 14))
         .show(ui, |ui| {
             ui.set_min_width(128.0);
@@ -1076,7 +1110,7 @@ fn resource_bar(ui: &mut Ui, label: &str, frac: f32, detail: &str) {
     } else if frac > 0.7 {
         c::WARN
     } else {
-        c::ACCENT
+        c::PINK
     };
     ui.add(
         egui::ProgressBar::new(frac)
@@ -1099,7 +1133,7 @@ fn host_card(
     Frame::new()
         .fill(c::PANEL)
         .stroke(Stroke::new(1.0_f32, c::BORDER))
-        .corner_radius(CornerRadius::same(7))
+        .corner_radius(CornerRadius::same(4))
         .inner_margin(Margin::symmetric(14, 12))
         .show(ui, |ui| {
             ui.horizontal(|ui| {

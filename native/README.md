@@ -7,7 +7,7 @@ Zielbild: langfristig die Web-Oberfläche ersetzen.
 ## Features
 
 - Eigene Titelleiste (kein OS-Chrome) mit Drag / Min / Max / Close
-- Sidebar-Navigation, Control-Room-Theme (Charcoal + Acid Green)
+- Proxora-Web-DNA (Pink/Lila/Cyan), dichteres Native-Chrome
 - Server-URL + optionales insecure TLS
 - Login inkl. TOTP/Recovery
 - Übersicht (Dashboard-Metriken + Ressourcenbalken)
@@ -61,4 +61,4 @@ Beim Start (und über „Nach Updates suchen“) prüft der Client `MarcelRuh/pr
 
 ## Version
 
-Aktuell: **0.2.1** (`Cargo.toml`).
+Aktuell: **0.2.2** (`Cargo.toml`).
