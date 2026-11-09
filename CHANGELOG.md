@@ -9,6 +9,7 @@ All notable changes to this project are documented here.
 ### Fixed
 
 - Production `next build` uses webpack again so Google-font fetches no longer fail under Turbopack in CI (unblocks the GHCR image that ships the Community Scripts Details dialog).
+- Docker build context ignores desktop/Android artifacts so local image builds do not fill the disk.
 
 ## [2.4.13] – 2026-11-09
 
