@@ -15,12 +15,19 @@ fn main() -> eframe::Result<()> {
             .with_min_inner_size([960.0, 640.0])
             .with_decorations(false)
             .with_transparent(false)
-            .with_title("Proxora Native"),
+            .with_title("Proxora Native")
+            .with_taskbar(true),
+        centered: true,
         ..Default::default()
     };
     eframe::run_native(
         "Proxora Native",
         options,
-        Box::new(|cc| Ok(Box::new(ProxoraApp::new(cc)))),
+        Box::new(|cc| {
+            // Force undecorated again after window creation (some Win hosts ignore builder flag).
+            cc.egui_ctx
+                .send_viewport_cmd(egui::ViewportCommand::Decorations(false));
+            Ok(Box::new(ProxoraApp::new(cc)))
+        }),
     )
 }

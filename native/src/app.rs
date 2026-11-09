@@ -210,18 +210,14 @@ impl ProxoraApp {
         }
     }
 
-    fn title_bar(&mut self, ui: &mut Ui, ctx: &egui::Context) {
-        let full = ui.max_rect();
-        let bar = Rect::from_min_size(full.min, Vec2::new(full.width(), TITLEBAR_H));
-        ui.painter()
-            .rect_filled(bar, CornerRadius::ZERO, c::TITLEBAR);
+    fn paint_title_bar(&mut self, ui: &mut Ui, ctx: &egui::Context) {
+        let bar = ui.max_rect();
+        ui.painter().rect_filled(bar, CornerRadius::ZERO, c::TITLEBAR);
         ui.painter().hline(
             bar.x_range(),
             bar.bottom() - 0.5,
             Stroke::new(1.0_f32, c::BORDER_SOFT),
         );
-
-        // Accent stripe
         ui.painter().rect_filled(
             Rect::from_min_max(
                 Pos2::new(bar.left(), bar.bottom() - 2.0),
@@ -231,159 +227,233 @@ impl ProxoraApp {
             c::ACCENT,
         );
 
-        let response = ui.interact(
-            bar.with_max_x(bar.right() - 120.0),
-            ui.id().with("title_drag"),
-            Sense::click_and_drag(),
-        );
-        if response.double_clicked() {
-            let maximized = ctx.input(|i| {
-                i.viewport().maximized.unwrap_or(false)
+        ui.horizontal_centered(|ui| {
+            ui.add_space(12.0);
+            ui.label(
+                RichText::new("PROXORA")
+                    .font(FontId::proportional(15.0))
+                    .color(c::ACCENT)
+                    .strong(),
+            );
+            ui.label(
+                RichText::new("NATIVE")
+                    .font(FontId::proportional(11.0))
+                    .color(c::FAINT),
+            );
+            ui.label(
+                RichText::new(format!("v{APP_VERSION}"))
+                    .font(FontId::monospace(11.0))
+                    .color(c::FAINT),
+            );
+
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                title_btn(ui, ctx, "✕", TitleAction::Close, c::DANGER);
+                title_btn(ui, ctx, "□", TitleAction::Maximize, c::MUTED);
+                title_btn(ui, ctx, "—", TitleAction::Minimize, c::MUTED);
+                ui.add_space(8.0);
+                if self.busy {
+                    ui.spinner();
+                }
+                if !self.status.is_empty() {
+                    ui.label(
+                        RichText::new(&self.status)
+                            .font(FontId::proportional(11.5))
+                            .color(c::MUTED),
+                    );
+                }
             });
+        });
+
+        // Drag region excludes window controls (~120px).
+        let drag = Rect::from_min_max(bar.left_top(), Pos2::new(bar.right() - 120.0, bar.bottom()));
+        let response = ui.interact(drag, ui.id().with("title_drag"), Sense::click_and_drag());
+        if response.double_clicked() {
+            let maximized = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
             ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!maximized));
         } else if response.drag_started_by(egui::PointerButton::Primary) {
             ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
         }
+    }
 
-        ui.scope_builder(
-            egui::UiBuilder::new().max_rect(bar).layout(Layout::left_to_right(Align::Center)),
-            |ui| {
-                ui.add_space(14.0);
+    fn paint_sidebar(&mut self, ui: &mut Ui) {
+        ui.label(
+            RichText::new("NAVIGATION")
+                .font(FontId::proportional(10.5))
+                .color(c::FAINT),
+        );
+        ui.add_space(10.0);
+
+        if self.screen == Screen::Home {
+            nav_item(ui, &mut self.tab, HomeTab::Overview, "Übersicht", "Cluster & Ressourcen");
+            nav_item(ui, &mut self.tab, HomeTab::Hosts, "Hosts", "Proxmox-Knoten");
+            nav_item(ui, &mut self.tab, HomeTab::Guests, "Gäste", "VMs & Container");
+            ui.add_space(14.0);
+            ui.separator();
+            ui.add_space(10.0);
+            if ui.add(ghost_btn("Aktualisieren")).clicked() {
+                self.enqueue(JobKind::Refresh);
+            }
+            ui.add_space(6.0);
+            if ui.add(ghost_btn("Abmelden")).clicked() {
+                self.enqueue(JobKind::Logout);
+            }
+        } else {
+            ui.label(RichText::new("Anmeldung").color(c::MUTED).size(13.0));
+            ui.add_space(6.0);
+            if !self.prefs.server_url.is_empty() {
                 ui.label(
-                    RichText::new("PROXORA")
-                        .font(FontId::proportional(15.0))
-                        .color(c::ACCENT)
-                        .strong(),
-                );
-                ui.label(
-                    RichText::new("NATIVE")
-                        .font(FontId::proportional(11.0))
-                        .color(c::FAINT),
-                );
-                ui.add_space(8.0);
-                ui.label(
-                    RichText::new(format!("v{APP_VERSION}"))
+                    RichText::new(&self.prefs.server_url)
                         .font(FontId::monospace(11.0))
                         .color(c::FAINT),
                 );
+            }
+        }
 
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.add_space(6.0);
-                    title_btn(ui, ctx, "✕", TitleAction::Close, c::DANGER);
-                    title_btn(ui, ctx, "□", TitleAction::Maximize, c::MUTED);
-                    title_btn(ui, ctx, "—", TitleAction::Minimize, c::MUTED);
-                    ui.add_space(8.0);
-                    if self.busy {
-                        ui.spinner();
-                        ui.add_space(6.0);
-                    }
-                    if !self.status.is_empty() {
-                        ui.label(
-                            RichText::new(&self.status)
-                                .font(FontId::proportional(11.5))
-                                .color(c::MUTED),
-                        );
-                    }
+        // Footer pinned to bottom via remaining-space allocation.
+        let footer_h = 88.0;
+        let gap = (ui.available_height() - footer_h).max(8.0);
+        ui.add_space(gap);
+
+        ui.separator();
+        ui.add_space(8.0);
+        if let Some(user) = &self.user {
+            Frame::new()
+                .fill(c::PANEL)
+                .stroke(Stroke::new(1.0_f32, c::BORDER))
+                .corner_radius(CornerRadius::same(6))
+                .inner_margin(10.0)
+                .show(ui, |ui| {
+                    ui.set_min_width(ui.available_width());
+                    ui.label(
+                        RichText::new(&user.username)
+                            .strong()
+                            .size(13.0)
+                            .color(c::TEXT),
+                    );
+                    ui.label(
+                        RichText::new(&user.role.name)
+                            .size(11.5)
+                            .color(c::ACCENT),
+                    );
                 });
-            },
-        );
-
-        ui.allocate_rect(bar, Sense::hover());
+        } else {
+            ui.label(
+                RichText::new("Nicht angemeldet")
+                    .size(12.0)
+                    .color(c::FAINT),
+            );
+        }
+        ui.add_space(4.0);
+        if ui
+            .add(
+                egui::Button::new(
+                    RichText::new("Nach Updates suchen")
+                        .size(12.0)
+                        .color(c::MUTED),
+                )
+                .fill(Color32::TRANSPARENT)
+                .stroke(Stroke::NONE),
+            )
+            .clicked()
+        {
+            let _ = self.update_cmd.send(UpdateCmd::Check);
+            self.update_state = UpdateState::Checking;
+        }
     }
 
-    fn sidebar(&mut self, ui: &mut Ui) {
-        let height = ui.available_height();
-        Frame::new()
-            .fill(c::BG_ELEV)
-            .stroke(Stroke::new(1.0_f32, c::BORDER_SOFT))
-            .inner_margin(Margin::symmetric(12, 16))
-            .show(ui, |ui| {
-                ui.set_min_width(SIDEBAR_W - 1.0);
-                ui.set_min_height(height);
-
-                ui.label(
-                    RichText::new("NAVIGATION")
-                        .font(FontId::proportional(10.5))
-                        .color(c::FAINT),
-                );
-                ui.add_space(8.0);
-
-                if self.screen == Screen::Home {
-                    nav_item(ui, &mut self.tab, HomeTab::Overview, "Übersicht", "Cluster & Ressourcen");
-                    nav_item(ui, &mut self.tab, HomeTab::Hosts, "Hosts", "Proxmox-Knoten");
-                    nav_item(ui, &mut self.tab, HomeTab::Guests, "Gäste", "VMs & Container");
-                    ui.add_space(16.0);
-                    ui.separator();
-                    ui.add_space(10.0);
-                    if ui.add(ghost_btn("Aktualisieren")).clicked() {
-                        self.enqueue(JobKind::Refresh);
-                    }
-                    ui.add_space(4.0);
-                    if ui.add(ghost_btn("Abmelden")).clicked() {
-                        self.enqueue(JobKind::Logout);
-                    }
-                } else {
-                    ui.label(
-                        RichText::new("Anmeldung")
-                            .color(c::MUTED)
-                            .size(13.0),
-                    );
-                    ui.add_space(6.0);
-                    if !self.prefs.server_url.is_empty() {
-                        ui.label(
-                            RichText::new(&self.prefs.server_url)
-                                .font(FontId::monospace(11.0))
-                                .color(c::FAINT),
-                        );
-                    }
-                }
-
-                ui.with_layout(Layout::bottom_up(Align::LEFT), |ui| {
-                    ui.add_space(8.0);
-                    if let Some(user) = &self.user {
-                        Frame::new()
-                            .fill(c::PANEL)
-                            .stroke(Stroke::new(1.0_f32, c::BORDER))
-                            .corner_radius(CornerRadius::same(6))
-                            .inner_margin(10.0)
-                            .show(ui, |ui| {
-                                ui.label(
-                                    RichText::new(&user.username)
-                                        .strong()
-                                        .size(13.0)
-                                        .color(c::TEXT),
-                                );
-                                ui.label(
-                                    RichText::new(&user.role.name)
-                                        .size(11.5)
-                                        .color(c::ACCENT),
-                                );
+    fn paint_update_banner(&mut self, ui: &mut Ui) {
+        let mut release_open: Option<String> = None;
+        match &self.update_state.clone() {
+            UpdateState::Available(info) => {
+                Frame::new()
+                    .fill(Color32::from_rgb(14, 32, 26))
+                    .inner_margin(Margin::symmetric(16, 8))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(format!("●  Update v{} verfügbar", info.version))
+                                    .color(c::ACCENT)
+                                    .size(13.0),
+                            );
+                            ui.label(
+                                RichText::new(format!("(aktuell v{APP_VERSION})"))
+                                    .color(c::MUTED)
+                                    .size(12.0),
+                            );
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                if ui.add(primary_btn("Aktualisieren")).clicked() {
+                                    let _ = self.update_cmd.send(UpdateCmd::Download(info.clone()));
+                                }
+                                if ui.button("Release").clicked() {
+                                    release_open = Some(info.release_url.clone());
+                                }
                             });
-                    } else {
-                        ui.label(
-                            RichText::new("Nicht angemeldet")
-                                .size(12.0)
-                                .color(c::FAINT),
+                        });
+                    });
+            }
+            UpdateState::Downloading { info, progress } => {
+                Frame::new()
+                    .fill(c::PANEL)
+                    .inner_margin(Margin::symmetric(16, 8))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label(format!(
+                                "Download v{} · {:.0}%",
+                                info.version,
+                                progress * 100.0
+                            ));
+                        });
+                        let p = *progress;
+                        ui.add(
+                            egui::ProgressBar::new(p)
+                                .desired_width(ui.available_width())
+                                .fill(c::ACCENT),
                         );
-                    }
-                    ui.add_space(8.0);
-                    if ui
-                        .add(
-                            egui::Button::new(
-                                RichText::new("Nach Updates suchen")
-                                    .size(12.0)
-                                    .color(c::MUTED),
-                            )
-                            .fill(Color32::TRANSPARENT)
-                            .stroke(Stroke::NONE),
-                        )
-                        .clicked()
-                    {
-                        let _ = self.update_cmd.send(UpdateCmd::Check);
-                        self.update_state = UpdateState::Checking;
-                    }
-                });
-            });
+                    });
+            }
+            UpdateState::ReadyToInstall { info, path } => {
+                let path = path.clone();
+                let ver = info.version.clone();
+                Frame::new()
+                    .fill(Color32::from_rgb(32, 28, 14))
+                    .inner_margin(Margin::symmetric(16, 8))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(format!("v{ver} bereit zur Installation"))
+                                    .color(c::WARN),
+                            );
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                if ui.add(primary_btn("Installieren & Neustart")).clicked() {
+                                    let _ = self.update_cmd.send(UpdateCmd::Install { path });
+                                }
+                            });
+                        });
+                    });
+            }
+            UpdateState::Error(err) => {
+                Frame::new()
+                    .fill(Color32::from_rgb(36, 16, 16))
+                    .inner_margin(Margin::symmetric(16, 8))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(format!("Updater: {err}"))
+                                    .color(c::DANGER)
+                                    .size(12.5),
+                            );
+                            if ui.button("Erneut").clicked() {
+                                let _ = self.update_cmd.send(UpdateCmd::Check);
+                            }
+                        });
+                    });
+            }
+            _ => {}
+        }
+        if let Some(url) = release_open {
+            updater::open_url(&url);
+        }
     }
 }
 
@@ -514,139 +584,53 @@ impl eframe::App for ProxoraApp {
             ctx.request_repaint_after(std::time::Duration::from_millis(80));
         }
 
-        egui::CentralPanel::default()
-            .frame(Frame::new().fill(c::BG).inner_margin(0.0))
+        egui::TopBottomPanel::top("proxora_title")
+            .exact_height(TITLEBAR_H)
+            .frame(Frame::new().fill(c::TITLEBAR).inner_margin(0.0))
+            .show_separator_line(false)
             .show(ctx, |ui| {
-                self.title_bar(ui, ctx);
+                self.paint_title_bar(ui, ctx);
+            });
 
-                // Update banner strip
-                let mut release_open: Option<String> = None;
-                ui.horizontal(|ui| {
-                    ui.add_space(0.0);
+        if !matches!(
+            self.update_state,
+            UpdateState::UpToDate | UpdateState::Checking
+        ) {
+            egui::TopBottomPanel::top("proxora_update")
+                .frame(Frame::new().fill(c::BG).inner_margin(0.0))
+                .show_separator_line(false)
+                .show(ctx, |ui| {
+                    self.paint_update_banner(ui);
                 });
-                {
-                    // banner with open-release fix
-                    match &self.update_state.clone() {
-                        UpdateState::Available(info) => {
-                            Frame::new()
-                                .fill(Color32::from_rgb(14, 32, 26))
-                                .inner_margin(Margin::symmetric(16, 8))
-                                .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.label(
-                                            RichText::new(format!(
-                                                "●  Update v{} verfügbar",
-                                                info.version
-                                            ))
-                                            .color(c::ACCENT)
-                                            .size(13.0),
-                                        );
-                                        ui.label(
-                                            RichText::new(format!("(aktuell v{APP_VERSION})"))
-                                                .color(c::MUTED)
-                                                .size(12.0),
-                                        );
-                                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                            if ui.add(primary_btn("Aktualisieren")).clicked() {
-                                                let _ = self
-                                                    .update_cmd
-                                                    .send(UpdateCmd::Download(info.clone()));
-                                            }
-                                            if ui.button("Release").clicked() {
-                                                release_open = Some(info.release_url.clone());
-                                            }
-                                        });
-                                    });
-                                });
-                        }
-                        UpdateState::Downloading { info, progress } => {
-                            Frame::new()
-                                .fill(c::PANEL)
-                                .inner_margin(Margin::symmetric(16, 8))
-                                .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.spinner();
-                                        ui.label(format!(
-                                            "Download v{} · {:.0}%",
-                                            info.version,
-                                            progress * 100.0
-                                        ));
-                                    });
-                                    let p = *progress;
-                                    ui.add(
-                                        egui::ProgressBar::new(p)
-                                            .desired_width(ui.available_width())
-                                            .fill(c::ACCENT),
-                                    );
-                                });
-                        }
-                        UpdateState::ReadyToInstall { info, path } => {
-                            let path = path.clone();
-                            let ver = info.version.clone();
-                            Frame::new()
-                                .fill(Color32::from_rgb(32, 28, 14))
-                                .inner_margin(Margin::symmetric(16, 8))
-                                .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.label(
-                                            RichText::new(format!("v{ver} bereit zur Installation"))
-                                                .color(c::WARN),
-                                        );
-                                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                            if ui
-                                                .add(primary_btn("Installieren & Neustart"))
-                                                .clicked()
-                                            {
-                                                let _ = self
-                                                    .update_cmd
-                                                    .send(UpdateCmd::Install { path });
-                                            }
-                                        });
-                                    });
-                                });
-                        }
-                        UpdateState::Error(err) => {
-                            Frame::new()
-                                .fill(Color32::from_rgb(36, 16, 16))
-                                .inner_margin(Margin::symmetric(16, 8))
-                                .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.label(
-                                            RichText::new(format!("Updater: {err}"))
-                                                .color(c::DANGER)
-                                                .size(12.5),
-                                        );
-                                        if ui.button("Erneut").clicked() {
-                                            let _ = self.update_cmd.send(UpdateCmd::Check);
-                                        }
-                                    });
-                                });
-                        }
-                        _ => {}
-                    }
-                }
-                if let Some(url) = release_open {
-                    updater::open_url(&url);
-                }
+        }
 
-                ui.horizontal(|ui| {
-                    ui.set_min_height(ui.available_height());
-                    self.sidebar(ui);
+        egui::SidePanel::left("proxora_sidebar")
+            .exact_width(SIDEBAR_W)
+            .resizable(false)
+            .frame(
+                Frame::new()
+                    .fill(c::BG_ELEV)
+                    .stroke(Stroke::new(1.0_f32, c::BORDER_SOFT))
+                    .inner_margin(Margin::symmetric(14, 16)),
+            )
+            .show_separator_line(false)
+            .show(ctx, |ui| {
+                self.paint_sidebar(ui);
+            });
 
-                    Frame::new()
-                        .fill(c::BG)
-                        .inner_margin(Margin::symmetric(22, 18))
-                        .show(ui, |ui| {
-                            ui.set_min_width(ui.available_width());
-                            ui.set_min_height(ui.available_height());
-                            match self.screen {
-                                Screen::Setup => self.ui_setup(ui),
-                                Screen::Login => self.ui_login(ui),
-                                Screen::Totp => self.ui_totp(ui),
-                                Screen::Home => self.ui_home(ui),
-                            }
-                        });
-                });
+        egui::CentralPanel::default()
+            .frame(
+                Frame::new()
+                    .fill(c::BG)
+                    .inner_margin(Margin::symmetric(28, 24)),
+            )
+            .show(ctx, |ui| {
+                match self.screen {
+                    Screen::Setup => self.ui_setup(ui),
+                    Screen::Login => self.ui_login(ui),
+                    Screen::Totp => self.ui_totp(ui),
+                    Screen::Home => self.ui_home(ui),
+                }
             });
     }
 }
@@ -993,27 +977,37 @@ fn action_btn(ui: &mut Ui, busy: bool, label: &str, color: Color32, on_click: im
 }
 
 fn auth_shell(ui: &mut Ui, title: &str, subtitle: &str, add_contents: impl FnOnce(&mut Ui)) {
-    ui.vertical_centered(|ui| {
-        ui.add_space(ui.available_height() * 0.08);
-        Frame::new()
-            .fill(c::PANEL)
-            .stroke(Stroke::new(1.0_f32, c::BORDER))
-            .corner_radius(CornerRadius::same(10))
-            .shadow(Shadow {
-                offset: [0, 8],
-                blur: 24,
-                spread: 0,
-                color: Color32::from_black_alpha(80),
-            })
-            .inner_margin(Margin::symmetric(28, 24))
-            .show(ui, |ui| {
-                ui.set_max_width(440.0);
-                ui.label(RichText::new(title).size(22.0).strong().color(c::TEXT));
-                ui.label(RichText::new(subtitle).size(13.0).color(c::MUTED));
-                ui.add_space(16.0);
-                add_contents(ui);
-            });
-    });
+    let card_w = 440.0_f32;
+    // Center card in the available central panel area.
+    let avail = ui.available_rect_before_wrap();
+    let left = avail.left() + ((avail.width() - card_w) * 0.5).max(0.0);
+    let top = avail.top() + (avail.height() * 0.12).clamp(24.0, 120.0);
+    ui.scope_builder(
+        egui::UiBuilder::new().max_rect(Rect::from_min_size(
+            Pos2::new(left, top),
+            Vec2::new(card_w.min(avail.width()), avail.height()),
+        )),
+        |ui| {
+            Frame::new()
+                .fill(c::PANEL)
+                .stroke(Stroke::new(1.0_f32, c::BORDER))
+                .corner_radius(CornerRadius::same(10))
+                .shadow(Shadow {
+                    offset: [0, 8],
+                    blur: 24,
+                    spread: 0,
+                    color: Color32::from_black_alpha(80),
+                })
+                .inner_margin(Margin::symmetric(28, 24))
+                .show(ui, |ui| {
+                    ui.set_width(card_w.min(avail.width()) - 4.0);
+                    ui.label(RichText::new(title).size(22.0).strong().color(c::TEXT));
+                    ui.label(RichText::new(subtitle).size(13.0).color(c::MUTED));
+                    ui.add_space(16.0);
+                    add_contents(ui);
+                });
+        },
+    );
 }
 
 fn labeled_field(ui: &mut Ui, label: &str, add_contents: impl FnOnce(&mut Ui)) {

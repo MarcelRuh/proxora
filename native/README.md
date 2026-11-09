@@ -61,4 +61,4 @@ Beim Start (und über „Nach Updates suchen“) prüft der Client `MarcelRuh/pr
 
 ## Version
 
-Aktuell: **0.2.0** (`Cargo.toml`).
+Aktuell: **0.2.1** (`Cargo.toml`).

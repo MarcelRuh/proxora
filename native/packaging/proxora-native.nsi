@@ -3,7 +3,7 @@
 !include "FileFunc.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "0.2.0"
+  !define APP_VERSION "0.2.1"
 !endif
 !ifndef SOURCE_EXE
   !define SOURCE_EXE "..\target\release\proxora-native.exe"
