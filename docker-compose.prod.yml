@@ -15,7 +15,7 @@ services:
       retries: 10
 
   proxora:
-    image: ghcr.io/marcelruh/proxora:${PROXORA_VERSION:-2.4.17}
+    image: ghcr.io/marcelruh/proxora:${PROXORA_VERSION:-2.4.18}
     build: .
     container_name: proxora
     restart: unless-stopped
@@ -38,12 +38,14 @@ services:
       PROXORA_REPO: ${PROXORA_REPO:-MarcelRuh/proxora}
       PROXORA_BRANCH: ${PROXORA_BRANCH:-main}
       PROXORA_UPDATE_SIGNAL_DIR: /update-signal
+      PROXORA_CACHE_DIR: /var/lib/proxora
       WG_CONFIG_DIR: /wireguard
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       PROXORA_TELEMETRY: ${PROXORA_TELEMETRY:-1}
     volumes:
       - proxora_update_signal:/update-signal
       - proxora_wireguard:/wireguard
+      - proxora_data:/var/lib/proxora
     cap_add:
       - NET_ADMIN
     device_cgroup_rules:
@@ -98,3 +100,5 @@ volumes:
     name: proxora_update_signal
   proxora_wireguard:
     name: proxora_wireguard
+  proxora_data:
+    name: proxora_data

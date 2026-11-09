@@ -19,6 +19,8 @@ export const GET = apiRoute(null, async (req) => {
     current,
     latest,
     updateAvailable,
-    apkPath: updateAvailable ? "/api/android/apk" : null,
+    // Always expose the proxy path when an APK exists so older shells can still update
+    // for bridge fixes even when the semver already matches.
+    apkPath: apkUrl ? "/api/android/apk" : null,
   });
 });

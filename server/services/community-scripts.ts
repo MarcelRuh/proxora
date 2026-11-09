@@ -1,3 +1,5 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import {
   COMMUNITY_SCRIPTS_CATEGORIES_DB,
   COMMUNITY_SCRIPTS_DB,
@@ -17,6 +19,8 @@ import { logger } from "@/lib/logger";
 const CACHE_TTL_MS = 6 * 60 * 60_000;
 const PER_PAGE = 200;
 const MAX_PAGES = 20;
+const DISK_CACHE_DIR = process.env.PROXORA_CACHE_DIR ?? "/var/lib/proxora";
+const DISK_CACHE_PATH = path.join(DISK_CACHE_DIR, "community-scripts-catalog.json");
 
 type CatalogCache = {
   fetchedAt: number;
@@ -26,6 +30,28 @@ type CatalogCache = {
 
 let cache: CatalogCache | null = null;
 let inflight: Promise<CatalogCache> | null = null;
+let servedStale = false;
+
+async function readDiskCache(): Promise<CatalogCache | null> {
+  try {
+    const raw = await readFile(DISK_CACHE_PATH, "utf8");
+    const parsed = JSON.parse(raw) as CatalogCache;
+    if (!parsed || !Array.isArray(parsed.scripts) || !Array.isArray(parsed.categories)) return null;
+    if (typeof parsed.fetchedAt !== "number") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function writeDiskCache(next: CatalogCache): Promise<void> {
+  try {
+    await mkdir(DISK_CACHE_DIR, { recursive: true });
+    await writeFile(DISK_CACHE_PATH, `${JSON.stringify(next)}\n`, "utf8");
+  } catch (error) {
+    logger.warn({ err: error }, "Community Scripts disk cache write failed");
+  }
+}
 
 async function fetchJson(url: string): Promise<unknown> {
   const res = await fetch(url, {
@@ -84,18 +110,41 @@ async function fetchCategories(): Promise<CommunityScriptCategory[]> {
   return out.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 }
 
+async function ensureMemoryCache(): Promise<void> {
+  if (cache) return;
+  const disk = await readDiskCache();
+  if (disk) {
+    cache = disk;
+    servedStale = Date.now() - disk.fetchedAt >= CACHE_TTL_MS;
+  }
+}
+
 async function loadCatalog(force = false): Promise<CatalogCache> {
-  if (!force && cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) return cache;
+  await ensureMemoryCache();
+  if (!force && cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
+    servedStale = false;
+    return cache;
+  }
   if (!force && inflight) return inflight;
   inflight = (async () => {
     try {
       const [scripts, categories] = await Promise.all([fetchAllScripts(), fetchCategories()]);
       cache = { fetchedAt: Date.now(), scripts, categories };
+      servedStale = false;
+      await writeDiskCache(cache);
       return cache;
     } catch (error) {
       if (cache) {
+        servedStale = true;
         logger.warn({ err: error }, "Community Scripts refresh failed; using stale cache");
         return cache;
+      }
+      const disk = await readDiskCache();
+      if (disk) {
+        cache = disk;
+        servedStale = true;
+        logger.warn({ err: error }, "Community Scripts refresh failed; using disk cache");
+        return disk;
       }
       throw error;
     } finally {
@@ -115,6 +164,7 @@ export async function listCommunityScripts(opts?: {
   categories: CommunityScriptCategory[];
   fetchedAt: number;
   total: number;
+  stale: boolean;
 }> {
   const catalog = await loadCatalog(opts?.force === true);
   const filtered = filterCommunityScripts(catalog.scripts, {
@@ -127,6 +177,7 @@ export async function listCommunityScripts(opts?: {
     categories: catalog.categories,
     fetchedAt: catalog.fetchedAt,
     total: catalog.scripts.length,
+    stale: servedStale || Date.now() - catalog.fetchedAt >= CACHE_TTL_MS,
   };
 }
 

@@ -31,10 +31,12 @@ services:
       PROXORA_REPO: ${PROXORA_REPO:-MarcelRuh/proxora}
       PROXORA_BRANCH: ${PROXORA_BRANCH:-main}
       PROXORA_UPDATE_SIGNAL_DIR: /update-signal
+      PROXORA_CACHE_DIR: /var/lib/proxora
       WG_CONFIG_DIR: /wireguard
     volumes:
       - proxora_update_signal:/update-signal
       - proxora_wireguard:/wireguard
+      - proxora_data:/var/lib/proxora
     cap_add:
       - NET_ADMIN
     device_cgroup_rules:
@@ -89,3 +91,5 @@ volumes:
     name: proxora_update_signal
   proxora_wireguard:
     name: proxora_wireguard
+  proxora_data:
+    name: proxora_data

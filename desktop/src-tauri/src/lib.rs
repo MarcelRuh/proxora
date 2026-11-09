@@ -245,12 +245,25 @@ pub fn run() {
 
       let prefs = app.state::<AppState>().prefs.lock().expect("prefs lock").clone();
 
+      let app_version = env!("CARGO_PKG_VERSION");
+      let desktop_ua = format!(
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 ProxoraDesktop/{app_version}"
+      );
+      // Injected into every page (including the remote Proxora UI) so web code can
+      // open external https links without relying on window.open.
+      let desktop_bridge = format!(
+        r#"window.ProxoraDesktop=Object.assign(window.ProxoraDesktop||{{}},{{version:{version:?},openExternal:function(u){{try{{window.location.assign(String(u||""));}}catch(e){{}}}}}});"#,
+        version = app_version
+      );
+
       let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
         .title("Proxora")
         .inner_size(1280.0, 800.0)
         .min_inner_size(900.0, 600.0)
         .resizable(true)
         .center()
+        .user_agent(&desktop_ua)
+        .initialization_script_for_all_frames(&desktop_bridge)
         .on_navigation({
           let handle = handle.clone();
           move |url| {

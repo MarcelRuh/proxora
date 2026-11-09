@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.18] – 2026-11-09
+
+### Added
+
+- Community Scripts details show port/flags, docs/project/source links, copyable install command, stale-cache hint, and clearer install toasts.
+- Persistent Community Scripts catalog cache under `/var/lib/proxora` (survives restarts / upstream outages).
+- Android banner when the WebView shell is missing `openExternal` (update APK for working external links).
+- Desktop shell identifies as `ProxoraDesktop/<version>` and injects `window.ProxoraDesktop.openExternal`.
+
+### Fixed
+
+- External https opening prefers native bridges, then shell-intercepted navigation.
+
 ## [2.4.17] – 2026-11-09
 
 ### Fixed

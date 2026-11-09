@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ExternalLink, Play, RefreshCw, Search } from "lucide-react";
+import { Copy, ExternalLink, Play, RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ import {
   communityScriptInstallCommand,
   communityScriptLogoSrc,
   communityScriptPageUrl,
+  communityScriptRawUrl,
 } from "@/lib/community-scripts";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,7 @@ type CatalogResponse = {
   categories: CommunityScriptCategory[];
   fetchedAt: number;
   total: number;
+  stale?: boolean;
 };
 
 type RunResponse = {
@@ -81,6 +83,28 @@ function ScriptLogo({ name, logo }: { name: string; logo: string | null }) {
   );
 }
 
+async function copyText(value: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    try {
+      const area = document.createElement("textarea");
+      area.value = value;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.left = "-9999px";
+      document.body.appendChild(area);
+      area.select();
+      const ok = document.execCommand("copy");
+      area.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
 export function CommunityScriptsPanel({
   hosts,
   hostId,
@@ -119,7 +143,7 @@ export function CommunityScriptsPanel({
   const canRun = Boolean(canConsole && hostOnline && peerOk && hostId);
 
   const catalogKey = ["community-scripts", debounced, categoryId, kind] as const;
-  const { data, isLoading, isFetching, error, refetch } = useQuery({
+  const { data, isLoading, isFetching, error, refetch, isError } = useQuery({
     queryKey: catalogKey,
     queryFn: () => {
       const params = new URLSearchParams();
@@ -140,6 +164,21 @@ export function CommunityScriptsPanel({
     return (ids: string[]) => ids.map((id) => map.get(id)).filter(Boolean).join(", ");
   }, [categories]);
 
+  async function refreshCatalog() {
+    const params = new URLSearchParams();
+    if (debounced) params.set("q", debounced);
+    if (categoryId) params.set("category", categoryId);
+    if (kind !== "all") params.set("kind", kind);
+    params.set("refresh", "1");
+    try {
+      await api<CatalogResponse>(`/api/community-scripts?${params}`);
+      await refetch();
+      toast.success(t("cs.refreshDone"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("cs.loadFailed"));
+    }
+  }
+
   async function startInstall(script: CommunityScriptSummary) {
     if (!canRun || running) return;
     setRunning(true);
@@ -155,11 +194,18 @@ export function CommunityScriptsPanel({
         command: result.command,
         name: result.script.name,
       });
+      toast.success(t("cs.installStarted", { name: result.script.name }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("common.failed"));
+      toast.error(err instanceof Error ? err.message : t("cs.installFailed"));
     } finally {
       setRunning(false);
     }
+  }
+
+  function openLink(url: string, label: string) {
+    const ok = openExternalUrl(url);
+    if (ok) toast.message(t("cs.openingLink", { label }));
+    else toast.error(t("cs.openLinkFailed"));
   }
 
   return (
@@ -216,23 +262,18 @@ export function CommunityScriptsPanel({
           size="icon"
           title={t("cs.refresh")}
           disabled={isFetching}
-          onClick={() => void refetch()}
+          onClick={() => void refreshCatalog()}
         >
           <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
         </Button>
-        <Button asChild variant="outline" className="gap-1 text-muted-foreground">
-          <a
-            href={COMMUNITY_SCRIPTS_SITE}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(event) => {
-              event.preventDefault();
-              openExternalUrl(COMMUNITY_SCRIPTS_SITE);
-            }}
-          >
-            community-scripts.org
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
+        <Button
+          type="button"
+          variant="outline"
+          className="gap-1 text-muted-foreground"
+          onClick={() => openLink(COMMUNITY_SCRIPTS_SITE, "community-scripts.org")}
+        >
+          community-scripts.org
+          <ExternalLink className="h-3.5 w-3.5" />
         </Button>
       </div>
 
@@ -248,10 +289,19 @@ export function CommunityScriptsPanel({
         </p>
       ) : null}
 
-      {error ? <p className="text-sm text-destructive">{t("cs.loadFailed")}</p> : null}
+      {data?.stale ? <p className="text-sm text-warning">{t("cs.staleCache")}</p> : null}
+
+      {isError ? (
+        <div className="flex flex-wrap items-center gap-2 text-sm text-destructive">
+          <span>{error instanceof Error ? error.message : t("cs.loadFailed")}</span>
+          <Button type="button" size="sm" variant="outline" onClick={() => void refreshCatalog()}>
+            {t("cs.retry")}
+          </Button>
+        </div>
+      ) : null}
       {isLoading ? <p className="text-sm text-muted-foreground">{t("common.loading")}</p> : null}
 
-      {!isLoading && scripts.length === 0 ? (
+      {!isLoading && !isError && scripts.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("cs.empty")}</p>
       ) : null}
 
@@ -316,26 +366,67 @@ export function CommunityScriptsPanel({
                 <ScriptLogo name={detail.name} logo={detail.logo} />
                 <p className="text-muted-foreground">{detail.description || "—"}</p>
               </div>
-              {resourcesLabel(detail) ? (
-                <p className="text-xs text-muted-foreground">{resourcesLabel(detail)}</p>
-              ) : null}
-              <p className="break-all rounded-[4px] border border-border bg-white/[0.03] p-2 font-mono text-[11px]">
-                {communityScriptInstallCommand(detail.kind, detail.slug)}
-              </p>
-              <div className="flex flex-wrap justify-end gap-2">
-                <Button asChild variant="outline">
-                  <a
-                    href={communityScriptPageUrl(detail.slug)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      openExternalUrl(communityScriptPageUrl(detail.slug));
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {resourcesLabel(detail) ? <span>{resourcesLabel(detail)}</span> : null}
+                {detail.port ? <span>{t("cs.port", { port: String(detail.port) })}</span> : null}
+                {detail.privileged ? <span>{t("cs.privileged")}</span> : null}
+                {detail.updateable ? <span>{t("cs.updateable")}</span> : null}
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-muted-foreground">{t("cs.installCommand")}</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2"
+                    onClick={() => {
+                      void copyText(communityScriptInstallCommand(detail.kind, detail.slug)).then((ok) => {
+                        if (ok) toast.success(t("cs.copied"));
+                        else toast.error(t("cs.copyFailed"));
+                      });
                     }}
                   >
-                    {t("cs.openWebsite")}
+                    <Copy className="mr-1 h-3.5 w-3.5" />
+                    {t("cs.copy")}
+                  </Button>
+                </div>
+                <p className="break-all rounded-[4px] border border-border bg-white/[0.03] p-2 font-mono text-[11px]">
+                  {communityScriptInstallCommand(detail.kind, detail.slug)}
+                </p>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                {detail.documentation ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => openLink(detail.documentation!, t("cs.openDocs"))}
+                  >
+                    {t("cs.openDocs")}
                     <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
+                  </Button>
+                ) : null}
+                {detail.website ? (
+                  <Button type="button" variant="outline" onClick={() => openLink(detail.website!, t("cs.openProject"))}>
+                    {t("cs.openProject")}
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => openLink(communityScriptPageUrl(detail.slug), t("cs.openWebsite"))}
+                >
+                  {t("cs.openWebsite")}
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => openLink(communityScriptRawUrl(detail.kind, detail.slug), t("cs.openSource"))}
+                >
+                  {t("cs.openSource")}
+                  <ExternalLink className="h-3.5 w-3.5" />
                 </Button>
                 <Button
                   type="button"
