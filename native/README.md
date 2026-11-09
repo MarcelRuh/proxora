@@ -19,7 +19,25 @@ Zielbild: langfristig die Web-Oberfläche ersetzen. Heute: MVP mit denselben Ker
 - Linux: typische egui/OpenGL-Deps (`libgtk-3`, Mesa/GL)
 - Laufende Proxora-Instanz (z. B. `http://192.168.178.246:3000`)
 
-## Start
+## Windows-Installer
+
+CI baut unter Tags `v*` / `native-v*` (oder manuell via Workflow **Native Client**):
+
+- `ProxoraNative_<version>_x64-setup.exe` — NSIS-Installer
+- `ProxoraNative_<version>_x64-portable.zip` — portable `.exe`
+
+Workflow manuell starten:
+
+```bash
+gh workflow run native-client.yml
+gh run watch
+```
+
+Artifacts danach unter dem Run herunterladen, oder vom GitHub Release.
+
+> Nicht verwechseln mit dem **Tauri-WebView**-Installer `Proxora_*_x64-setup.exe` (lädt die Web-UI).
+
+## Start (Entwicklung)
 
 ```bash
 cd native
