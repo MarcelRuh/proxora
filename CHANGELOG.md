@@ -4,12 +4,19 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.15] – 2026-11-09
+
+### Fixed
+
+- Community Scripts Details dialog finally ships in the live image (2.4.13/2.4.14 CI/image builds were blocked).
+- Docker image build aborts unless `.next/BUILD_ID` exists; build context ignores desktop/Android artifacts.
+- CI production build retries once when `next/font` Google downloads flake under Turbopack.
+
 ## [2.4.14] – 2026-11-09
 
 ### Fixed
 
-- Production `next build` uses webpack again so Google-font fetches no longer fail under Turbopack in CI (unblocks the GHCR image that ships the Community Scripts Details dialog).
-- Docker build context ignores desktop/Android artifacts so local image builds do not fill the disk.
+- Attempted webpack production build + Docker context ignores (superseded by 2.4.15; webpack breaks `@novnc/novnc` top-level await).
 
 ## [2.4.13] – 2026-11-09
 

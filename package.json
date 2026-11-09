@@ -1,6 +1,6 @@
 {
   "name": "proxora",
-  "version": "2.4.14",
+  "version": "2.4.15",
   "private": true,
   "description": "Proxora – central management for independent Proxmox VE hosts",
   "license": "MIT",
@@ -13,7 +13,7 @@
     "dev": "concurrently -k \"next dev --turbopack\" \"tsx server/ws/standalone.ts\"",
     "dev:web": "next dev --turbopack",
     "dev:ws": "tsx server/ws/standalone.ts",
-    "build": "prisma generate && next build --webpack && npm run build:server && npm run build:seed",
+    "build": "prisma generate && next build && npm run build:server && npm run build:seed",
     "build:server": "esbuild server/index.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/server.cjs --tsconfig=tsconfig.json",
     "build:seed": "esbuild prisma/seed.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/seed.cjs --tsconfig=tsconfig.json",
     "start": "node dist/server.cjs",

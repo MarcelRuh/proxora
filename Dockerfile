@@ -22,17 +22,19 @@ ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
 ENV DATABASE_URL="postgresql://proxora:proxora@127.0.0.1:5432/proxora?schema=public"
 ENV ENCRYPTION_KEY="build-time-placeholder-not-a-real-secret-key"
 ENV SESSION_SECRET="build-time-placeholder-not-a-real-session-secret"
-RUN npx prisma generate \
-  && npm run build \
-  && npm prune --omit=dev \
-  && rm -rf /root/.npm /tmp/* .next/cache .next/dev \
-  && find .next -type f -name '*.map' -delete 2>/dev/null || true \
-  && find node_modules -type f \( \
+RUN set -eux; \
+  npx prisma generate; \
+  npm run build; \
+  test -f .next/BUILD_ID; \
+  npm prune --omit=dev; \
+  rm -rf /root/.npm /tmp/* .next/cache .next/dev; \
+  find .next -type f -name '*.map' -delete 2>/dev/null || true; \
+  find node_modules -type f \( \
        -name '*.md' -o -name '*.markdown' -o -name 'CHANGELOG*' -o -name 'LICENSE*' -o -name '*.map' \
-     \) -delete 2>/dev/null || true \
-  && find node_modules -type d \( -name 'test' -o -name 'tests' -o -name '__tests__' -o -name 'docs' \) \
-       -prune -exec rm -rf {} + 2>/dev/null || true \
-  && rm -rf \
+     \) -delete 2>/dev/null || true; \
+  find node_modules -type d \( -name 'test' -o -name 'tests' -o -name '__tests__' -o -name 'docs' \) \
+       -prune -exec rm -rf {} + 2>/dev/null || true; \
+  rm -rf \
        node_modules/@next/swc-linux-x64-musl \
        node_modules/@img/sharp-libvips-linuxmusl-x64 \
        node_modules/@img/sharp-linuxmusl-x64 \
