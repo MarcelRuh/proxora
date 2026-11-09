@@ -1,6 +1,6 @@
 [package]
 name = "proxora-desktop"
-version = "2.4.12"
+version = "2.4.13"
 description = "Proxora desktop client"
 authors = ["Silence <96293418+MarcelRuh@users.noreply.github.com>"]
 edition = "2021"

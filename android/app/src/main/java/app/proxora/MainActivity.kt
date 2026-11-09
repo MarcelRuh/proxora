@@ -416,10 +416,10 @@ class MainActivity : AppCompatActivity() {
   private fun attachClients(view: WebView) {
     view.webViewClient = object : WebViewClient() {
       @Suppress("OVERRIDE_DEPRECATION")
-      override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = handleUrl(url)
+      override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = handleUrl(url, view)
 
       override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-        handleUrl(request.url.toString())
+        handleUrl(request.url.toString(), view)
 
       override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
         if (view === webView) hideError()
@@ -526,12 +526,42 @@ class MainActivity : AppCompatActivity() {
     }
   }
 
-  private fun handleUrl(url: String): Boolean {
+  private fun handleUrl(url: String, fromView: WebView? = null): Boolean {
     val uri = Uri.parse(url)
     val scheme = uri.scheme?.lowercase() ?: return true
-    if (scheme == "http" || scheme == "https" || scheme == "blob" || scheme == "data") return false
+    if (scheme == "blob" || scheme == "data") return false
+    if (scheme == "http" || scheme == "https") {
+      val server = Prefs.serverUrl(this)
+      // Keep Proxora itself inside the WebView; open foreign sites in the system browser
+      // (target=_blank / community-scripts.org otherwise often land in a blank popup WebView).
+      if (server != null && pageBelongsToServer(server, url.trimEnd('/'))) {
+        return false
+      }
+      if (server != null) {
+        val serverUri = Uri.parse(server)
+        val sameHost = serverUri.host.equals(uri.host, ignoreCase = true)
+        val serverPort = if (serverUri.port != -1) serverUri.port else defaultHttpPort(serverUri.scheme)
+        val urlPort = if (uri.port != -1) uri.port else defaultHttpPort(uri.scheme)
+        if (sameHost && serverPort == urlPort) return false
+      }
+      return openExternal(uri, fromView)
+    }
+    return openExternal(uri, fromView)
+  }
+
+  private fun defaultHttpPort(scheme: String?): Int =
+    when (scheme?.lowercase()) {
+      "https" -> 443
+      "http" -> 80
+      else -> -1
+    }
+
+  private fun openExternal(uri: Uri, fromView: WebView?): Boolean {
     return try {
-      startActivity(Intent(Intent.ACTION_VIEW, uri))
+      startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+      if (fromView != null && fromView !== webView) {
+        extraWindows.lastOrNull()?.dismiss()
+      }
       true
     } catch (_: Exception) {
       true

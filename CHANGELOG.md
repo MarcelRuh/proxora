@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.13] – 2026-11-09
+
+### Fixed
+
+- Community Scripts Details opens an in-app dialog (no blank external WebView); Android opens foreign https links in the system browser.
+
 ## [2.4.12] – 2026-11-09
 
 ### Fixed

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ExternalLink, Play, RefreshCw, Search } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -26,6 +26,19 @@ import {
   communityScriptPageUrl,
 } from "@/lib/community-scripts";
 import { cn } from "@/lib/utils";
+
+function openExternalUrl(url: string) {
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+  if (!opened) {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+}
 
 type CatalogResponse = {
   scripts: CommunityScriptSummary[];
@@ -97,6 +110,7 @@ export function CommunityScriptsPanel({
   const [kind, setKind] = useState<CommunityScriptKind | "all">("all");
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [selected, setSelected] = useState<CommunityScriptSummary | null>(null);
+  const [detail, setDetail] = useState<CommunityScriptSummary | null>(null);
   const [running, setRunning] = useState(false);
   const [shell, setShell] = useState<{ hostId: string; node: string; command: string; name: string } | null>(
     null,
@@ -218,15 +232,15 @@ export function CommunityScriptsPanel({
         >
           <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
         </Button>
-        <a
-          href={COMMUNITY_SCRIPTS_SITE}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex h-9 items-center gap-1 rounded-[4px] border border-input px-3 text-sm text-muted-foreground hover:text-foreground"
+        <Button
+          type="button"
+          variant="outline"
+          className="gap-1 text-muted-foreground"
+          onClick={() => openExternalUrl(COMMUNITY_SCRIPTS_SITE)}
         >
           community-scripts.org
           <ExternalLink className="h-3.5 w-3.5" />
-        </a>
+        </Button>
       </div>
 
       {!canRun ? (
@@ -251,7 +265,6 @@ export function CommunityScriptsPanel({
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {shown.map((script) => {
           const resources = resourcesLabel(script);
-          const detailsUrl = communityScriptPageUrl(script.slug);
           return (
             <Card key={script.id} className="overflow-hidden">
               <CardContent className="flex h-full flex-col gap-3 p-4">
@@ -272,15 +285,9 @@ export function CommunityScriptsPanel({
                     <Play className="mr-1 h-3.5 w-3.5" />
                     {t("cs.install")}
                   </Button>
-                  <a
-                    href={detailsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-                  >
+                  <Button type="button" size="sm" variant="outline" onClick={() => setDetail(script)}>
                     {t("cs.details")}
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -301,6 +308,52 @@ export function CommunityScriptsPanel({
           {t("cs.count", { shown: String(Math.min(visible, scripts.length)), total: String(data.total) })}
         </p>
       ) : null}
+
+      <Dialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{detail?.name}</DialogTitle>
+            <DialogDescription>
+              {detail ? `${t(`cs.kind.${detail.kind}`)} · ${detail.slug}` : null}
+            </DialogDescription>
+          </DialogHeader>
+          {detail ? (
+            <div className="space-y-3 text-sm">
+              <div className="flex items-start gap-3">
+                <ScriptLogo name={detail.name} logo={detail.logo} />
+                <p className="text-muted-foreground">{detail.description || "—"}</p>
+              </div>
+              {resourcesLabel(detail) ? (
+                <p className="text-xs text-muted-foreground">{resourcesLabel(detail)}</p>
+              ) : null}
+              <p className="break-all rounded-[4px] border border-border bg-white/[0.03] p-2 font-mono text-[11px]">
+                {communityScriptInstallCommand(detail.kind, detail.slug)}
+              </p>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => openExternalUrl(communityScriptPageUrl(detail.slug))}
+                >
+                  {t("cs.openWebsite")}
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!canRun || running}
+                  onClick={() => {
+                    setDetail(null);
+                    setSelected(detail);
+                  }}
+                >
+                  <Play className="mr-1 h-3.5 w-3.5" />
+                  {t("cs.install")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
         <DialogContent className="max-w-lg">
