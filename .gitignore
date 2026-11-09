@@ -59,3 +59,4 @@ android/proxora-release.jks
 *.aab
 *.keystore
 *.jks
+.impeccable/
