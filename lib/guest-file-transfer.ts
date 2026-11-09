@@ -399,6 +399,8 @@ export type AndroidDownloadBridge = {
   finishDownload: (id: string) => void;
   abortDownload?: (id: string) => void;
   setCookieMaxAge?: (seconds: number) => void;
+  /** Opens http(s) URLs in the system browser (Android WebView). */
+  openExternal?: (url: string) => void;
 };
 
 export const ANDROID_DOWNLOAD_CHUNK = 24 * 1024;

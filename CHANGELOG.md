@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.16] – 2026-11-09
+
+### Fixed
+
+- Community Scripts „Website öffnen“ opens the system browser on Android (JS bridge + no blank WebView popup) and uses a real link click on desktop.
+
 ## [2.4.15] – 2026-11-09
 
 ### Fixed

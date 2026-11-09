@@ -2,7 +2,9 @@ package app.proxora
 
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.media.MediaScannerConnection
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.Handler
@@ -21,6 +23,29 @@ class AndroidDownloadBridge(context: Context) {
   private val jobs = ConcurrentHashMap<String, Job>()
 
   private data class Job(val file: File, val name: String, val mime: String)
+
+  /** Open foreign http(s) links in the system browser (avoids blank WebView popups). */
+  @JavascriptInterface
+  fun openExternal(url: String) {
+    val trimmed = url.trim()
+    if (trimmed.isEmpty()) return
+    val uri = try {
+      Uri.parse(trimmed)
+    } catch (_: Exception) {
+      return
+    }
+    val scheme = uri.scheme?.lowercase()
+    if (scheme != "http" && scheme != "https") return
+    main.post {
+      try {
+        app.startActivity(
+          Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+      } catch (_: Exception) {
+        toast(app.getString(R.string.error_body))
+      }
+    }
+  }
 
   @JavascriptInterface
   fun beginDownload(id: String, filename: String, mime: String) {

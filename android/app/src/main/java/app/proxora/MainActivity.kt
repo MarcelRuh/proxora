@@ -461,43 +461,49 @@ class MainActivity : AppCompatActivity() {
       }
 
       override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
-        val child = WebView(this@MainActivity)
-        ProxoraWeb.configure(child)
-        attachClients(child)
-        child.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
-          startDownload(url, userAgent, contentDisposition, mimeType)
+        // Catch target=_blank / window.open without showing a blank popup WebView.
+        // Foreign https → system browser; Proxora URLs → main WebView.
+        val catcher = WebView(this@MainActivity)
+        catcher.settings.javaScriptEnabled = true
+        catcher.webViewClient = object : WebViewClient() {
+          private fun capture(url: String): Boolean {
+            val trimmed = url.trim()
+            if (trimmed.isEmpty() || trimmed == "about:blank") return true
+            val server = Prefs.serverUrl(this@MainActivity)
+            val staysInApp = server != null && (
+              pageBelongsToServer(server, trimmed.trimEnd('/')) ||
+                run {
+                  val serverUri = Uri.parse(server)
+                  val uri = Uri.parse(trimmed)
+                  val sameHost = serverUri.host.equals(uri.host, ignoreCase = true)
+                  val serverPort = if (serverUri.port != -1) serverUri.port else defaultHttpPort(serverUri.scheme)
+                  val urlPort = if (uri.port != -1) uri.port else defaultHttpPort(uri.scheme)
+                  sameHost && serverPort == urlPort
+                }
+              )
+            if (staysInApp) {
+              webView.loadUrl(trimmed)
+            } else {
+              openExternal(Uri.parse(trimmed), webView)
+            }
+            catcher.post {
+              try {
+                catcher.destroy()
+              } catch (_: Exception) {
+              }
+            }
+            return true
+          }
+
+          @Suppress("OVERRIDE_DEPRECATION")
+          override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = capture(url)
+
+          override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
+            capture(request.url.toString())
         }
         val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
-        transport.webView = child
+        transport.webView = catcher
         resultMsg.sendToTarget()
-
-        val dialog = Dialog(this@MainActivity, R.style.Theme_Proxora)
-        val close = proxoraOutlinedButton(getString(R.string.menu_close)) { dialog.dismiss() }
-        val header = LinearLayout(this@MainActivity).apply {
-          orientation = LinearLayout.VERTICAL
-          setBackgroundColor(getColor(R.color.proxora_bg))
-          setPadding(dp(12), dp(8), dp(12), dp(8))
-          addView(close, buttonRowParams())
-        }
-        val chrome = LinearLayout(this@MainActivity).apply {
-          orientation = LinearLayout.VERTICAL
-          setBackgroundColor(getColor(R.color.proxora_bg))
-          addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-          addView(
-            child,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
-          )
-        }
-        dialog.setContentView(
-          chrome,
-          ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
-        )
-        dialog.setOnDismissListener {
-          extraWindows.remove(dialog)
-          child.destroy()
-        }
-        extraWindows.addLast(dialog)
-        dialog.show()
         return true
       }
 

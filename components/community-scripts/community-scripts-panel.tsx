@@ -25,20 +25,8 @@ import {
   communityScriptLogoSrc,
   communityScriptPageUrl,
 } from "@/lib/community-scripts";
+import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
-
-function openExternalUrl(url: string) {
-  const opened = window.open(url, "_blank", "noopener,noreferrer");
-  if (!opened) {
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.target = "_blank";
-    anchor.rel = "noopener noreferrer";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-  }
-}
 
 type CatalogResponse = {
   scripts: CommunityScriptSummary[];
