@@ -10,7 +10,10 @@
 !endif
 
 Name "Proxora Native"
-OutFile "ProxoraNative_${APP_VERSION}_x64-setup.exe"
+!ifndef OUT_FILE
+  !define OUT_FILE "ProxoraNative_${APP_VERSION}_x64-setup.exe"
+!endif
+OutFile "${OUT_FILE}"
 InstallDir "$PROGRAMFILES64\Proxora Native"
 InstallDirRegKey HKLM "Software\Proxora\Native" "InstallDir"
 RequestExecutionLevel admin

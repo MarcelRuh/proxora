@@ -29,19 +29,21 @@ jobs:
           New-Item -ItemType Directory -Force -Path native/dist | Out-Null
           Copy-Item $exe native/dist/proxora-native.exe -Force
           Compress-Archive -Path native/dist/proxora-native.exe -DestinationPath "native/dist/ProxoraNative_${ver}_x64-portable.zip" -Force
-          $out = Resolve-Path native/dist
+          $outExe = Join-Path (Resolve-Path native/dist) "ProxoraNative_${ver}_x64-setup.exe"
           $nsi = Resolve-Path native/packaging/proxora-native.nsi
           $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
           if (-not (Test-Path $makensis)) { $makensis = "$env:ProgramFiles\NSIS\makensis.exe" }
           & $makensis `
             "/DAPP_VERSION=$ver" `
             "/DSOURCE_EXE=$($exe.Path)" `
-            "/XOutFile $out\ProxoraNative_${ver}_x64-setup.exe" `
+            "/DOUT_FILE=$outExe" `
             $nsi.Path
+          if (-not (Test-Path $outExe)) { throw "NSIS installer missing: $outExe" }
           Get-ChildItem native/dist | Format-Table Name, Length
       - uses: actions/upload-artifact@v4
         with:
           name: proxora-native-windows
+          if-no-files-found: error
           path: |
             native/dist/ProxoraNative_*_x64-setup.exe
             native/dist/ProxoraNative_*_x64-portable.zip
