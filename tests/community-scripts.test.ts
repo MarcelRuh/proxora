@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   communityScriptInstallCommand,
   communityScriptKindFromTypeId,
+  communityScriptLogoSrc,
   communityScriptRawUrl,
   communityScriptSourcePath,
   filterCommunityScripts,
@@ -89,5 +90,13 @@ describe("community scripts helpers", () => {
     expect(isSafeCommunityScriptSlug("add-netbird-lxc")).toBe(true);
     expect(isSafeCommunityScriptSlug("../evil")).toBe(false);
     expect(isSafeCommunityScriptSlug("docker.sh")).toBe(false);
+  });
+
+  it("proxies CDN logos and keeps other https logos direct", () => {
+    expect(communityScriptLogoSrc("https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/docker.webp")).toContain(
+      "/api/community-scripts/logo?u=",
+    );
+    expect(communityScriptLogoSrc("https://cinny.in/assets/cinny.svg")).toBe("https://cinny.in/assets/cinny.svg");
+    expect(communityScriptLogoSrc("http://evil.example/x.png")).toBeNull();
   });
 });

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ExternalLink, Play, RefreshCw, Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -22,6 +22,8 @@ import type {
 import {
   COMMUNITY_SCRIPTS_SITE,
   communityScriptInstallCommand,
+  communityScriptLogoSrc,
+  communityScriptPageUrl,
 } from "@/lib/community-scripts";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +43,7 @@ type RunResponse = {
 };
 
 const KIND_OPTIONS: Array<CommunityScriptKind | "all"> = ["all", "lxc", "vm", "addon", "pve", "turnkey"];
+const PAGE_SIZE = 48;
 
 function resourcesLabel(script: CommunityScriptSummary): string | null {
   const parts: string[] = [];
@@ -49,6 +52,32 @@ function resourcesLabel(script: CommunityScriptSummary): string | null {
   if (script.defaultDiskGb) parts.push(`${script.defaultDiskGb} GB`);
   if (script.defaultOs) parts.push(script.defaultOs);
   return parts.length ? parts.join(" · ") : null;
+}
+
+function ScriptLogo({ name, logo }: { name: string; logo: string | null }) {
+  const [failed, setFailed] = useState(false);
+  const src = communityScriptLogoSrc(logo);
+  if (!src || failed) {
+    return (
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] bg-white/[0.06] text-xs font-semibold text-muted-foreground">
+        {name.trim().slice(0, 1).toUpperCase() || "?"}
+      </div>
+    );
+  }
+  return (
+    <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[4px] bg-white/[0.04]">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt=""
+        className="h-full w-full object-contain p-1"
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
 }
 
 export function CommunityScriptsPanel({
@@ -66,6 +95,7 @@ export function CommunityScriptsPanel({
   const [debounced, setDebounced] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [kind, setKind] = useState<CommunityScriptKind | "all">("all");
+  const [visible, setVisible] = useState(PAGE_SIZE);
   const [selected, setSelected] = useState<CommunityScriptSummary | null>(null);
   const [running, setRunning] = useState(false);
   const [shell, setShell] = useState<{ hostId: string; node: string; command: string; name: string } | null>(
@@ -76,6 +106,10 @@ export function CommunityScriptsPanel({
     const id = window.setTimeout(() => setDebounced(query.trim()), 200);
     return () => window.clearTimeout(id);
   }, [query]);
+
+  useEffect(() => {
+    setVisible(PAGE_SIZE);
+  }, [debounced, categoryId, kind]);
 
   const activeHost = hosts.find((host) => host.id === hostId) ?? null;
   const hostOnline = activeHost?.connectionState === "ONLINE";
@@ -97,6 +131,7 @@ export function CommunityScriptsPanel({
   });
 
   const scripts = data?.scripts ?? [];
+  const shown = scripts.slice(0, visible);
   const categories = data?.categories ?? [];
   const categoryName = useMemo(() => {
     const map = new Map(categories.map((item) => [item.id, item.name]));
@@ -186,7 +221,7 @@ export function CommunityScriptsPanel({
         <a
           href={COMMUNITY_SCRIPTS_SITE}
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
           className="inline-flex h-9 items-center gap-1 rounded-[4px] border border-input px-3 text-sm text-muted-foreground hover:text-foreground"
         >
           community-scripts.org
@@ -214,18 +249,14 @@ export function CommunityScriptsPanel({
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {scripts.map((script) => {
+        {shown.map((script) => {
           const resources = resourcesLabel(script);
+          const detailsUrl = communityScriptPageUrl(script.slug);
           return (
             <Card key={script.id} className="overflow-hidden">
               <CardContent className="flex h-full flex-col gap-3 p-4">
                 <div className="flex items-start gap-3">
-                  <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[4px] bg-white/[0.04]">
-                    {script.logo ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={script.logo} alt="" className="h-full w-full object-contain p-1" loading="lazy" />
-                    ) : null}
-                  </div>
+                  <ScriptLogo name={script.name} logo={script.logo} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{script.name}</p>
                     <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -241,11 +272,15 @@ export function CommunityScriptsPanel({
                     <Play className="mr-1 h-3.5 w-3.5" />
                     {t("cs.install")}
                   </Button>
-                  <Button type="button" size="sm" variant="outline" asChild>
-                    <a href={`${COMMUNITY_SCRIPTS_SITE}/scripts/${script.slug}`} target="_blank" rel="noreferrer">
-                      {t("cs.details")}
-                    </a>
-                  </Button>
+                  <a
+                    href={detailsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                  >
+                    {t("cs.details")}
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
                 </div>
               </CardContent>
             </Card>
@@ -253,9 +288,17 @@ export function CommunityScriptsPanel({
         })}
       </div>
 
+      {scripts.length > visible ? (
+        <div className="flex justify-center">
+          <Button type="button" variant="outline" onClick={() => setVisible((n) => n + PAGE_SIZE)}>
+            {t("cs.loadMore", { remaining: String(scripts.length - visible) })}
+          </Button>
+        </div>
+      ) : null}
+
       {data ? (
         <p className="text-xs text-muted-foreground">
-          {t("cs.count", { shown: String(scripts.length), total: String(data.total) })}
+          {t("cs.count", { shown: String(Math.min(visible, scripts.length)), total: String(data.total) })}
         </p>
       ) : null}
 
@@ -285,7 +328,7 @@ export function CommunityScriptsPanel({
       </Dialog>
 
       <Dialog open={Boolean(shell)} onOpenChange={(open) => !open && setShell(null)}>
-        <DialogContent className="max-w-5xl p-0 overflow-hidden">
+        <DialogContent className="max-w-5xl overflow-hidden p-0">
           <DialogHeader className="border-b border-border px-4 py-3">
             <DialogTitle>
               {shell ? t("cs.shellTitle", { name: shell.name, node: shell.node }) : t("cs.install")}

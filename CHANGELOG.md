@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.12] – 2026-11-09
+
+### Fixed
+
+- Community Scripts: logos load via a Proxora proxy (avoids jsdelivr rate-limits), list is paginated, and the Details link is a real external anchor again.
+
 ## [2.4.11] – 2026-11-09
 
 ### Added

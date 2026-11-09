@@ -85,6 +85,33 @@ export function communityScriptPageUrl(slug: string): string {
   return `${COMMUNITY_SCRIPTS_SITE}/scripts/${encodeURIComponent(slug)}`;
 }
 
+export const COMMUNITY_SCRIPT_LOGO_PROXY_HOSTS = new Set([
+  "cdn.jsdelivr.net",
+  "raw.githubusercontent.com",
+  "avatars.githubusercontent.com",
+  "objects.githubusercontent.com",
+]);
+
+export function isCommunityScriptLogoProxyHost(hostname: string): boolean {
+  return COMMUNITY_SCRIPT_LOGO_PROXY_HOSTS.has(hostname);
+}
+
+/** Prefer Proxora logo proxy for CDNs that rate-limit browsers; otherwise use https directly. */
+export function communityScriptLogoSrc(logo: string | null | undefined): string | null {
+  const raw = (logo ?? "").trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:") return null;
+    if (isCommunityScriptLogoProxyHost(url.hostname)) {
+      return `/api/community-scripts/logo?u=${encodeURIComponent(raw)}`;
+    }
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
 /** One-liner pasted into the Proxmox host shell (same shape as community-scripts.org). */
 export function communityScriptInstallCommand(kind: CommunityScriptKind, slug: string): string {
   const url = communityScriptRawUrl(kind, slug);
