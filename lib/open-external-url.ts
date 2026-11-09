@@ -1,4 +1,10 @@
-/** Open https links outside Proxora (system browser on Android, new tab on desktop). */
+/**
+ * Open an external https URL.
+ *
+ * Android/Desktop WebView shells block window.open and synthetic <a>.click().
+ * Main-frame navigation is intercepted there and opened in the system browser
+ * (Proxora stays put). In a normal browser this navigates to the site.
+ */
 export function openExternalUrl(url: string): void {
   if (typeof window === "undefined") return;
   const trimmed = url.trim();
@@ -10,17 +16,9 @@ export function openExternalUrl(url: string): void {
       bridge.openExternal(trimmed);
       return;
     } catch {
-      /* fall through to DOM navigation */
+      /* fall through */
     }
   }
 
-  // Prefer a real <a> click over window.open: Android WebView often creates a blank
-  // multi-window popup for window.open(..., "noopener"), especially inside dialogs.
-  const anchor = document.createElement("a");
-  anchor.href = trimmed;
-  anchor.target = "_blank";
-  anchor.rel = "noopener noreferrer";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
+  window.location.assign(trimmed);
 }

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.17] – 2026-11-09
+
+### Fixed
+
+- Community Scripts „Website öffnen“ uses main-frame navigation in Android/Desktop shells so the system browser actually opens (window.open was a no-op there).
+
 ## [2.4.16] – 2026-11-09
 
 ### Fixed

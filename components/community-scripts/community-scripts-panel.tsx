@@ -220,14 +220,19 @@ export function CommunityScriptsPanel({
         >
           <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="gap-1 text-muted-foreground"
-          onClick={() => openExternalUrl(COMMUNITY_SCRIPTS_SITE)}
-        >
-          community-scripts.org
-          <ExternalLink className="h-3.5 w-3.5" />
+        <Button asChild variant="outline" className="gap-1 text-muted-foreground">
+          <a
+            href={COMMUNITY_SCRIPTS_SITE}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(event) => {
+              event.preventDefault();
+              openExternalUrl(COMMUNITY_SCRIPTS_SITE);
+            }}
+          >
+            community-scripts.org
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
         </Button>
       </div>
 
@@ -318,13 +323,19 @@ export function CommunityScriptsPanel({
                 {communityScriptInstallCommand(detail.kind, detail.slug)}
               </p>
               <div className="flex flex-wrap justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => openExternalUrl(communityScriptPageUrl(detail.slug))}
-                >
-                  {t("cs.openWebsite")}
-                  <ExternalLink className="h-3.5 w-3.5" />
+                <Button asChild variant="outline">
+                  <a
+                    href={communityScriptPageUrl(detail.slug)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      openExternalUrl(communityScriptPageUrl(detail.slug));
+                    }}
+                  >
+                    {t("cs.openWebsite")}
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
                 </Button>
                 <Button
                   type="button"
