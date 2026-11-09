@@ -2,22 +2,24 @@
 
 Eigenständiger **Rust-/egui**-Desktop-Client für Proxora. Spricht die bestehende HTTP-API an (Session-Cookie `pm_session`) — **kein WebView**.
 
-Zielbild: langfristig die Web-Oberfläche ersetzen. Heute: MVP mit denselben Kernfunktionen.
+Zielbild: langfristig die Web-Oberfläche ersetzen.
 
-## Features (MVP)
+## Features
 
+- Eigene Titelleiste (kein OS-Chrome) mit Drag / Min / Max / Close
+- Sidebar-Navigation, Control-Room-Theme (Charcoal + Acid Green)
 - Server-URL + optionales insecure TLS
 - Login inkl. TOTP/Recovery
-- Übersicht (Dashboard-Metriken)
+- Übersicht (Dashboard-Metriken + Ressourcenbalken)
 - Hosts-Liste
 - Gäste (VMs + LXC) mit Start / Shutdown / Reboot / Stop
-- Eigene UI (dunkles Native-Theme), nicht die Next.js-App
+- **Auto-Updater** über GitHub Releases (`native-v*` / ProxoraNative-Assets)
 
 ## Voraussetzungen
 
 - Rust stable (`rustup`)
 - Linux: typische egui/OpenGL-Deps (`libgtk-3`, Mesa/GL)
-- Laufende Proxora-Instanz (z. B. `http://192.168.178.246:3000`)
+- Laufende Proxora-Instanz
 
 ## Windows-Installer
 
@@ -26,16 +28,12 @@ CI baut unter Tags `v*` / `native-v*` (oder manuell via Workflow **Native Client
 - `ProxoraNative_<version>_x64-setup.exe` — NSIS-Installer
 - `ProxoraNative_<version>_x64-portable.zip` — portable `.exe`
 
-Workflow manuell starten:
-
 ```bash
 gh workflow run native-client.yml
 gh run watch
 ```
 
-Artifacts danach unter dem Run herunterladen, oder vom GitHub Release.
-
-> Nicht verwechseln mit dem **Tauri-WebView**-Installer `Proxora_*_x64-setup.exe` (lädt die Web-UI).
+> Nicht verwechseln mit dem **Tauri-WebView**-Installer `Proxora_*_x64-setup.exe`.
 
 ## Start (Entwicklung)
 
@@ -44,31 +42,23 @@ cd native
 cargo run --release
 ```
 
-Debug:
-
-```bash
-cargo run
-```
-
 ## Architektur
 
 | Schicht | Inhalt |
 | --- | --- |
 | `src/api/` | Blocking `reqwest`-Client, Models, Power-Actions |
-| `src/prefs.rs` | `~/.config/proxora-native/prefs.json` |
-| `src/app.rs` | egui-Screens + Background-Worker-Thread |
+| `src/prefs.rs` | Config unter Proxora/proxora-native |
+| `src/theme.rs` | Farben, Typo, Visuals |
+| `src/updater.rs` | GitHub-Release-Check, Download, Installer-Launch |
+| `src/app.rs` | Custom Titlebar, Sidebar, Screens, Worker |
 
-Auth wie im Browser: `POST /api/auth/login` setzt Cookie; Folge-Requests nutzen Cookie-Jar. Ohne `Origin`-Header (kein Browser) greift CSRF-Check nicht blockierend.
+## Updater
 
-## Roadmap (Richtung Web-Ablösung)
+Beim Start (und über „Nach Updates suchen“) prüft der Client `MarcelRuh/proxora` Releases:
 
-1. Console (xterm/VNC) — native oder eingebettetes Terminal
-2. Guest-Detail, Config, Snapshots
-3. Backups, Storage, Templates
-4. Community Scripts
-5. Users/Roles/Settings
-6. Web-UI optional deprecaten, wenn Parität erreicht
+1. Tags `native-vX.Y.Z` mit Asset `ProxoraNative_*_x64-setup.exe` (Windows) bzw. `*_linux_amd64.tar.gz`
+2. Banner bei neuer Version → Download → Installieren & Neustart (Windows startet den NSIS-Installer und beendet die App)
 
-## Hinweis
+## Version
 
-Der bestehende Tauri-Client unter `desktop/` bleibt der **WebView-Shell**. `native/` ist der parallele API-first-Client.
+Aktuell: **0.2.0** (`Cargo.toml`).

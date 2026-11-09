@@ -3,14 +3,18 @@
 mod api;
 mod app;
 mod prefs;
+mod theme;
+mod updater;
 
 use app::ProxoraApp;
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1180.0, 760.0])
-            .with_min_inner_size([900.0, 600.0])
+            .with_inner_size([1240.0, 800.0])
+            .with_min_inner_size([960.0, 640.0])
+            .with_decorations(false)
+            .with_transparent(false)
             .with_title("Proxora Native"),
         ..Default::default()
     };
