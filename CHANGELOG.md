@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.4.14] – 2026-11-09
+
+### Fixed
+
+- Production `next build` uses webpack again so Google-font fetches no longer fail under Turbopack in CI (unblocks the GHCR image that ships the Community Scripts Details dialog).
+
 ## [2.4.13] – 2026-11-09
 
 ### Fixed
