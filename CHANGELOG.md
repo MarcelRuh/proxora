@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Native Rust desktop client (`native/`): egui MVP against the Proxora HTTP API (login/TOTP, dashboard, hosts, guest power actions) — path toward replacing the web UI.
+
 ## [2.4.18] – 2026-11-09
 
 ### Added
