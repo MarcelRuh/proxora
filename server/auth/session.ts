@@ -2,6 +2,7 @@ import { cookies, headers } from "next/headers";
 import { SESSION_COOKIE } from "@/lib/env";
 import { ForbiddenError, UnauthorizedError } from "@/lib/errors";
 import { userHasPermission, type Permission } from "@/lib/permissions";
+import { PEER_IP_HEADER, resolveClientIp } from "@/server/http/client-ip";
 import {
   getSessionFromToken,
   type AuthSession,
@@ -43,15 +44,10 @@ export async function requirePermission(permission: Permission): Promise<AuthSes
   return session;
 }
 
+/** See server/http/client-ip.ts: forwarded headers only count with TRUST_PROXY. */
 export async function clientIp(): Promise<string | undefined> {
   const h = await headers();
-  const real = h.get("x-real-ip")?.trim();
-  if (real) return real;
-  const forwarded = h.get("x-forwarded-for");
-  if (!forwarded) return undefined;
-  // Rightmost hop is set by the nearest reverse proxy; left entries are client-spoofable.
-  const parts = forwarded.split(",").map((part) => part.trim()).filter(Boolean);
-  return parts.at(-1);
+  return resolveClientIp((name) => h.get(name), h.get(PEER_IP_HEADER));
 }
 
 export async function clientUserAgent(): Promise<string | undefined> {

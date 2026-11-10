@@ -12,6 +12,7 @@ import { getHostOrThrow } from "@/server/services/host-service";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { streamGuestFileDownload, streamGuestFileUpload } from "@/server/services/guest-files";
 import { cookieValue } from "@/server/ws/request-cookie";
+import { clientIpFromNode } from "@/server/http/client-ip";
 
 const HOST_FILES =
   /^\/api\/hosts\/([^/]+)\/(vms|lxc)\/([^/]+)\/([^/]+)\/files\/(upload|download)\/?$/;
@@ -29,13 +30,6 @@ function nodeToHeaderRequest(req: IncomingMessage): Request {
     headers.set(key, Array.isArray(value) ? value.join(", ") : value);
   }
   return new Request(url, { method: req.method, headers });
-}
-
-function clientIp(req: IncomingMessage): string | undefined {
-  const forwarded = String(req.headers["x-forwarded-for"] ?? "")
-    .split(",")[0]
-    ?.trim();
-  return forwarded || req.socket.remoteAddress || undefined;
 }
 
 async function sendWebResponse(res: ServerResponse, response: Response) {
@@ -110,7 +104,7 @@ export async function handleNodeGuestFileTransfer(req: IncomingMessage, res: Ser
       return true;
     }
     const host = await getHostOrThrow(parsed.hostId, session.user);
-    const ip = clientIp(req);
+    const ip = clientIpFromNode(req);
     const meta = { path: ticket.path, sshHost: ticket.target, sshUser: ticket.username, mode: ticket.mode };
     try {
       if (parsed.mode === "upload") {

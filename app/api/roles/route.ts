@@ -17,7 +17,7 @@ export const GET = apiRoute("roles.view", async () => {
 
 export const POST = apiRoute("roles.create", async (req, session) => {
   const body = createRoleSchema.parse(await req.json());
-  const role = await createRole(body);
+  const role = await createRole(session.user, body);
   await writeAuditLog({
     userId: session.user.id,
     ip: await clientIp(),

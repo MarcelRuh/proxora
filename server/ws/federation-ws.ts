@@ -7,6 +7,8 @@ import { assertSharedHost } from "@/server/services/federation-service";
 import { clientForHost } from "@/server/services/host-service";
 import { WireguardPeerKind } from "@prisma/client";
 import { wsPayloadToBuffer } from "@/lib/vnc-handshake";
+import { isSafeProxmoxPath } from "@/lib/federation-access";
+import { dropUpstreamIfBrowserGone } from "@/server/ws/request-headers";
 
 function bearer(req: IncomingMessage): string {
   const header = req.headers.authorization ?? "";
@@ -45,7 +47,7 @@ async function pipeFederationWebsocket(browser: WebSocket, req: IncomingMessage)
   }
   const remoteHostId = url.searchParams.get("remoteHostId") ?? "";
   const path = url.searchParams.get("path") ?? "";
-  if (!remoteHostId || !path.startsWith("/")) {
+  if (!remoteHostId || !isSafeProxmoxPath(path)) {
     throw new ForbiddenError("Invalid federation websocket");
   }
   const query: Record<string, string> = {};
@@ -62,6 +64,7 @@ async function pipeFederationWebsocket(browser: WebSocket, req: IncomingMessage)
     rejectUnauthorized: !host.allowInsecureTls,
     perMessageDeflate: false,
   } as import("ws").ClientOptions);
+  if (dropUpstreamIfBrowserGone(browser, remote)) return;
 
   const pending: Buffer[] = [];
   let upstreamOpen = false;

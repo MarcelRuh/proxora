@@ -2,6 +2,7 @@ import { apiRoute } from "@/server/http/api-route";
 import { json } from "@/server/http/respond";
 import { withHostClient } from "@/server/services/host-service";
 import { ValidationError } from "@/lib/errors";
+import { assertTaskAccess } from "@/lib/task-scope";
 
 export const GET = apiRoute(
   [
@@ -26,6 +27,7 @@ export const GET = apiRoute(
     const node = url.searchParams.get("node")?.trim() ?? "";
     const upid = url.searchParams.get("upid")?.trim() ?? "";
     if (!node || !upid) throw new ValidationError("node und upid erforderlich");
+    assertTaskAccess(session.user, params.id, node, upid);
     const start = Math.max(0, Number(url.searchParams.get("start") ?? 0) || 0);
     const limit = Math.min(5000, Math.max(50, Number(url.searchParams.get("limit") ?? 2000) || 2000));
     const data = await withHostClient(params.id, session.user, async (client) => {

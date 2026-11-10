@@ -1,6 +1,15 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
+import {
+  assertCanAddPermissions,
+  assertCanGrantPermissions,
+  assertScopeWithinActor,
+  assertUserChangeAllowed,
+  isSuperAdminRole,
+  SUPER_ADMIN_SLUG,
+  type GrantingActor,
+} from "@/lib/access-policy";
 import { sanitizePermissions, normalizeGuestPermissions } from "@/lib/permissions";
 import { hashPassword } from "@/lib/password";
 import { parseGuestKind, type GuestGrant } from "@/lib/guest-scope";
@@ -130,14 +139,40 @@ export async function listUsers() {
   return users.map((u) => withScope(u));
 }
 
-export async function createUser(input: z.infer<typeof createUserSchema>) {
+function assertGrantsAllowed(
+  actor: GrantingActor,
+  hostRows: Array<{ hostId: string; override: boolean; permissions: string[] }>,
+  guestRows: Array<{ hostId: string; kind: string; vmid: number; override: boolean; permissions: string[] }>,
+) {
+  for (const row of [...hostRows, ...guestRows]) {
+    if (row.override) assertCanGrantPermissions(actor, row.permissions);
+  }
+  assertScopeWithinActor(actor, {
+    hosts: hostRows,
+    guests: guestRows.flatMap((g) => {
+      const kind = parseGuestKind(g.kind);
+      return kind ? [{ hostId: g.hostId, kind, vmid: g.vmid }] : [];
+    }),
+  });
+}
+
+async function otherActiveSuperAdmins(excludeId: string) {
+  return prisma.user.count({
+    where: { id: { not: excludeId }, status: "ACTIVE", role: { slug: SUPER_ADMIN_SLUG } },
+  });
+}
+
+export async function createUser(actor: GrantingActor, input: z.infer<typeof createUserSchema>) {
   const existing = await prisma.user.findFirst({
     where: { OR: [{ username: input.username }, { email: input.email }] },
   });
   if (existing) throw new ConflictError("Username or email already exists");
   const role = await prisma.role.findUnique({ where: { id: input.roleId } });
   if (!role) throw new ValidationError("Role not found");
+  assertCanGrantPermissions(actor, role.permissions);
   const hostRows = hostRowsFromInput(input.hosts, input.hostIds);
+  const guestRows = guestRowsFromInput(input.guests);
+  assertGrantsAllowed(actor, hostRows, guestRows);
   const user = await prisma.user.create({
     data: {
       username: input.username,
@@ -145,18 +180,42 @@ export async function createUser(input: z.infer<typeof createUserSchema>) {
       passwordHash: await hashPassword(input.password),
       roleId: input.roleId,
       hostAccess: hostRows.length ? { create: hostRows } : undefined,
-      guestAccess: input.guests?.length
-        ? { create: guestRowsFromInput(input.guests) }
-        : undefined,
+      guestAccess: guestRows.length ? { create: guestRows } : undefined,
     },
     include: { role: true, hostAccess: true, guestAccess: true },
   });
   return withScope(user);
 }
 
-export async function updateUser(id: string, input: z.infer<typeof updateUserSchema>) {
-  const user = await prisma.user.findUnique({ where: { id } });
+export async function updateUser(actor: GrantingActor, id: string, input: z.infer<typeof updateUserSchema>) {
+  const user = await prisma.user.findUnique({ where: { id }, include: { role: true } });
   if (!user) throw new NotFoundError("User not found");
+  let nextRoleSlug: string | undefined;
+  if (input.roleId && input.roleId !== user.roleId) {
+    const role = await prisma.role.findUnique({ where: { id: input.roleId } });
+    if (!role) throw new ValidationError("Role not found");
+    assertCanGrantPermissions(actor, role.permissions);
+    nextRoleSlug = role.slug;
+  }
+  const change = { roleSlug: nextRoleSlug, status: input.status };
+  assertUserChangeAllowed(actor, user, change, await otherActiveSuperAdmins(id));
+  const hostRows = input.hosts || input.hostIds ? hostRowsFromInput(input.hosts, input.hostIds) : null;
+  const guestRows = input.guests ? guestRowsFromInput(input.guests) : null;
+  if (hostRows || guestRows) {
+    const current = await prisma.user.findUniqueOrThrow({
+      where: { id },
+      include: { hostAccess: true, guestAccess: true },
+    });
+    // Override permissions are checked only for the grants being replaced; scope covers the result.
+    for (const row of [...(hostRows ?? []), ...(guestRows ?? [])]) {
+      if (row.override) assertCanGrantPermissions(actor, row.permissions);
+    }
+    assertGrantsAllowed(
+      actor,
+      (hostRows ?? current.hostAccess).map((h) => ({ ...h, override: false })),
+      (guestRows ?? current.guestAccess).map((g) => ({ ...g, override: false })),
+    );
+  }
   const data: Record<string, unknown> = {};
   if (input.email) data.email = input.email;
   if (input.roleId) data.roleId = input.roleId;
@@ -167,8 +226,7 @@ export async function updateUser(id: string, input: z.infer<typeof updateUserSch
     data,
   });
   if (input.password || input.status === "DISABLED") await destroyUserSessions(id);
-  if (input.hosts || input.hostIds) {
-    const hostRows = hostRowsFromInput(input.hosts, input.hostIds);
+  if (hostRows) {
     await prisma.userHostAccess.deleteMany({ where: { userId: id } });
     if (hostRows.length) {
       await prisma.userHostAccess.createMany({
@@ -176,11 +234,11 @@ export async function updateUser(id: string, input: z.infer<typeof updateUserSch
       });
     }
   }
-  if (input.guests) {
+  if (guestRows) {
     await prisma.userGuestAccess.deleteMany({ where: { userId: id } });
-    if (input.guests.length) {
+    if (guestRows.length) {
       await prisma.userGuestAccess.createMany({
-        data: guestRowsFromInput(input.guests).map((row) => ({ userId: id, ...row })),
+        data: guestRows.map((row) => ({ userId: id, ...row })),
       });
     }
   }
@@ -191,10 +249,11 @@ export async function updateUser(id: string, input: z.infer<typeof updateUserSch
   return withScope(fresh);
 }
 
-export async function deleteUser(id: string, actorId: string) {
-  if (id === actorId) throw new ValidationError("You cannot delete your own account");
-  const user = await prisma.user.findUnique({ where: { id } });
+export async function deleteUser(actor: GrantingActor, id: string) {
+  if (id === actor.id) throw new ValidationError("You cannot delete your own account");
+  const user = await prisma.user.findUnique({ where: { id }, include: { role: true } });
   if (!user) throw new NotFoundError("User not found");
+  assertUserChangeAllowed(actor, user, "delete", await otherActiveSuperAdmins(id));
   await prisma.user.delete({ where: { id } });
 }
 
@@ -205,8 +264,9 @@ export async function listRoles() {
   });
 }
 
-export async function createRole(input: z.infer<typeof createRoleSchema>) {
+export async function createRole(actor: GrantingActor, input: z.infer<typeof createRoleSchema>) {
   const permissions = sanitizePermissions(input.permissions);
+  assertCanGrantPermissions(actor, permissions);
   return prisma.role.create({
     data: {
       name: input.name,
@@ -218,9 +278,17 @@ export async function createRole(input: z.infer<typeof createRoleSchema>) {
   });
 }
 
-export async function updateRole(id: string, input: Partial<z.infer<typeof createRoleSchema>>) {
+export async function updateRole(
+  actor: GrantingActor,
+  id: string,
+  input: Partial<z.infer<typeof createRoleSchema>>,
+) {
   const role = await prisma.role.findUnique({ where: { id } });
   if (!role) throw new NotFoundError("Role not found");
+  if (isSuperAdminRole(role) && !isSuperAdminRole(actor.role)) {
+    throw new ForbiddenError("Only a super-admin can modify the super-admin role");
+  }
+  if (input.permissions) assertCanAddPermissions(actor, role.permissions, input.permissions);
   if (role.isSystem && input.slug && input.slug !== role.slug) {
     throw new ValidationError("System roles cannot be renamed");
   }

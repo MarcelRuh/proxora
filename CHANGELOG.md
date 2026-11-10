@@ -27,6 +27,15 @@ All notable changes to this project are documented here.
 - `safeNextPath` rejects control characters (`/\t/evil.com`).
 - Community Scripts logo proxy sends `nosniff` and a sandboxing CSP.
 
+### Security
+
+- Users/roles: actors can only grant roles and permissions they hold themselves; only super-admins can change super-admin accounts; the last active super-admin cannot be disabled or demoted, and users cannot disable themselves.
+- Guest-scoped users: backup run/restore/delete, orphan cleanup, storage-content delete and host task list/log/status/cancel are limited to their allowed guests.
+- Federation proxy rejects non-canonical paths (encoded dot-segments, `%`, `\`, `?`, `#`) before permission classification, on HTTP and WebSocket.
+- Guest SFTP only connects to the guest's own reported addresses and pins SSH host keys on first use.
+- Console/VNC WebSockets check `Origin` and drop upstream sockets when the browser left during setup.
+- TOTP login step is rate-limited per account; forwarded client-IP headers are only trusted with `TRUST_PROXY=true` (set it when Proxora runs behind your own reverse proxy).
+
 ## [2.5.4] – 2026-11-10
 
 ### Fixed

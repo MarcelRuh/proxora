@@ -41,6 +41,10 @@ export async function POST(request: NextRequest) {
 
     if (body.ticket && body.totp) {
       const ticket = readTotpTicket(body.ticket);
+      // One password step yields a ticket valid for many guesses; cap TOTP tries per account.
+      if (!rateLimit(`login-totp:${ticket.userId}`, 5, 15 * 60 * 1000)) {
+        return json({ error: "Too many login attempts", code: "RATE_LIMITED" }, 429);
+      }
       const user = await prisma.user.findUnique({
         where: { id: ticket.userId },
         include: { role: true, hostAccess: true, guestAccess: true },

@@ -1,10 +1,12 @@
+import { createHash } from "node:crypto";
 import { PassThrough, Readable, Transform } from "node:stream";
 import { Client, type SFTPWrapper } from "ssh2";
 import { HostOrigin, type Host } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { ForbiddenError, HostUnreachableError, ValidationError } from "@/lib/errors";
+import { ForbiddenError, HostUnreachableError, NotFoundError, ValidationError } from "@/lib/errors";
 import {
   GUEST_FILE_MAX_BYTES,
+  assertSftpTargetIsGuestAddress,
   attachmentDisposition,
   clampSftpPort,
   decodeGuestFileContent,
@@ -12,6 +14,7 @@ import {
   GUEST_UPLOAD_PART_SUFFIX,
   guestFileName,
   guestPathParent,
+  guestReportedAddresses,
   guestUploadMetaPath,
   guestUploadPartPath,
   hasGuestSshAuth,
@@ -38,6 +41,7 @@ import { outboundToken, peerHttpBase } from "@/server/services/wireguard-service
 import { GUEST_UPLOAD_OFFSET_HEADER, GUEST_UPLOAD_PREFIX_HEADER, GUEST_UPLOAD_SIZE_HEADER } from "@/lib/guest-file-http";
 import { clientForHost } from "@/server/services/host-service";
 import { guestAgentFiles } from "@/server/services/guest-agent-files";
+import { loadHostInventory } from "@/server/services/inventory-cache";
 import {
   encodeGuestTransferMeta,
   GUEST_TRANSFER_META_HEADER,
@@ -49,6 +53,7 @@ const CONNECT_MS = 12_000;
 const OP_MS = 45_000;
 
 function fileError(error: unknown, fallback: string): Error {
+  if (error instanceof ForbiddenError || error instanceof NotFoundError) return error;
   const message = error instanceof Error ? error.message : String(error);
   const lower = message.toLowerCase();
   if (lower.includes("authentication") || lower.includes("auth") || lower.includes("permission denied")) {
@@ -87,7 +92,11 @@ function withTimeout<T>(ms: number, work: Promise<T>, label: string): Promise<T>
   });
 }
 
+/** The guest an SSH session belongs to; the target must be one of its addresses. */
+export type GuestSshGuest = { host: Host; kind: "vm" | "lxc"; vmid: number };
+
 type SshAuth = {
+  guest: GuestSshGuest;
   target: string;
   port: number;
   username: string;
@@ -96,7 +105,7 @@ type SshAuth = {
   passphrase?: string;
 };
 
-function parseSshAuth(input: {
+function parseSshAuth(guest: GuestSshGuest, input: {
   target?: string;
   port?: number;
   username?: string;
@@ -124,6 +133,7 @@ function parseSshAuth(input: {
     throw new ValidationError("Ungültiger SSH-Schlüssel");
   }
   return {
+    guest,
     target,
     port,
     username,
@@ -133,14 +143,87 @@ function parseSshAuth(input: {
   };
 }
 
+/** Addresses Proxmox reports for the guest (config, QEMU agent or LXC interfaces). */
+export async function guestSshAddresses(guest: GuestSshGuest): Promise<string[]> {
+  const client = await clientForHost(guest.host);
+  const inv = await loadHostInventory(client, guest.host.id);
+  const listed = (guest.kind === "vm" ? inv.vms : inv.containers).find((g) => g.vmid === guest.vmid);
+  if (!listed?.node) throw new NotFoundError(guest.kind === "vm" ? "VM not found" : "Container not found");
+  const node = listed.node;
+  if (guest.kind === "vm") {
+    const [config, agent] = await Promise.all([
+      client.vms.config(node, guest.vmid).catch(() => null),
+      client.vms.agentNetworkInterfaces(node, guest.vmid).catch(() => null),
+    ]);
+    return guestReportedAddresses({ config, agent });
+  }
+  const [config, lxcInterfaces] = await Promise.all([
+    client.lxc.config(node, guest.vmid).catch(() => null),
+    client.lxc.interfaces(node, guest.vmid).catch(() => null),
+  ]);
+  return guestReportedAddresses({ config, lxcInterfaces });
+}
+
+async function resolveGuestSshTarget(auth: SshAuth): Promise<string> {
+  const addresses = await guestSshAddresses(auth.guest);
+  try {
+    return assertSftpTargetIsGuestAddress(auth.target, addresses);
+  } catch (error) {
+    throw new ForbiddenError(error instanceof Error ? error.message : "Invalid SSH host");
+  }
+}
+
+const HOST_KEY_SETTING_PREFIX = "guest-ssh-hostkey:";
+
+export function guestHostKeySettingKey(guest: { host: { id: string }; kind: "vm" | "lxc"; vmid: number }): string {
+  return `${HOST_KEY_SETTING_PREFIX}${guest.host.id}:${guest.kind}:${guest.vmid}`;
+}
+
+/** OpenSSH-style `SHA256:…` fingerprint of a raw host key blob. */
+export function sshHostKeyFingerprint(key: Buffer): string {
+  return `SHA256:${createHash("sha256").update(key).digest("base64").replace(/=+$/, "")}`;
+}
+
+function storedFingerprint(value: unknown): string | null {
+  if (value && typeof value === "object" && typeof (value as { fingerprint?: unknown }).fingerprint === "string") {
+    return (value as { fingerprint: string }).fingerprint;
+  }
+  return null;
+}
+
+/**
+ * Trust on first use: the first host key seen for a guest is pinned, later
+ * connections must present the same key.
+ */
+export async function verifyGuestHostKey(guest: GuestSshGuest, fingerprint: string): Promise<boolean> {
+  const key = guestHostKeySettingKey(guest);
+  const row = await prisma.setting.findUnique({ where: { key } });
+  const pinned = storedFingerprint(row?.value);
+  if (pinned) return pinned === fingerprint;
+  try {
+    await prisma.setting.create({ data: { key, value: { fingerprint, pinnedAt: new Date().toISOString() } } });
+    return true;
+  } catch {
+    // Lost a race with a concurrent first connection; compare with the winner.
+    const again = await prisma.setting.findUnique({ where: { key } });
+    return storedFingerprint(again?.value) === fingerprint;
+  }
+}
+
+/** Forget a pinned guest host key (e.g. after reinstalling the guest's OS). */
+export async function forgetGuestHostKey(guest: { host: { id: string }; kind: "vm" | "lxc"; vmid: number }) {
+  await prisma.setting.deleteMany({ where: { key: guestHostKeySettingKey(guest) } });
+}
+
 async function openSftp(auth: SshAuth): Promise<{ client: Client; sftp: SFTPWrapper; fingerprint: string }> {
-  const host = isAllowedSftpTarget(auth.target);
+  const host = await resolveGuestSshTarget(auth);
   const password = auth.password ?? "";
   const privateKey = auth.privateKey ?? "";
 
   return new Promise((resolve, reject) => {
     const client = new Client();
     let fingerprint = "";
+    let hostKeyMismatch = false;
     let settled = false;
     const fail = (error: unknown) => {
       if (settled) return;
@@ -176,7 +259,13 @@ async function openSftp(auth: SshAuth): Promise<{ client: Client; sftp: SFTPWrap
     });
     client.on("error", (error) => {
       clearTimeout(timer);
-      fail(error);
+      fail(
+        hostKeyMismatch
+          ? new ForbiddenError(
+              `SSH host key of this guest changed (now ${fingerprint}). Ask an administrator to reset the pinned key.`,
+            )
+          : error,
+      );
     });
     client.connect({
       host,
@@ -187,9 +276,15 @@ async function openSftp(auth: SshAuth): Promise<{ client: Client; sftp: SFTPWrap
       algorithms: { compress: ["none"] },
       ...(password ? { password } : {}),
       ...(privateKey ? { privateKey, passphrase: auth.passphrase || undefined } : {}),
-      hostVerifier: (key: Buffer) => {
-        fingerprint = Buffer.isBuffer(key) ? key.toString("hex").slice(0, 32) : String(key).slice(0, 32);
-        return true;
+      hostVerifier: (key: Buffer, verify: (valid: boolean) => void) => {
+        fingerprint = sshHostKeyFingerprint(Buffer.isBuffer(key) ? key : Buffer.from(String(key)));
+        verifyGuestHostKey(auth.guest, fingerprint).then(
+          (ok) => {
+            hostKeyMismatch = !ok;
+            verify(ok);
+          },
+          () => verify(false),
+        );
       },
     });
   });
@@ -351,8 +446,8 @@ function toNodeReadable(body: GuestUploadBody): Readable | null {
   });
 }
 
-async function parseStreamCreds(input: StreamCreds) {
-  const auth = parseSshAuth(input);
+async function parseStreamCreds(guest: GuestSshGuest, input: StreamCreds) {
+  const auth = parseSshAuth(guest, input);
   try {
     return { ...auth, path: resolveGuestPath(input.path || "/") };
   } catch (error) {
@@ -662,8 +757,8 @@ function sshWire(auth: {
 }
 
 /** Stream a guest file over SFTP. SSH stays open until the HTTP body ends. */
-export async function sftpDownloadResponse(input: StreamCreds): Promise<Response> {
-  const creds = await parseStreamCreds(input);
+export async function sftpDownloadResponse(guest: GuestSshGuest, input: StreamCreds): Promise<Response> {
+  const creds = await parseStreamCreds(guest, input);
   const session = await openSftp(creds);
   try {
     const attrs = await new Promise<{ size: number; mode: number }>((resolve, reject) => {
@@ -804,7 +899,7 @@ async function finalizeGuestUploadPart(
   return size;
 }
 
-export async function sftpUploadFromStream(input: StreamCreds & {
+export async function sftpUploadFromStream(guest: GuestSshGuest, input: StreamCreds & {
   body: GuestUploadBody;
   expectedSize?: number | null;
   offset?: number;
@@ -814,7 +909,7 @@ export async function sftpUploadFromStream(input: StreamCreds & {
   name: string;
   size: number;
 }> {
-  const creds = await parseStreamCreds(input);
+  const creds = await parseStreamCreds(guest, input);
   const offset = Math.max(0, Math.floor(Number(input.offset) || 0));
   const partPath = guestUploadPartPath(creds.path);
   const session = await openSftp(creds);
@@ -940,7 +1035,7 @@ export async function streamGuestFileDownload(
 ): Promise<Response> {
   if (host.origin === HostOrigin.PEER) return proxyGuestFileDownloadToPeer(host, input);
   try {
-    return await sftpDownloadResponse(input);
+    return await sftpDownloadResponse({ host, kind: input.kind, vmid: input.vmid }, input);
   } catch (error) {
     if (error instanceof ValidationError || error instanceof ForbiddenError) throw error;
     throw fileError(error, "SSH fehlgeschlagen");
@@ -1023,21 +1118,21 @@ export async function streamGuestFileUpload(
 ): Promise<{ path: string; name: string; size: number }> {
   if (host.origin === HostOrigin.PEER) return proxyGuestFileUploadToPeer(host, input);
   try {
-    return await sftpUploadFromStream(input);
+    return await sftpUploadFromStream({ host, kind: input.kind, vmid: input.vmid }, input);
   } catch (error) {
     if (error instanceof ValidationError || error instanceof ForbiddenError) throw error;
     throw fileError(error, "Upload fehlgeschlagen");
   }
 }
 
-export async function guestSftp(input: GuestFileRequest): Promise<GuestFileResult> {
+export async function guestSftp(host: Host, input: GuestFileRequest): Promise<GuestFileResult> {
   let path: string;
   try {
     path = resolveGuestPath(input.path || "/");
   } catch (error) {
     throw new ValidationError(error instanceof Error ? error.message : "Invalid path");
   }
-  const auth = parseSshAuth(input);
+  const auth = parseSshAuth({ host, kind: input.kind, vmid: input.vmid }, input);
   return withSftp(auth, async (sftp, fingerprint) => {
     switch (input.op) {
       case "list": {
@@ -1147,7 +1242,7 @@ export async function runGuestFileOp(host: Host, input: GuestFileRequest): Promi
   }
   if (host.origin === HostOrigin.PEER) return proxyGuestFilesToPeer(host, input);
   try {
-    return await guestSftp(input);
+    return await guestSftp(host, input);
   } catch (error) {
     if (error instanceof ValidationError || error instanceof ForbiddenError) throw error;
     throw fileError(error, "SSH fehlgeschlagen");

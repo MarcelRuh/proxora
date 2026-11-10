@@ -330,3 +330,86 @@ export function parseGuestListOutput(text: string, dir: string): GuestFileEntry[
   });
   return entries;
 }
+
+/** Canonical form for comparing SSH targets with guest-reported addresses. */
+export function normalizeSftpAddress(raw: string): string | null {
+  let ip = raw.trim().replace(/^\[/, "").replace(/\]$/, "");
+  ip = ip.replace(/\/\d+$/, "").replace(/%.*$/, "").toLowerCase();
+  if (isIpv4(ip)) return ip;
+  if (!ip.includes(":") || !/^[0-9a-f:.]+$/.test(ip)) return null;
+  let tail: string[] = [];
+  const v4 = /(\d+\.\d+\.\d+\.\d+)$/.exec(ip);
+  if (v4) {
+    if (!isIpv4(v4[1])) return null;
+    const [a, b, c, d] = v4[1].split(".").map(Number);
+    tail = [((a << 8) | b).toString(16), ((c << 8) | d).toString(16)];
+    ip = ip.slice(0, -v4[1].length).replace(/:$/, "") || ":";
+    if (ip === ":") ip = "::";
+  }
+  const halves = ip.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const rest = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const total = head.length + rest.length + tail.length;
+  if (halves.length === 1 && total !== 8) return null;
+  if (halves.length === 2 && total > 7) return null;
+  const groups = [...head, ...Array(8 - total).fill("0"), ...rest, ...tail];
+  if (groups.some((g) => !/^[0-9a-f]{1,4}$/.test(g))) return null;
+  return groups.map((g) => g.replace(/^0+(?=.)/, "")).join(":");
+}
+
+function pushAddress(out: Set<string>, raw: unknown) {
+  const ip = normalizeSftpAddress(String(raw ?? ""));
+  if (ip) out.add(ip);
+}
+
+/**
+ * Every address Proxmox reports for a guest: static `ip=`/`ip6=` from the config,
+ * plus QEMU agent `network-get-interfaces` or LXC `interfaces` when available.
+ */
+export function guestReportedAddresses(input: {
+  config?: Record<string, unknown> | null;
+  agent?: unknown;
+  lxcInterfaces?: unknown;
+}): string[] {
+  const out = new Set<string>();
+  for (const [key, value] of Object.entries(input.config ?? {})) {
+    if (typeof value !== "string" || !/^(net|ipconfig)\d+$/i.test(key)) continue;
+    for (const match of value.matchAll(/(?:^|,)ip6?=([^,]*)/gi)) pushAddress(out, match[1]);
+  }
+  const listOf = (payload: unknown): unknown[] => {
+    if (Array.isArray(payload)) return payload;
+    const root = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+    return Array.isArray(root.result) ? root.result : [];
+  };
+  for (const nic of listOf(input.agent)) {
+    const rec = nic && typeof nic === "object" ? (nic as Record<string, unknown>) : {};
+    const addrs = rec["ip-addresses"] ?? rec.ip_addresses;
+    if (!Array.isArray(addrs)) continue;
+    for (const entry of addrs) {
+      if (entry && typeof entry === "object") pushAddress(out, (entry as Record<string, unknown>)["ip-address"]);
+    }
+  }
+  for (const nic of listOf(input.lxcInterfaces)) {
+    const rec = nic && typeof nic === "object" ? (nic as Record<string, unknown>) : {};
+    for (const value of [rec.inet, rec.inet6, rec.ip, rec.address]) {
+      for (const part of Array.isArray(value) ? value : [value]) {
+        for (const piece of String(part ?? "").split(/[\s,]+/)) pushAddress(out, piece);
+      }
+    }
+  }
+  for (const ip of [...out]) {
+    if (ip.startsWith("127.") || ip === "0:0:0:0:0:0:0:1" || ip.startsWith("fe80:")) out.delete(ip);
+  }
+  return [...out];
+}
+
+/** The SSH target must be one of the guest's own addresses, never an arbitrary host. */
+export function assertSftpTargetIsGuestAddress(target: string, addresses: readonly string[]): string {
+  const host = isAllowedSftpTarget(target);
+  const normalized = normalizeSftpAddress(host);
+  if (!normalized || !addresses.includes(normalized)) {
+    throw new Error("SSH host is not an address reported for this guest");
+  }
+  return host;
+}

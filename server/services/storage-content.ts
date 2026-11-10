@@ -172,3 +172,14 @@ export async function listStorageContent(
     return applyVolumeUsage(item, item.vmid ? configs.get(item.vmid) : undefined, guest);
   });
 }
+
+/** Looks up one volume in its storage listing so callers see Proxmox's own content type and owner. */
+export async function findStorageVolume(
+  client: ProxmoxClient,
+  node: string,
+  storage: string,
+  volid: string,
+): Promise<Record<string, unknown> | null> {
+  const rows = await client.storage.content(node, storage);
+  return (Array.isArray(rows) ? rows : []).find((row) => storageContentVolid(row) === volid) ?? null;
+}

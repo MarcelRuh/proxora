@@ -4,6 +4,7 @@ import { parse } from "node:url";
 import next from "next";
 import { WebSocketServer } from "ws";
 import { logger } from "@/lib/logger";
+import { stampPeerIp } from "@/server/http/client-ip";
 import { attachConsoleProxy } from "@/server/ws/console-proxy";
 import { attachGuestFileUpload } from "@/server/ws/guest-file-upload";
 import { handleNodeGuestFileTransfer } from "@/server/http/guest-file-node";
@@ -36,6 +37,7 @@ async function main() {
   const upgradeHandler = app.getUpgradeHandler?.();
 
   const server = createServer((req, res) => {
+    stampPeerIp(req);
     void (async () => {
       try {
         if (await handleNodeGuestFileTransfer(req, res)) return;

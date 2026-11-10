@@ -11,7 +11,7 @@ export const GET = apiRoute("users.view", async () => {
 
 export const POST = apiRoute("users.create", async (req, session) => {
   const body = createUserSchema.parse(await req.json());
-  const user = await createUser(body);
+  const user = await createUser(session.user, body);
   await writeAuditLog({
     userId: session.user.id,
     ip: await clientIp(),

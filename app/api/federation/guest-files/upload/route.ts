@@ -39,14 +39,14 @@ export async function POST(request: Request) {
       throw new ValidationError("Upload-Meta fehlt");
     }
     const payload = metaSchema.parse(parsed);
-    await requireSharedGuestFiles(request, payload.remoteHostId, payload.kind);
+    const { host } = await requireSharedGuestFiles(request, payload.remoteHostId, payload.kind);
     if (!payload.target.trim()) throw new ValidationError("SSH host fehlt");
     const plan = parseGuestUploadPlan({
       sizeHeader: request.headers.get(GUEST_UPLOAD_SIZE_HEADER),
       offsetHeader: request.headers.get(GUEST_UPLOAD_OFFSET_HEADER),
       contentLength: request.headers.get("content-length"),
     });
-    const result = await sftpUploadFromStream({
+    const result = await sftpUploadFromStream({ host, kind: payload.kind, vmid: payload.vmid }, {
       target: payload.target,
       port: payload.port,
       username: payload.username,
