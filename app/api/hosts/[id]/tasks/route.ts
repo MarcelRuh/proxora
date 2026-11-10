@@ -8,6 +8,7 @@ import { withHostClient } from "@/server/services/host-service";
 import { inventoryNodeNames, loadHostInventory } from "@/server/services/inventory-cache";
 import { mapPool } from "@/lib/async-pool";
 import { taskGuestLabel, taskTypeLabel } from "@/lib/proxmox-tasks";
+import { assertTaskAccess, filterTasksForUser } from "@/lib/task-scope";
 
 const TASK_NODE_CONCURRENCY = 2;
 
@@ -23,7 +24,7 @@ export const GET = apiRoute("tasks.view", async (req, session, params) => {
     const names = new Map<string, { name: string; kind: "vm" | "lxc" }>();
     for (const guest of inv.vms) names.set(String(guest.vmid), { name: guest.name, kind: "vm" });
     for (const guest of inv.containers) names.set(String(guest.vmid), { name: guest.name, kind: "lxc" });
-    const tasks = taskLists.flat().map((task) => {
+    const tasks = filterTasksForUser(session.user, params.id, taskLists.flat()).map((task) => {
       const match = names.get(String(task.id ?? "").trim());
       return {
         ...task,
@@ -44,6 +45,7 @@ const stopSchema = z.object({
 
 export const POST = apiRoute("tasks.cancel", async (req, session, params) => {
   const body = stopSchema.parse(await req.json());
+  assertTaskAccess(session.user, params.id, body.node, body.upid);
   await withHostClient(params.id, session.user, async (client, host) => {
     await client.tasks.stop(body.node, body.upid);
     const status = await client.tasks.status(body.node, body.upid).catch(() => null);
