@@ -15,6 +15,7 @@ import { getHostOrThrow } from "@/server/services/host-service";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { streamGuestFileUpload } from "@/server/services/guest-files";
 import { headerRequest } from "@/server/ws/request-headers";
+import { clientIpFromNode } from "@/server/http/client-ip";
 
 function cookieValue(req: IncomingMessage, name: string): string | undefined {
   const raw = req.headers.cookie ?? "";
@@ -23,13 +24,6 @@ function cookieValue(req: IncomingMessage, name: string): string | undefined {
     if (key === name) return decodeURIComponent(rest.join("="));
   }
   return undefined;
-}
-
-function clientIp(req: IncomingMessage): string | undefined {
-  const forwarded = String(req.headers["x-forwarded-for"] ?? "")
-    .split(",")[0]
-    ?.trim();
-  return forwarded || req.socket.remoteAddress || undefined;
 }
 
 function sendJson(ws: WebSocket, payload: Record<string, unknown>) {
@@ -111,7 +105,7 @@ async function handleUploadSocket(ws: WebSocket, req: IncomingMessage) {
     return;
   }
 
-  const ip = clientIp(req);
+  const ip = clientIpFromNode(req);
   const meta = { path: ticket.path, sshHost: ticket.target, sshUser: ticket.username, mode: ticket.mode, via: "ws" };
   const body = new PassThrough({ highWaterMark: 4 * 1024 * 1024 });
   const socket = (ws as unknown as { _socket?: { pause?: () => void; resume?: () => void } })._socket;

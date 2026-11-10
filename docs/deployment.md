@@ -40,6 +40,7 @@ The wget installer prints username and password again in the final summary box. 
 | `SESSION_SECRET` | yes | cookie signing / rotation helper |
 | `APP_URL` | yes in prod | Canonical public origin. The installer sets `http://<LAN-IP>:3000`. Leave HTTPS URLs untouched (reverse proxy). Cookie `Secure` follows this scheme. |
 | `APP_ALLOWED_ORIGINS` | no | Extra CSRF origins, comma-separated |
+| `TRUST_PROXY` | behind a proxy | `true` to take client IPs from `X-Real-IP` / rightmost `X-Forwarded-For`. Leave off when clients reach Proxora directly, or they can spoof their IP. |
 | `BOOTSTRAP_ADMIN_PASSWORD` | first boot | change after login |
 | `NEXT_PUBLIC_WS_URL` | no | only if WS is split |
 | `PROXORA_INSTALL_DIR` | for self-update | Host path of the Compose install |
@@ -57,6 +58,7 @@ Terminate TLS in Caddy/nginx and forward:
 - `/ws/console` with WebSocket upgrade headers
 
 Set `APP_URL` to the public HTTPS origin.
+Set `TRUST_PROXY=true` and have the proxy set `X-Real-IP` (or append to `X-Forwarded-For`), otherwise login rate limits and audit logs see every client as the proxy's address.
 
 ## Backups
 
