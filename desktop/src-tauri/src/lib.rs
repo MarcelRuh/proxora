@@ -1,14 +1,14 @@
 mod legacy_install;
 mod prefs;
+mod titlebar;
 mod url_util;
 
 use prefs::Prefs;
 use serde::Serialize;
 use std::sync::Mutex;
-use tauri::{
-  menu::{MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder},
-  Manager, State, WebviewUrl, WebviewWindowBuilder,
-};
+use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
+#[cfg(target_os = "macos")]
+use tauri::menu::{MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_updater::UpdaterExt;
 use url::Url;
@@ -187,6 +187,7 @@ fn clear_server_internal(app: &tauri::AppHandle) -> Result<(), String> {
   navigate_main(app, setup_nav_url())
 }
 
+#[cfg(target_os = "macos")]
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
   let reload = MenuItem::with_id(app, "reload", "Reload", true, Some("CmdOrCtrl+R"))?;
   let change = MenuItem::with_id(app, "change_server", "Change server…", true, None::<&str>)?;
@@ -240,8 +241,12 @@ pub fn run() {
     ])
     .setup(|app| {
       let handle = app.handle().clone();
-      let menu = build_menu(&handle)?;
-      app.set_menu(menu)?;
+      // Custom HTML chrome owns window actions on Win/Linux; keep native menu on macOS.
+      #[cfg(target_os = "macos")]
+      {
+        let menu = build_menu(&handle)?;
+        app.set_menu(menu)?;
+      }
 
       let prefs = app.state::<AppState>().prefs.lock().expect("prefs lock").clone();
 
@@ -261,8 +266,11 @@ pub fn run() {
         .inner_size(1280.0, 800.0)
         .min_inner_size(900.0, 600.0)
         .resizable(true)
+        .decorations(false)
+        .shadow(true)
         .center()
         .user_agent(&desktop_ua)
+        .initialization_script(titlebar::TITLEBAR_BOOTSTRAP)
         .initialization_script_for_all_frames(&desktop_bridge)
         .on_navigation({
           let handle = handle.clone();

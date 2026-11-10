@@ -1106,3 +1106,27 @@ html[data-ui="harbor"] {
   --ui-shell-gap: 0px;
 }
 
+/* Tauri desktop client custom titlebar (see desktop/src-tauri/src/titlebar.rs) */
+html[data-desktop-chrome] {
+  --desktop-titlebar-height: 36px;
+}
+
+html[data-desktop-chrome] body {
+  box-sizing: border-box;
+  height: 100dvh;
+  padding-top: var(--desktop-titlebar-height);
+  overflow: hidden;
+}
+
+html[data-desktop-chrome] .app-shell,
+html[data-desktop-chrome] .h-dvh,
+html[data-desktop-chrome] [data-desktop-frame] {
+  height: calc(100dvh - var(--desktop-titlebar-height));
+  max-height: calc(100dvh - var(--desktop-titlebar-height));
+}
+
+html[data-desktop-chrome] .app-sidebar.fixed {
+  top: var(--desktop-titlebar-height);
+  height: calc(100dvh - var(--desktop-titlebar-height));
+}
+

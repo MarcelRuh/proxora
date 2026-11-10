@@ -28,7 +28,7 @@ body {
 }
 
 .shell {
-  min-height: 100vh;
+  min-height: calc(100vh - var(--desktop-titlebar-height, 0px));
   display: grid;
   place-items: center;
   padding: 32px 20px;
