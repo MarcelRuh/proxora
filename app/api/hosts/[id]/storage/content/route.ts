@@ -5,11 +5,12 @@ import { clientIp } from "@/server/auth/session";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
-import { ForbiddenError, ValidationError } from "@/lib/errors";
+import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
+import { assertVolidAccess, isGuestScoped } from "@/lib/backup-scope";
 import { parseBackupVolid } from "@/lib/backup";
 import { userHasPermission } from "@/lib/permissions";
 import { storageContentDeletePermission, storageContentKind } from "@/lib/storage-content";
-import { listStorageContent } from "@/server/services/storage-content";
+import { findStorageVolume, listStorageContent } from "@/server/services/storage-content";
 
 export const GET = apiRoute("storage.view", async (req, session, params) => {
   const url = new URL(req.url);
@@ -33,11 +34,18 @@ export const POST = apiRoute(["storage.delete", "backup.delete"], async (req, se
   const body = deleteSchema.parse(await req.json());
   const parsed = parseBackupVolid(body.volid);
   if (!parsed.storage || !parsed.volume) throw new ValidationError("Ungültiges Volume");
-  const content = storageContentKind({ volid: body.volid, content: parsed.volume.includes("backup") ? "backup" : "" });
-  const needed = storageContentDeletePermission(content);
-  if (!userHasPermission(session.user, needed, params.id)) throw new ForbiddenError();
+  const volid = `${parsed.storage}:${parsed.volume}`;
 
   await withHostClient(params.id, session.user, async (client, host) => {
+    const row = await findStorageVolume(client, body.node, parsed.storage, volid);
+    if (!row) throw new NotFoundError("Volume nicht gefunden");
+    const content = storageContentKind(row);
+    const needed = storageContentDeletePermission(content);
+    if (!userHasPermission(session.user, needed, params.id)) throw new ForbiddenError();
+    if (isGuestScoped(session.user)) {
+      const vmid = Number(row.vmid);
+      assertVolidAccess(session.user, params.id, volid, Number.isInteger(vmid) && vmid > 0 ? vmid : null);
+    }
     await client.storage.deleteContent(body.node, parsed.storage, parsed.volume);
     await writeAuditLog({
       userId: session.user.id,

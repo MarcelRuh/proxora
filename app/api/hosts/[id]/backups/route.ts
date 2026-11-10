@@ -7,7 +7,7 @@ import { writeAuditLog } from "@/server/services/audit-service";
 import { AUDIT_ACTIONS } from "@/lib/audit-actions";
 import { withHostClient } from "@/server/services/host-service";
 import { compactProxmoxBody } from "@/lib/lxc-net";
-import { newBackupJobId, parseBackupVolid } from "@/lib/backup";
+import { newBackupJobId, normalizeBackupJob, parseBackupVolid } from "@/lib/backup";
 import {
   cleanupOrphanBackupFiles,
   listHostBackups,
@@ -15,13 +15,31 @@ import {
   upsertBackupJob,
 } from "@/server/services/backup-service";
 import { enqueueRestoreJob } from "@/server/services/restore-jobs";
-import { ValidationError } from "@/lib/errors";
+import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { lookupGuestName } from "@/server/notifications/guest-name";
 import { notifyTopic } from "@/server/notifications/dispatch";
 import { backupPermissionForAction, userHasPermission } from "@/lib/permissions";
-import { ForbiddenError } from "@/lib/errors";
 import { TASK_TIMEOUT, isUpid, waitUpid } from "@/server/proxmox/task-wait";
 import { durationLabel } from "@/lib/duration";
+import {
+  assertBackupJobAccess,
+  assertHostWideBackupAction,
+  assertVmidListAccess,
+  assertVolidAccess,
+  canAccessVmid,
+  isGuestScoped,
+} from "@/lib/backup-scope";
+import type { ProxmoxClient } from "@/server/proxmox/client";
+import type { SessionUser } from "@/server/auth/session";
+
+/** Guest-scoped users may only touch jobs that list nothing but their own guests. */
+async function assertExistingJobAccess(client: ProxmoxClient, user: SessionUser, hostId: string, jobId: string) {
+  if (!isGuestScoped(user)) return;
+  const jobs = await client.backup.jobs();
+  const raw = (Array.isArray(jobs) ? jobs : []).find((j) => String(j.id) === jobId);
+  if (!raw) throw new NotFoundError("Backup-Job nicht gefunden");
+  assertBackupJobAccess(user, hostId, normalizeBackupJob(raw));
+}
 
 export const maxDuration = 900;
 
@@ -88,23 +106,29 @@ export const POST = apiRoute(
   let result: Record<string, unknown>;
   try {
     if (body.action === "cleanup-orphans") {
+      assertHostWideBackupAction(session.user);
       result = await cleanupOrphanBackupFiles(params.id, session.user);
     } else {
     result = await withHostClient(params.id, session.user, async (client, host) => {
     hostName = host.name;
     switch (body.action) {
       case "create-job": {
+        assertBackupJobAccess(session.user, params.id, body);
         const id = body.id?.trim() || newBackupJobId();
         await upsertBackupJob(client, { ...body, id, update: false });
         return { id };
       }
       case "update-job":
+        await assertExistingJobAccess(client, session.user, params.id, body.id);
+        assertBackupJobAccess(session.user, params.id, body);
         await upsertBackupJob(client, { ...body, id: body.id, update: true });
         return { id: body.id };
       case "delete-job":
+        await assertExistingJobAccess(client, session.user, params.id, body.id);
         await client.backup.deleteJob(body.id);
         return { id: body.id };
       case "run-job": {
+        await assertExistingJobAccess(client, session.user, params.id, body.id);
         const started = await runBackupJob(client, params.id, body.id, body.node);
         notifyName = started.job.all ? "Alle Gäste" : started.job.vmid || started.job.id;
         notifyId = started.job.all ? started.job.id : started.job.vmid || started.job.id;
@@ -112,6 +136,7 @@ export const POST = apiRoute(
         return { upid: started.upid, node: started.node };
       }
       case "run": {
+        assertVmidListAccess(session.user, params.id, body.vmid);
         const first = Number(body.vmid.split(/[,\s]+/).find(Boolean));
         notifyName = await lookupGuestName(client, body.node, first);
         notifyId = body.vmid;
@@ -128,6 +153,10 @@ export const POST = apiRoute(
         return { upid, node: body.node };
       }
       case "restore": {
+        assertVolidAccess(session.user, params.id, body.volid);
+        if (isGuestScoped(session.user) && !canAccessVmid(session.user, params.id, body.vmid, parseBackupVolid(body.volid).kind)) {
+          throw new NotFoundError("Guest not found");
+        }
         notifyName = (await lookupGuestName(client, body.node, body.vmid)) || parseBackupVolid(body.volid).filename;
         notifyId = String(body.vmid);
         notifyNode = body.node;
@@ -148,6 +177,7 @@ export const POST = apiRoute(
       case "delete-file": {
         const parsed = parseBackupVolid(body.volid);
         if (!parsed.storage || !parsed.volume) throw new ValidationError("Ungültiges Backup-Volume");
+        assertVolidAccess(session.user, params.id, body.volid);
         await client.storage.deleteContent(body.node, parsed.storage, parsed.volume);
         return { volid: body.volid };
       }
