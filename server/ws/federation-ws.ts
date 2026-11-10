@@ -8,6 +8,7 @@ import { clientForHost } from "@/server/services/host-service";
 import { WireguardPeerKind } from "@prisma/client";
 import { wsPayloadToBuffer } from "@/lib/vnc-handshake";
 import { isSafeProxmoxPath } from "@/lib/federation-access";
+import { dropUpstreamIfBrowserGone } from "@/server/ws/request-headers";
 
 function bearer(req: IncomingMessage): string {
   const header = req.headers.authorization ?? "";
@@ -63,6 +64,7 @@ async function pipeFederationWebsocket(browser: WebSocket, req: IncomingMessage)
     rejectUnauthorized: !host.allowInsecureTls,
     perMessageDeflate: false,
   } as import("ws").ClientOptions);
+  if (dropUpstreamIfBrowserGone(browser, remote)) return;
 
   const pending: Buffer[] = [];
   let upstreamOpen = false;

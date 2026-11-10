@@ -11,6 +11,8 @@ import { getSessionFromToken, assertGuestAccess, canAccessHost } from "@/server/
 import { writeAuditLog } from "@/server/services/audit-service";
 import { clientForHost } from "@/server/services/host-service";
 import { handleFederationWebsocket } from "@/server/ws/federation-ws";
+import { isAllowedOrigin } from "@/server/http/respond";
+import { browserGone, dropUpstreamIfBrowserGone, headerRequest } from "@/server/ws/request-headers";
 import { consumeProxmoxVncHandshake, wsPayloadToBuffer } from "@/lib/vnc-handshake";
 import { rfbPasswordFromVncProxy } from "@/lib/vnc-password";
 import { isTermproxySerialError, vmHasGraphics, vmHasSerialSocket } from "@/lib/guest-console";
@@ -41,6 +43,12 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
   const url = new URL(req.url ?? "", "http://localhost");
   if (url.pathname === "/api/federation/ws") {
     await handleFederationWebsocket(browser, req);
+    return;
+  }
+  // Browser consoles authenticate by cookie, so a cross-site page must not be able to open one.
+  const origin = req.headers.origin;
+  if (!origin || !isAllowedOrigin(headerRequest(req), origin)) {
+    browser.close(4403, "Invalid origin");
     return;
   }
   const hostId = url.searchParams.get("hostId") ?? "";
@@ -146,6 +154,7 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
       }
     }
 
+    if (browserGone(browser)) return;
     const term =
       display === "vga"
         ? await openVmVncProxy(proxmox, node, Number(vmid))
@@ -173,6 +182,7 @@ async function handleConnection(browser: WebSocket, req: IncomingMessage) {
       rejectUnauthorized: !host.allowInsecureTls,
       perMessageDeflate: false,
     } as import("ws").ClientOptions);
+    if (dropUpstreamIfBrowserGone(browser, remote)) return;
 
     const closeBoth = (code?: number, reason?: string) => {
       try {
