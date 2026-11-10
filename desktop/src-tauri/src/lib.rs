@@ -66,10 +66,10 @@ fn eval_main(app: &tauri::AppHandle, js: &str) {
 }
 
 fn emit_update_event(app: &tauri::AppHandle, detail: serde_json::Value) {
-  let payload = serde_json::json!({ "detail": detail });
+  // Mirror onto ProxoraDesktop and dispatch a CustomEvent the titlebar listens to.
   let js = format!(
-    "window.dispatchEvent(new CustomEvent('proxora-update',{}));",
-    payload
+    r#"(function(d){{try{{window.ProxoraDesktop=Object.assign(window.ProxoraDesktop||{{}},{{lastUpdate:d}});}}catch(e){{}}try{{window.dispatchEvent(new CustomEvent('proxora-update',{{detail:d}}));}}catch(e){{}}}})({detail});"#,
+    detail = detail
   );
   eval_main(app, &js);
 }

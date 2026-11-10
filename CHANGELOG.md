@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.5.2] – 2026-11-10
+
+### Fixed
+
+- Desktop titlebar “Check for updates” now shows status on remote UI (previously silent even when up to date / errors).
+
 ## [2.5.1] – 2026-11-10
 
 ### Fixed

@@ -7,7 +7,7 @@ import {
 
 describe("desktop shell helpers", () => {
   it("reads the desktop version from the WebView user agent", () => {
-    expect(parseProxoraDesktopVersion("Mozilla/5.0 ProxoraDesktop/2.5.1")).toBe("2.5.1");
+    expect(parseProxoraDesktopVersion("Mozilla/5.0 ProxoraDesktop/2.5.2")).toBe("2.5.2");
     expect(parseProxoraDesktopVersion("Mozilla/5.0 Chrome/120")).toBeNull();
   });
 
@@ -16,8 +16,8 @@ describe("desktop shell helpers", () => {
   });
 
   it("only offers an update when GitHub is newer", () => {
-    expect(desktopUpdateAvailable("2.4.19", "2.5.1")).toBe(true);
-    expect(desktopUpdateAvailable("2.5.1", "2.5.1")).toBe(false);
-    expect(desktopUpdateAvailable("2.5.1", "2.4.19")).toBe(false);
+    expect(desktopUpdateAvailable("2.4.19", "2.5.2")).toBe(true);
+    expect(desktopUpdateAvailable("2.5.2", "2.5.2")).toBe(false);
+    expect(desktopUpdateAvailable("2.5.2", "2.4.19")).toBe(false);
   });
 });

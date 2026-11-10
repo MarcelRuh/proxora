@@ -11,6 +11,7 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
   var HEIGHT = 36;
   var STYLE_ID = "proxora-desktop-titlebar-style";
   var BAR_ID = "proxora-desktop-titlebar";
+  var toastTimer = null;
 
   function coreInvoke(cmd, args) {
     try {
@@ -38,6 +39,11 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
       "#" + BAR_ID + " .px-mark{width:16px;height:16px;border-radius:3px;background:linear-gradient(135deg,#ff006e,#7b2cbf);box-shadow:0 0 0 1px rgba(255,0,110,0.35);flex:0 0 auto;}",
       "#" + BAR_ID + " .px-brand{letter-spacing:0.22em;font-size:11px;font-weight:800;color:#fff;}",
       "#" + BAR_ID + " .px-sub{color:#a0a0b0;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;font-size:10px;opacity:0.9;}",
+      "#" + BAR_ID + " .px-status{display:none;max-width:min(420px,46vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:8px;padding:3px 8px;border-radius:3px;font-size:11px;font-weight:600;letter-spacing:0.02em;-webkit-app-region:no-drag;}",
+      "#" + BAR_ID + " .px-status.show{display:inline-block;}",
+      "#" + BAR_ID + " .px-status.info{background:rgba(61,224,255,0.12);color:#b8f3ff;}",
+      "#" + BAR_ID + " .px-status.ok{background:rgba(52,211,153,0.14);color:#a7f3d0;}",
+      "#" + BAR_ID + " .px-status.err{background:rgba(255,0,110,0.14);color:#ffb3c8;}",
       "#" + BAR_ID + " .px-actions{display:flex;align-items:stretch;flex:0 0 auto;-webkit-app-region:no-drag;}",
       "#" + BAR_ID + " .px-menu{position:relative;display:flex;}",
       "#" + BAR_ID + " button.px-btn{appearance:none;border:0;background:transparent;color:#c8c8d8;width:46px;min-width:46px;padding:0;margin:0;cursor:pointer;display:grid;place-items:center;transition:background .12s ease,color .12s ease;}",
@@ -62,6 +68,48 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
       path +
       "</svg>"
     );
+  }
+
+  function setStatus(message, kind, persistMs) {
+    var el = document.querySelector("#" + BAR_ID + " .px-status");
+    if (!el) return;
+    if (toastTimer) {
+      clearTimeout(toastTimer);
+      toastTimer = null;
+    }
+    if (!message) {
+      el.className = "px-status";
+      el.textContent = "";
+      return;
+    }
+    el.className = "px-status show " + (kind || "info");
+    el.textContent = message;
+    el.title = message;
+    if (persistMs !== 0) {
+      toastTimer = setTimeout(function () {
+        el.className = "px-status";
+        el.textContent = "";
+      }, persistMs || 5000);
+    }
+  }
+
+  function showUpdateDetail(detail) {
+    if (!detail || !detail.status) return;
+    if (detail.status === "available") {
+      setStatus("Update " + (detail.version || "") + " found — downloading…", "info", 0);
+      return;
+    }
+    if (detail.status === "installed") {
+      setStatus("Update " + (detail.version || "") + " installed — restarting…", "ok", 0);
+      return;
+    }
+    if (detail.status === "upToDate") {
+      setStatus("Desktop client is up to date", "ok", 4500);
+      return;
+    }
+    if (detail.status === "error") {
+      setStatus("Update failed: " + (detail.message || "unknown error"), "err", 8000);
+    }
   }
 
   function setMaxIcon(btn, maximized) {
@@ -95,6 +143,7 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
       '<span class="px-mark" data-tauri-drag-region></span>' +
       '<span class="px-brand" data-tauri-drag-region>PROXORA</span>' +
       '<span class="px-sub" data-tauri-drag-region>Desktop</span>' +
+      '<span class="px-status" aria-live="polite"></span>' +
       "</div>" +
       '<div class="px-actions">' +
       '<div class="px-menu">' +
@@ -161,11 +210,39 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
             return;
           }
           if (act === "change") {
-            coreInvoke("clear_server").catch(function () {});
+            setStatus("Opening server setup…", "info", 2500);
+            coreInvoke("clear_server").catch(function (err) {
+              setStatus("Change server failed: " + (err && err.message ? err.message : String(err)), "err", 7000);
+            });
             return;
           }
           if (act === "updates") {
-            coreInvoke("check_for_updates").catch(function () {});
+            setStatus("Checking for desktop updates…", "info", 0);
+            coreInvoke("check_for_updates")
+              .then(function () {
+                setTimeout(function () {
+                  var el = document.querySelector("#" + BAR_ID + " .px-status");
+                  if (
+                    el &&
+                    el.classList.contains("show") &&
+                    /Checking for desktop updates/i.test(el.textContent || "")
+                  ) {
+                    setStatus(
+                      "No updater response — reinstall from GitHub Releases if this persists",
+                      "err",
+                      8000
+                    );
+                  }
+                }, 20000);
+              })
+              .catch(function (err) {
+                setStatus(
+                  "Update check failed: " +
+                    (err && err.message ? err.message : String(err)),
+                  "err",
+                  8000
+                );
+              });
           }
         });
       });
@@ -197,6 +274,10 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
         coreInvoke("desktop_close").catch(function () {});
       });
     }
+
+    window.addEventListener("proxora-update", function (event) {
+      showUpdateDetail(event && event.detail);
+    });
   }
 
   function boot() {
