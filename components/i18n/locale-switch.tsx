@@ -26,18 +26,21 @@ function FlagGb({ className }: { className?: string }) {
   );
 }
 
-export function LocaleSwitch({ className }: { className?: string }) {
+export function LocaleSwitch({ className, compact = false }: { className?: string; compact?: boolean }) {
   const { locale, setLocale } = useI18n();
   const btn =
     "inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider";
   return (
-    <div className={cn("flex items-center gap-2", className)}>
+    <div className={cn("flex items-center", compact ? "gap-1" : "gap-2", className)} role="group" aria-label="Language">
       <button
         type="button"
         className={cn(btn, locale === "de" ? "text-primary" : "text-muted-foreground hover:text-foreground")}
         onClick={() => setLocale("de")}
+        aria-pressed={locale === "de"}
+        lang="de"
+        title="Deutsch"
       >
-        <FlagDe className="h-3 w-4 rounded-[1px] ring-1 ring-black/20" />
+        {compact ? null : <FlagDe className="h-3 w-4 rounded-[1px] ring-1 ring-black/20" />}
         DE
       </button>
       <span className="text-muted-foreground">/</span>
@@ -45,8 +48,11 @@ export function LocaleSwitch({ className }: { className?: string }) {
         type="button"
         className={cn(btn, locale === "en" ? "text-primary" : "text-muted-foreground hover:text-foreground")}
         onClick={() => setLocale("en")}
+        aria-pressed={locale === "en"}
+        lang="en"
+        title="English"
       >
-        <FlagGb className="h-3 w-4 rounded-[1px] ring-1 ring-black/20" />
+        {compact ? null : <FlagGb className="h-3 w-4 rounded-[1px] ring-1 ring-black/20" />}
         EN
       </button>
     </div>

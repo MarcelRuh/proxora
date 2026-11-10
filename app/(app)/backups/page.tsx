@@ -337,7 +337,7 @@ function HostBackups({
                       className="max-w-xs"
                     />
                     <select
-                      className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+                      className="h-9 rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm"
                       value={fileKind}
                       onChange={(e) => setFileKind(e.target.value as BackupFileFilter["kind"])}
                     >
@@ -346,7 +346,7 @@ function HostBackups({
                       <option value="lxc">LXC</option>
                     </select>
                     <select
-                      className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+                      className="h-9 rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm"
                       value={fileStorage}
                       onChange={(e) => setFileStorage(e.target.value)}
                     >
@@ -358,7 +358,7 @@ function HostBackups({
                       ))}
                     </select>
                     <select
-                      className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+                      className="h-9 rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm"
                       value={filePeriod}
                       onChange={(e) => setFilePeriod(e.target.value as BackupFileFilter["period"])}
                     >

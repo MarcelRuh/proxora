@@ -39,6 +39,9 @@ export async function GET(request: NextRequest) {
         headers: {
           "Content-Type": cached.contentType,
           "Cache-Control": "public, max-age=43200",
+          // Upstream SVGs are served from our origin: never let them run script.
+          "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+          "X-Content-Type-Options": "nosniff",
         },
       });
     }
@@ -79,6 +82,9 @@ export async function GET(request: NextRequest) {
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "public, max-age=43200",
+          // Upstream SVGs are served from our origin: never let them run script.
+          "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+          "X-Content-Type-Options": "nosniff",
       },
     });
   } catch (error) {

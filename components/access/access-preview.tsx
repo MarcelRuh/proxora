@@ -28,7 +28,7 @@ export function AccessPreviewCard({ preview }: { preview: AccessPreview }) {
           .join(", ");
 
   return (
-    <div className="rounded-[4px] border border-border bg-white/[0.03] p-3 text-sm">
+    <div className="rounded-[var(--ui-radius)] border border-border bg-foreground/[0.03] p-3 text-sm">
       <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("users.preview")}</p>
       <p>
         <span className="font-medium">{preview.roleName || t("users.chooseRole")}</span>

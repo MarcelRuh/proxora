@@ -129,7 +129,7 @@ export function GuestNetworksSection() {
         <div className="space-y-2 border-t border-border pt-4">
           <p className="font-medium">{t("settings.hostNetworks")}</p>
           <select
-            className="h-9 w-full max-w-md rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+            className="h-9 w-full max-w-md rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm"
             value={activeHostId}
             onChange={(e) => setHostId(e.target.value)}
           >

@@ -40,6 +40,24 @@ function shortRev(value: string | null | undefined): string {
   return value.length > 12 ? `${value.slice(0, 12)}…` : value;
 }
 
+type Translate = ReturnType<typeof useI18n>["t"];
+
+/** Localize the server status line from structured fields; raw text only for error details. */
+function statusLine(status: SelfUpdateStatus, t: Translate): string {
+  if (status.updating) return t("proxora.msg.updating");
+  if (status.sidecar === "missing") return t("proxora.msg.sidecarMissing");
+  if (!status.enabled) return t("proxora.msg.unavailable");
+  if (status.updateAvailable && status.imageReady === false) {
+    return t("proxora.msg.imagePending", { v: status.targetVersion ?? "" });
+  }
+  if (status.updateAvailable) {
+    return t("proxora.msg.available", { from: status.currentVersion, to: status.targetVersion ?? t("proxora.latest") });
+  }
+  if (/^GitHub check failed/i.test(status.message)) return status.message;
+  if (/^Checking/i.test(status.message)) return t("proxora.msg.checking");
+  return t("proxora.msg.upToDate");
+}
+
 export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
   const qc = useQueryClient();
@@ -107,7 +125,7 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
         {success ? <p className="whitespace-pre-wrap text-success">{success}</p> : null}
         {status ? (
           <>
-            <p className="text-muted-foreground">{status.message}</p>
+            <p className="text-muted-foreground" aria-live="polite">{statusLine(status, t)}</p>
             <div className="flex flex-wrap items-baseline gap-2 font-mono text-lg font-semibold">
               {status.updateAvailable ? (
                 <>
@@ -120,7 +138,7 @@ export function SelfUpdateSection({ compact = false }: { compact?: boolean }) {
               )}
             </div>
             {!compact ? (
-              <dl className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+              <dl className="grid grid-cols-[minmax(7rem,max-content)_1fr] gap-x-6 gap-y-1 text-xs text-muted-foreground [&_dd]:min-w-0 [&_dd]:break-all [&_dd]:text-foreground">
                 <dt>{t("proxora.repo")}</dt>
                 <dd>
                   {status.repo}@{status.targetTag ?? status.branch}

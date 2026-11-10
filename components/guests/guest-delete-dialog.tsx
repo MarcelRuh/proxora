@@ -249,7 +249,7 @@ export function GuestDeleteDialog({
                           : "—";
                         return (
                           <li key={file.volid}>
-                            <label className="flex cursor-pointer items-start gap-2 rounded-md px-1 py-1 text-sm hover:bg-white/[0.04]">
+                            <label className="flex cursor-pointer items-start gap-2 rounded-md px-1 py-1 text-sm hover:bg-foreground/[0.04]">
                               <input
                                 type="checkbox"
                                 className="mt-1"

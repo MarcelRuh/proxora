@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { APP_VERSION, compareSemver } from "@/lib/version";
+import { compareSemver } from "@/lib/version";
 
 const execFileAsync = promisify(execFile);
 

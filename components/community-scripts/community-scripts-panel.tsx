@@ -62,13 +62,13 @@ function ScriptLogo({ name, logo }: { name: string; logo: string | null }) {
   const src = communityScriptLogoSrc(logo);
   if (!src || failed) {
     return (
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] bg-white/[0.06] text-xs font-semibold text-muted-foreground">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--ui-radius)] bg-foreground/[0.06] text-xs font-semibold text-muted-foreground">
         {name.trim().slice(0, 1).toUpperCase() || "?"}
       </div>
     );
   }
   return (
-    <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[4px] bg-white/[0.04]">
+    <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[var(--ui-radius)] bg-foreground/[0.04]">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
@@ -213,7 +213,7 @@ export function CommunityScriptsPanel({
       <div className="flex flex-wrap items-center gap-2">
         {hosts.length > 1 ? (
           <select
-            className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+            className="h-9 rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm"
             value={hostId}
             onChange={(e) => onHostChange(e.target.value)}
           >
@@ -234,7 +234,7 @@ export function CommunityScriptsPanel({
           />
         </div>
         <select
-          className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+          className="h-9 rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm"
           value={kind}
           onChange={(e) => setKind(e.target.value as CommunityScriptKind | "all")}
         >
@@ -245,7 +245,7 @@ export function CommunityScriptsPanel({
           ))}
         </select>
         <select
-          className="h-9 max-w-[16rem] rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+          className="h-9 max-w-[16rem] rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm"
           value={categoryId}
           onChange={(e) => setCategoryId(e.target.value)}
         >
@@ -391,7 +391,7 @@ export function CommunityScriptsPanel({
                     {t("cs.copy")}
                   </Button>
                 </div>
-                <p className="break-all rounded-[4px] border border-border bg-white/[0.03] p-2 font-mono text-[11px]">
+                <p className="break-all rounded-[var(--ui-radius)] border border-border bg-foreground/[0.03] p-2 font-mono text-[11px]">
                   {communityScriptInstallCommand(detail.kind, detail.slug)}
                 </p>
               </div>
@@ -454,7 +454,7 @@ export function CommunityScriptsPanel({
           {selected ? (
             <div className="space-y-3 text-sm">
               <p className="text-muted-foreground">{selected.description}</p>
-              <p className="break-all rounded-[4px] border border-border bg-white/[0.03] p-2 font-mono text-[11px]">
+              <p className="break-all rounded-[var(--ui-radius)] border border-border bg-foreground/[0.03] p-2 font-mono text-[11px]">
                 {communityScriptInstallCommand(selected.kind, selected.slug)}
               </p>
               <div className="flex justify-end gap-2">

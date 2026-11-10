@@ -31,12 +31,17 @@ async function postJson(url: string, body: unknown): Promise<void> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
+      // Only the first URL is validated; never follow a redirect into the LAN.
+      redirect: "manual",
     });
   } catch (error) {
     const reason = error instanceof Error ? error.message : "request failed";
     throw new AppError(502, `Webhook request failed: ${reason}`, "WEBHOOK_ERROR");
   }
   if (response.ok) return;
+  if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400)) {
+    throw new AppError(502, `Webhook redirected (HTTP ${response.status}); redirects are not followed`, "WEBHOOK_ERROR");
+  }
   const text = await response.text().catch(() => "");
   throw new AppError(502, discordErrorMessage(response.status, text), "WEBHOOK_ERROR");
 }

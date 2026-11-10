@@ -10,6 +10,7 @@ import {
   deleteHost,
   getHostOrThrow,
   hostUpdateSchema,
+  normalizeUrl,
   toPublicHost,
   updateHost,
 } from "@/server/services/host-service";
@@ -24,7 +25,13 @@ export const GET = apiRoute("hosts.view", async (_req, session, params) => {
 
 export const PATCH = apiRoute(["hosts.update", "hosts.credentials"], async (req, session, params) => {
   const body = hostUpdateSchema.parse(await req.json());
-  const creds = Boolean(body.secret || body.authType || body.username || body.tokenId);
+  const current = await getHostOrThrow(params.id, session.user);
+  // Re-pointing the URL or relaxing TLS sends the stored secret to a new endpoint,
+  // so it needs the credentials permission, not just hosts.update.
+  const retarget =
+    (body.url !== undefined && normalizeUrl(body.url) !== current.url) ||
+    (body.allowInsecureTls !== undefined && body.allowInsecureTls !== current.allowInsecureTls);
+  const creds = Boolean(body.secret || body.authType || body.username || body.tokenId) || retarget;
   const meta =
     body.name !== undefined ||
     body.url !== undefined ||

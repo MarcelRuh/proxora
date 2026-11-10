@@ -4,6 +4,29 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.6.0] – 2026-11-10
+
+### Added
+
+- Dashboard fleet summary (hosts online, guests running, total CPU/RAM/storage, pending host updates) and a proper first-run empty state.
+
+### Changed
+
+- Transparent brand marks (no black tile behind logo/icon); compact sidebar footer so the full navigation fits on 900 px screens.
+- Theme-aware overlays and radii (`bg-foreground/…`, `--ui-radius`) so Atelier/Harbor/Brutal render tracks, inputs and corners correctly.
+- Self-update status line is localized; VM/container lists say "no VMs" / "no containers" instead of a mixed message.
+- Accessibility: nav `aria-current`, labelled menu/logout/overlay buttons, `aria-sort` on the table header, `role="alert"` on login errors.
+- Vitest uses Vite's native tsconfig paths (dropped `vite-tsconfig-paths`); ESLint ignores Tauri/Android build output.
+
+### Fixed
+
+- Editing a host without sending `allowInsecureTls` no longer silently resets it to `false`.
+- Console/VNC/upload WebSockets: malformed cookies and early client resets no longer crash the server; unhandled rejections are logged.
+- Changing a host URL or TLS mode now requires `hosts.credentials` (stored secret would follow the new URL).
+- Webhook SSRF guard handles bracketed IPv6 / IPv4-mapped loopback and no longer follows redirects; `fc…`/`fd…` hostnames are no longer misread as IPv6.
+- `safeNextPath` rejects control characters (`/\t/evil.com`).
+- Community Scripts logo proxy sends `nosniff` and a sandboxing CSP.
+
 ## [2.5.4] – 2026-11-10
 
 ### Fixed

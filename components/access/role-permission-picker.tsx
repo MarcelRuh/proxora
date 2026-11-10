@@ -47,7 +47,7 @@ export function RolePermissionPicker({
         const count = groupItems.filter((p) => selected.has(p.id)).length;
         const allOn = count === groupItems.length && groupItems.length > 0;
         return (
-          <section key={group.id} className="rounded-[4px] border border-border p-3">
+          <section key={group.id} className="rounded-[var(--ui-radius)] border border-border p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h3 className="text-sm font-medium">{locale === "en" ? group.en : group.de}</h3>
               <label className="flex items-center gap-2 text-xs text-muted-foreground">

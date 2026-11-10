@@ -112,7 +112,7 @@ export function TotpSection() {
       <CardContent className="space-y-3 text-sm">
         <p className="text-muted-foreground">{t("settings.totpHint")}</p>
         {codes?.length ? (
-          <div className="space-y-2 rounded-[4px] border border-warning/40 bg-warning/10 p-3">
+          <div className="space-y-2 rounded-[var(--ui-radius)] border border-warning/40 bg-warning/10 p-3">
             <p className="font-medium">{t("settings.recoveryOnce")}</p>
             <ul className="grid gap-1 font-mono text-xs sm:grid-cols-2">
               {codes.map((item) => (
@@ -156,7 +156,7 @@ export function TotpSection() {
         ) : pending ? (
           <div className="grid max-w-md gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={pending.qr} alt="TOTP QR" className="h-48 w-48 rounded-[4px] bg-white p-2" />
+            <img src={pending.qr} alt="TOTP QR" className="h-48 w-48 rounded-[var(--ui-radius)] bg-white p-2" />
             <p className="break-all font-mono text-xs text-muted-foreground">{pending.secret}</p>
             <div className="space-y-1">
               <Label>{t("login.totp")}</Label>

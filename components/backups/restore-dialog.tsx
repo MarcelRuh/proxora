@@ -272,7 +272,7 @@ export function RestoreDialog({
                       const when = entry.ctime ? new Date(entry.ctime).toLocaleString(dateLocale) : "—";
                       return (
                         <li key={entry.volid}>
-                          <label className="flex cursor-pointer items-start gap-2 rounded-md px-1 py-1 text-sm hover:bg-white/[0.04]">
+                          <label className="flex cursor-pointer items-start gap-2 rounded-md px-1 py-1 text-sm hover:bg-foreground/[0.04]">
                             <input
                               type="radio"
                               className="mt-1"

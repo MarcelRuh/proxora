@@ -30,7 +30,7 @@ import {
   type TaskStatusFilter,
 } from "@/lib/proxmox-tasks";
 
-const selectClass = "h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm";
+const selectClass = "h-9 rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm";
 const TASK_HOST_CONCURRENCY = 2;
 
 type Task = {

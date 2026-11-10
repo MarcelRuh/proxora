@@ -71,7 +71,7 @@ function PoolCard({ hostId, node, pool }: { hostId: string; node: string; pool: 
   const tone = poolTone(live.health, allHealthy);
 
   return (
-    <div className="rounded-[4px] border border-border p-4">
+    <div className="rounded-[var(--ui-radius)] border border-border p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="font-medium">{live.name}</p>
@@ -81,7 +81,7 @@ function PoolCard({ hostId, node, pool }: { hostId: string; node: string; pool: 
       </div>
       <div
         className={cn(
-          "mb-4 rounded-[4px] px-3 py-2 text-sm font-medium",
+          "mb-4 rounded-[var(--ui-radius)] px-3 py-2 text-sm font-medium",
           allHealthy ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-300",
         )}
       >

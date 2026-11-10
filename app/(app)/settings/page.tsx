@@ -31,7 +31,7 @@ export default function SettingsPage() {
             ["suite", "settings.suiteTitle"],
           ] as const
         ).map(([id, key]) => (
-          <a key={id} href={`#${id}`} className="rounded-[4px] border border-border px-2 py-1 text-muted-foreground hover:text-foreground">
+          <a key={id} href={`#${id}`} className="rounded-[var(--ui-radius)] border border-border px-2 py-1 text-muted-foreground hover:text-foreground">
             {t(key)}
           </a>
         ))}

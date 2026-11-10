@@ -35,7 +35,7 @@ function focusRfb(container: HTMLElement | null, rfb: RfbInstance | null) {
 }
 
 const toolbarSelectClass =
-  "h-7 max-w-[11rem] rounded border border-white/15 bg-transparent px-1.5 text-[11px] text-slate-300 disabled:opacity-50";
+  "h-7 max-w-[11rem] rounded border border-foreground/15 bg-transparent px-1.5 text-[11px] text-slate-300 disabled:opacity-50";
 
 export function VncConsole({
   hostId,
@@ -271,7 +271,7 @@ export function VncConsole({
         fill ? "h-full min-h-0" : "h-[min(70vh,720px)] min-h-[240px] md:min-h-[420px]",
       )}
     >
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2 text-xs text-slate-300">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-foreground/10 px-3 py-2 text-xs text-slate-300">
         <span
           className={
             !running || status === "error"
@@ -331,7 +331,7 @@ export function VncConsole({
         </div>
       </div>
       {running ? (
-        <div className="flex shrink-0 flex-wrap gap-1 border-b border-white/10 px-2 py-1 md:hidden">
+        <div className="flex shrink-0 flex-wrap gap-1 border-b border-foreground/10 px-2 py-1 md:hidden">
           <Button
             size="sm"
             variant="outline"

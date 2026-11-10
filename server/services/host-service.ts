@@ -34,9 +34,11 @@ export const hostInputSchema = z.object({
 
 export const hostUpdateSchema = hostInputSchema.partial().extend({
   secret: z.string().min(1).optional(),
+  // No default here: .partial() keeps the create default, which silently reset TLS on every edit.
+  allowInsecureTls: z.boolean().optional(),
 });
 
-function normalizeUrl(url: string): string {
+export function normalizeUrl(url: string): string {
   const trimmed = url.trim();
   if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/\/+$/, "");
   if (/:\d+$/.test(trimmed)) return `https://${trimmed}`;

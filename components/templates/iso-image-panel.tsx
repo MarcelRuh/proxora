@@ -22,7 +22,7 @@ import {
 import { formatVolumeUsers, usersForVolids, type VolumeUser } from "@/lib/volume-usage";
 
 const selectClass =
-  "h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm";
+  "h-9 rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm";
 
 type CatalogPayload = {
   nodes: string[];
@@ -172,7 +172,7 @@ export function IsoImagePanel({ hostId }: { hostId: string }) {
       clearJob();
     }, 800);
     return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [finished]);
 
   function clearJob() {
@@ -326,7 +326,7 @@ export function IsoImagePanel({ hostId }: { hostId: string }) {
       ) : !rows.length ? (
         <p className="text-sm text-muted-foreground">{t("iso.empty")}</p>
       ) : (
-        <div className="max-h-[min(60vh,36rem)] overflow-auto rounded-[4px] border border-border">
+        <div className="max-h-[min(60vh,36rem)] overflow-auto rounded-[var(--ui-radius)] border border-border">
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead className="sticky top-0 z-10 bg-card font-[family-name:var(--font-display)] text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
               <tr>

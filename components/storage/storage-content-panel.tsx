@@ -20,7 +20,7 @@ import {
 } from "@/lib/storage-content";
 import { LIST_RENDER_CAP } from "@/lib/table-window";
 
-const selectClass = "h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm";
+const selectClass = "h-9 rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm";
 
 type Props = {
   hostId: string;
@@ -99,7 +99,7 @@ export function StorageContentPanel({ hostId, node, storage, onClose }: Props) {
   }
 
   return (
-    <div className="mt-4 space-y-3 rounded-[4px] border border-border bg-white/[0.02] p-3">
+    <div className="mt-4 space-y-3 rounded-[var(--ui-radius)] border border-border bg-foreground/[0.02] p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium">
           {t("storage.browseTitle", { storage, node })}

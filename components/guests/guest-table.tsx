@@ -352,10 +352,6 @@ export const GuestTable = memo(function GuestTable({
   const bulkBusy = Boolean(busyIds.bulk);
   const selectedGuests = filtered.filter((g) => selected.has(rowKey(g)));
   const shareBlocked = t("peers.shareBlocked");
-  const noPerm = t("common.noPermission");
-  function lockTitle(rbac: boolean, shareOk: boolean, okTitle: string) {
-    return actionDeniedTitle(rbac, shareOk, shareBlocked, noPerm) ?? okTitle;
-  }
   function pendingLabel(action: string) {
     if (action === "start") return t("guest.pendingStart");
     if (action === "shutdown") return t("guest.pendingShutdown");
@@ -373,7 +369,7 @@ export const GuestTable = memo(function GuestTable({
       {compact ? null : <div className="flex flex-wrap gap-2">
         <Input placeholder={t("table.search")} value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" />
         <select
-          className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+          className="h-9 rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm"
           value={status}
           onChange={(e) => setStatus(e.target.value)}
         >
@@ -384,7 +380,7 @@ export const GuestTable = memo(function GuestTable({
         </select>
         {hosts.length > 1 ? (
           <select
-            className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+            className="h-9 rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm"
             value={hostFilter}
             onChange={(e) => setHostFilter(e.target.value)}
             aria-label={t("table.host")}
@@ -399,7 +395,7 @@ export const GuestTable = memo(function GuestTable({
         ) : null}
         {tags.length > 0 ? (
           <select
-            className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+            className="h-9 rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm"
             value={tag}
             onChange={(e) => setTag(e.target.value)}
           >
@@ -413,7 +409,7 @@ export const GuestTable = memo(function GuestTable({
         ) : null}
       </div>}
       {!compact && selectedVisible.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-[4px] border border-border bg-muted/30 px-3 py-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2 rounded-[var(--ui-radius)] border border-border bg-muted/30 px-3 py-2 text-sm">
           <span className="text-muted-foreground">{t("table.selected", { n: selectedVisible.length })}</span>
           <Button
             size="sm"
@@ -466,8 +462,8 @@ export const GuestTable = memo(function GuestTable({
         ref={scrollRef}
         className={
           virtualize
-            ? "hidden max-h-[min(70vh,720px)] overflow-auto rounded-[4px] border border-border md:block"
-            : "hidden overflow-x-auto rounded-[4px] border border-border md:block"
+            ? "hidden max-h-[min(70vh,720px)] overflow-auto rounded-[var(--ui-radius)] border border-border md:block"
+            : "hidden overflow-x-auto rounded-[var(--ui-radius)] border border-border md:block"
         }
       >
         <table className={`w-full text-left text-sm ${compact ? "min-w-[640px]" : mixed ? "min-w-[1080px]" : showHost ? "min-w-[860px]" : "min-w-[720px]"}`}>
@@ -520,7 +516,7 @@ export const GuestTable = memo(function GuestTable({
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={colCount} className="px-3 py-6 text-sm text-muted-foreground">
-                  {items.length === 0 ? (noGrants ? t("guests.noGrants") : t("dashboard.noGuests")) : t("table.noMatches")}
+                  {items.length === 0 ? (noGrants ? t("guests.noGrants") : t(kind === "vm" ? "guests.noVms" : kind === "lxc" ? "guests.noLxc" : "dashboard.noGuests")) : t("table.noMatches")}
                 </td>
               </tr>
             ) : (
@@ -560,7 +556,6 @@ export const GuestTable = memo(function GuestTable({
                   snapshot: shareAllows(hid, `${prefix}.snapshot.create` as Permission),
                   delete: shareAllows(hid, `${prefix}.delete` as Permission),
                 };
-                const shareBlocked = t("peers.shareBlocked");
                 const kindLabel = row === "vm" ? "VM" : "LXC";
                 const detailBase = row === "vm" ? "vms" : "containers";
                 const rowTags = parseGuestTags(g.tags);
@@ -699,8 +694,8 @@ export const GuestTable = memo(function GuestTable({
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 w-full" />)
         ) : filtered.length === 0 ? (
-          <p className="rounded-[4px] border border-border px-3 py-6 text-sm text-muted-foreground">
-            {items.length === 0 ? (noGrants ? t("guests.noGrants") : t("dashboard.noGuests")) : t("table.noMatches")}
+          <p className="rounded-[var(--ui-radius)] border border-border px-3 py-6 text-sm text-muted-foreground">
+            {items.length === 0 ? (noGrants ? t("guests.noGrants") : t(kind === "vm" ? "guests.noVms" : kind === "lxc" ? "guests.noLxc" : "dashboard.noGuests")) : t("table.noMatches")}
           </p>
         ) : (
           <>
@@ -740,7 +735,7 @@ export const GuestTable = memo(function GuestTable({
             const shareSnapshot = shareAllows(hid, `${prefix}.snapshot.create` as Permission);
             const shareDelete = shareAllows(hid, `${prefix}.delete` as Permission);
             return (
-              <article key={key} className="rounded-[4px] border border-border bg-card/40 p-3">
+              <article key={key} className="rounded-[var(--ui-radius)] border border-border bg-card/40 p-3">
                 <div className="flex items-start gap-2">
                   <input
                     type="checkbox"
@@ -985,11 +980,13 @@ function SortHeader({
 }) {
   const active = sort.key === column;
   return (
-    <th className="px-3 py-2 font-medium">
+    <th
+      className="px-3 py-2 font-medium"
+      aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+    >
       <button
         type="button"
         className={active ? "text-foreground" : "hover:text-foreground"}
-        aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
         onClick={() => onSort(nextGuestSort(sort, column))}
       >
         {label}

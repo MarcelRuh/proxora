@@ -153,7 +153,7 @@ export function JobDialog({
                   type="button"
                   onClick={() => toggleDay(day)}
                   className={cn(
-                    "h-8 min-w-9 rounded-[4px] border px-2 text-xs font-semibold uppercase",
+                    "h-8 min-w-9 rounded-[var(--ui-radius)] border px-2 text-xs font-semibold uppercase",
                     parsed.days.includes(day)
                       ? "border-primary bg-primary/15 text-foreground"
                       : "border-border text-muted-foreground hover:border-primary/50",
@@ -265,7 +265,7 @@ export function JobDialog({
               {t("backup.allGuests")}
             </label>
             <p className="text-xs text-muted-foreground">{t("backup.guestsHint")}</p>
-            <div className="max-h-56 space-y-1 overflow-y-auto rounded-[4px] border border-border p-2">
+            <div className="max-h-56 space-y-1 overflow-y-auto rounded-[var(--ui-radius)] border border-border p-2">
               {overview.guests.length === 0 ? (
                 <Input
                   value={form.vmid}

@@ -63,7 +63,13 @@ export function LoginForm({ next }: { next: string }) {
       <Card className="relative z-10 w-full max-w-md">
         <CardHeader className="items-center text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/proxora-logo.jpg" alt={APP_NAME} className="mx-auto mb-2 w-56 object-contain" />
+          <img
+            src="/brand/proxora-logo-mark.png"
+            alt={APP_NAME}
+            width={560}
+            height={503}
+            className="proxora-brand-img mx-auto mb-2 h-auto w-52 object-contain"
+          />
           <CardDescription>{ticket ? t("login.totpSubtitle") : t("login.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -98,7 +104,11 @@ export function LoginForm({ next }: { next: string }) {
                 </div>
               </>
             )}
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {error ? (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
             <Button className="w-full uppercase tracking-wider" disabled={busy || Boolean(ticket && totp.replace(/\s/g, "").length < 6)}>
               {busy ? t("login.busy") : ticket ? t("login.totpSubmit") : t("login.submit")}
             </Button>

@@ -17,6 +17,16 @@ describe("webhook URL SSRF guard", () => {
     expect(isPrivateOrLocalHostname("localhost")).toBe(true);
     expect(isPrivateOrLocalHostname("metadata.google.internal")).toBe(true);
     expect(isPrivateOrLocalHostname("8.8.8.8")).toBe(false);
+    expect(isPrivateOrLocalHostname("[::1]")).toBe(true);
+    expect(isPrivateOrLocalHostname("[::ffff:127.0.0.1]")).toBe(true);
+    expect(isPrivateOrLocalHostname("[::ffff:7f00:1]")).toBe(true);
+    expect(isPrivateOrLocalHostname("[fe80::1]")).toBe(true);
+    expect(isPrivateOrLocalHostname("[fd12:3456::1]")).toBe(true);
+    expect(isPrivateOrLocalHostname("[2606:4700::1111]")).toBe(false);
+    expect(isPrivateOrLocalHostname("fcbayern.de")).toBe(false);
+    expect(isPrivateOrLocalHostname("fd-example.com")).toBe(false);
+    expect(() => assertSafeWebhookUrl("http://[::1]:3000/api")).toThrow(ValidationError);
+    expect(() => assertSafeWebhookUrl("http://[::ffff:7f00:1]/")).toThrow(ValidationError);
     expect(() => assertSafeWebhookUrl("http://127.0.0.1/hook")).toThrow(ValidationError);
     expect(() => assertSafeWebhookUrl("https://192.168.0.10/hook")).toThrow(ValidationError);
     expect(() => assertSafeWebhookUrl("http://169.254.169.254/latest")).toThrow(ValidationError);
@@ -38,6 +48,9 @@ describe("push URL guard", () => {
 
   it("rejects loopback, metadata, and credentials", () => {
     expect(() => assertSafePushUrl("http://127.0.0.1/up")).toThrow(ValidationError);
+    expect(() => assertSafePushUrl("http://127.0.0.2/up")).toThrow(ValidationError);
+    expect(() => assertSafePushUrl("http://[::1]/up")).toThrow(ValidationError);
+    expect(() => assertSafePushUrl("http://[::ffff:127.0.0.1]/up")).toThrow(ValidationError);
     expect(() => assertSafePushUrl("http://169.254.169.254/latest")).toThrow(ValidationError);
     expect(() => assertSafePushUrl("https://user:pass@ntfy.sh/up")).toThrow(ValidationError);
   });

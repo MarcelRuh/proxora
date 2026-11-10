@@ -276,7 +276,7 @@ export function WireguardSection() {
               ) : (
                 <ul className="space-y-2">
                   {diagnostics.peers.map((rp) => (
-                    <li key={rp.publicKey} className="rounded-[4px] border border-border p-2 text-xs">
+                    <li key={rp.publicKey} className="rounded-[var(--ui-radius)] border border-border p-2 text-xs">
                       <p className="font-mono">{shortKey(rp.publicKey)}</p>
                       <p className="mt-1 text-muted-foreground">
                         {t("peers.diagHandshake")}:{" "}
@@ -338,7 +338,7 @@ export function WireguardSection() {
               <div>
                 <p className="mb-1 text-xs font-medium">{t("peers.diagLog")}</p>
                 {diagnostics.log.length ? (
-                  <pre className="max-h-48 overflow-auto rounded-[4px] border border-border bg-black/30 p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                  <pre className="max-h-48 overflow-auto rounded-[var(--ui-radius)] border border-border bg-black/30 p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
                     {diagnostics.log.join("\n")}
                   </pre>
                 ) : (
@@ -666,12 +666,12 @@ function PeerCard({
               const custom = Boolean(overrides[host.id]);
               const expanded = openHost === host.id && custom;
               return (
-                <div key={host.id} className="rounded-[4px] border border-border p-2">
+                <div key={host.id} className="rounded-[var(--ui-radius)] border border-border p-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="min-w-0 truncate text-sm">{host.name}</span>
                     <div className="flex flex-wrap items-center gap-2">
                       <select
-                        className="h-8 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+                        className="h-8 rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm"
                         value={level}
                         onChange={(e) => setLevel(host.id, e.target.value as ShareLevel | "")}
                       >

@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ProgressBar, Skeleton } from "@/components/ui/misc";
+import { EmptyState, ProgressBar, Skeleton } from "@/components/ui/misc";
+import { PageHeader } from "@/components/layout/page-header";
 import { HostStateBadge } from "@/components/status-badge";
 import { HostUpgrade } from "@/components/dashboard/host-upgrade";
 import { useAptSummary } from "@/components/layout/apt-update-alert";
@@ -32,16 +35,24 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Skeleton className="h-16 lg:col-span-2" />
-        <Skeleton className="h-52" />
-        <Skeleton className="h-52" />
+      <div className="space-y-6" aria-busy="true">
+        <Skeleton className="h-14 w-56" />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+        </div>
+        <div className="grid gap-4 xl:grid-cols-2">
+          <Skeleton className="h-52" />
+          <Skeleton className="h-52" />
+        </div>
       </div>
     );
   }
   if (!data) {
     return (
-      <div className="proxora-panel p-6">
+      <div className="proxora-panel p-6" role="alert">
         <p className="font-medium">{t("dashboard.loadError")}</p>
         <p className="text-sm text-muted-foreground">
           {isNetworkFetchError(error)
@@ -50,9 +61,9 @@ export default function DashboardPage() {
               ? error.message
               : t("common.pageErrorBody")}
         </p>
-        <button className="mt-3 text-sm text-primary" onClick={() => void refetch()}>
+        <Button className="mt-3" size="sm" variant="outline" onClick={() => void refetch()} disabled={isFetching}>
           {t("common.retry")}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -65,15 +76,16 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="proxora-section">{t("dashboard.kicker")}</p>
-          <h1 className="proxora-title mt-1 text-3xl">{t("dashboard.title")}</h1>
-        </div>
-        <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={isFetching}>
-          {t("common.refresh")}
-        </Button>
-      </div>
+      <PageHeader
+        kicker={t("dashboard.kicker")}
+        title={t("dashboard.title")}
+        actions={
+          <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={isFetching}>
+            <RefreshCw className={isFetching ? "animate-spin" : undefined} aria-hidden />
+            {t("common.refresh")}
+          </Button>
+        }
+      />
 
       {error ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--ui-radius)] border border-warning/40 bg-warning/10 px-3 py-2 text-sm">
@@ -101,21 +113,30 @@ export default function DashboardPage() {
         </p>
       ) : null}
 
-      <p className="text-sm text-muted-foreground">
-        {running}/{totalGuests} {t("dashboard.running")}
-      </p>
-
       {data.hosts.items.length === 0 ? (
-        <div className="proxora-panel p-6">
-          <p className="text-sm text-muted-foreground">
-            {t("dashboard.noHosts")}{" "}
-            <Link className="text-primary" href="/hosts">
-              {t("dashboard.addHost")}
-            </Link>
-            .
-          </p>
-        </div>
+        <EmptyState
+          title={t("dashboard.emptyTitle")}
+          description={t("dashboard.emptyBody")}
+          action={
+            <Button asChild className="mt-2">
+              <Link href="/hosts">{t("dashboard.addHost")}</Link>
+            </Button>
+          }
+        />
       ) : (
+        <FleetSummary
+          hostsOnline={data.hosts.online}
+          hostsTotal={data.hosts.total}
+          running={running}
+          totalGuests={totalGuests}
+          vms={data.virtualization.vms}
+          lxc={data.virtualization.lxc}
+          resources={data.resources}
+          updates={apt.data?.total ?? null}
+        />
+      )}
+
+      {data.hosts.items.length === 0 ? null : (
         <DashboardHosts
           hosts={data.hosts.items}
           aptByHost={aptByHost}
@@ -123,6 +144,118 @@ export default function DashboardPage() {
           alertC={alertC}
         />
       )}
+    </div>
+  );
+}
+
+function FleetSummary({
+  hostsOnline,
+  hostsTotal,
+  running,
+  totalGuests,
+  vms,
+  lxc,
+  resources,
+  updates,
+}: {
+  hostsOnline: number;
+  hostsTotal: number;
+  running: number;
+  totalGuests: number;
+  vms: number;
+  lxc: number;
+  resources: { cpu: number; memUsed: number; memTotal: number; diskUsed: number; diskTotal: number };
+  updates: number | null;
+}) {
+  const { t } = useI18n();
+  const offline = Math.max(0, hostsTotal - hostsOnline);
+  const stopped = Math.max(0, totalGuests - running);
+  return (
+    <section aria-label={t("dashboard.kicker")} className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <SummaryTile label={t("dashboard.hosts")} href="/hosts">
+        <p className="proxora-stat text-2xl tabular-nums">
+          {hostsOnline}
+          <span className="text-base text-muted-foreground">/{hostsTotal}</span>
+        </p>
+        <p className={offline > 0 ? "text-xs font-medium text-warning" : "text-xs text-muted-foreground"}>
+          {offline > 0 ? t("dashboard.offlineCount", { n: offline }) : t("dashboard.allHostsOnline")}
+        </p>
+      </SummaryTile>
+      <SummaryTile label={t("dashboard.guests")} href="/vms">
+        <p className="proxora-stat text-2xl tabular-nums">
+          {running}
+          <span className="text-base text-muted-foreground">/{totalGuests}</span>
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {t("dashboard.guestSplit", { vms, lxc })}
+          {stopped > 0 ? ` · ${t("dashboard.stoppedCount", { n: stopped })}` : ""}
+        </p>
+      </SummaryTile>
+      <SummaryTile label={t("dashboard.resources")} className="order-last col-span-2 xl:order-none xl:col-span-1">
+        {hostsOnline > 0 ? (
+          <div className="space-y-2 pt-1">
+            <MiniMeter label={t("dashboard.cpu")} value={resources.cpu * 100} />
+            <MiniMeter label={t("dashboard.ram")} value={percentage(resources.memUsed, resources.memTotal)} />
+            <MiniMeter label={t("dashboard.storage")} value={percentage(resources.diskUsed, resources.diskTotal)} />
+          </div>
+        ) : (
+          <p className="pt-1 text-sm text-muted-foreground">{t("dashboard.noLiveData")}</p>
+        )}
+      </SummaryTile>
+      <SummaryTile label={t("dashboard.updates")} href="/updates" className="col-span-2 xl:col-span-1">
+        {updates == null ? (
+          <p className="text-sm text-muted-foreground">—</p>
+        ) : updates > 0 ? (
+          <>
+            <p className="proxora-stat text-2xl tabular-nums text-warning">{updates}</p>
+            <p className="text-xs text-muted-foreground">
+              {updates === 1 ? t("dashboard.packageOne") : t("dashboard.packages", { n: updates })}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="proxora-stat text-2xl tabular-nums">0</p>
+            <p className="text-xs text-muted-foreground">{t("dashboard.noUpdates")}</p>
+          </>
+        )}
+      </SummaryTile>
+    </section>
+  );
+}
+
+function SummaryTile({
+  label,
+  href,
+  className,
+  children,
+}: {
+  label: string;
+  href?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const body = (
+    <>
+      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      <div className="mt-1.5 space-y-0.5">{children}</div>
+    </>
+  );
+  const cls = `proxora-panel block min-h-24 min-w-0 p-4 ${className ?? ""}`;
+  return href ? (
+    <Link href={href} className={`${cls} transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}>
+      {body}
+    </Link>
+  ) : (
+    <div className={cls}>{body}</div>
+  );
+}
+
+function MiniMeter({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="grid grid-cols-[3.5rem_1fr_2.75rem] items-center gap-2 text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <ProgressBar value={value} />
+      <span className="text-right font-medium tabular-nums">{Math.round(value)}%</span>
     </div>
   );
 }

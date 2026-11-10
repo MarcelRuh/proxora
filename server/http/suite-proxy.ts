@@ -28,6 +28,7 @@ import {
 import { INVENTORY_VIEW_PERMISSIONS, userHasAnyPermission, userHasPermission } from "@/lib/permissions";
 import { getSessionFromToken } from "@/server/auth/session-core";
 import { loadSuiteEmbedAppsCached } from "@/server/services/suite-embeds";
+import { cookieValue } from "@/server/ws/request-cookie";
 
 function canUseSuite(user: Parameters<typeof userHasPermission>[0]) {
   return userHasAnyPermission(user, INVENTORY_VIEW_PERMISSIONS) || userHasPermission(user, "settings.view");
@@ -53,15 +54,6 @@ const STRIP = new Set([
 
 const BODYLESS = new Set(["GET", "HEAD"]);
 const TEXT_LIMIT = 8_000_000;
-
-function cookieValue(req: IncomingMessage, name: string): string | undefined {
-  const raw = req.headers.cookie ?? "";
-  for (const part of raw.split(";")) {
-    const [key, ...rest] = part.trim().split("=");
-    if (key === name) return decodeURIComponent(rest.join("="));
-  }
-  return undefined;
-}
 
 function headerText(value: string | string[] | undefined): string {
   if (!value) return "";

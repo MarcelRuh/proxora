@@ -14,15 +14,7 @@ import { takeGuestTransferTicket } from "@/server/services/guest-file-tickets";
 import { getHostOrThrow } from "@/server/services/host-service";
 import { writeAuditLog } from "@/server/services/audit-service";
 import { streamGuestFileUpload } from "@/server/services/guest-files";
-
-function cookieValue(req: IncomingMessage, name: string): string | undefined {
-  const raw = req.headers.cookie ?? "";
-  for (const part of raw.split(";")) {
-    const [key, ...rest] = part.trim().split("=");
-    if (key === name) return decodeURIComponent(rest.join("="));
-  }
-  return undefined;
-}
+import { cookieValue } from "@/server/ws/request-cookie";
 
 function headerRequest(req: IncomingMessage): Request {
   const host = req.headers.host || "localhost";

@@ -14,7 +14,7 @@ import { useCan } from "@/components/auth/session-user";
 import { LxcTemplatePanel } from "@/components/templates/lxc-template-panel";
 import { IsoImagePanel } from "@/components/templates/iso-image-panel";
 
-const selectClass = "h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm";
+const selectClass = "h-9 rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm";
 
 export default function TemplatesPage() {
   return (

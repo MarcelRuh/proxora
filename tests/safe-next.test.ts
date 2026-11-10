@@ -14,4 +14,10 @@ describe("safeNextPath", () => {
     expect(safeNextPath("https://example.com")).toBe("/dashboard");
     expect(safeNextPath(null)).toBe("/dashboard");
   });
+
+  it("rejects control characters browsers strip into protocol-relative URLs", () => {
+    expect(safeNextPath("/\t/evil.example")).toBe("/dashboard");
+    expect(safeNextPath("/\n/evil.example")).toBe("/dashboard");
+    expect(safeNextPath("/\r/evil.example")).toBe("/dashboard");
+  });
 });

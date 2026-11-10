@@ -28,7 +28,7 @@ export function ProgressBar({
         : "proxora-fill";
   return (
     <div
-      className={cn("h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]", className)}
+      className={cn("h-1.5 w-full overflow-hidden rounded-full bg-foreground/[0.06]", className)}
       role="progressbar"
       aria-valuemin={0}
       aria-valuemax={100}

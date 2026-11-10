@@ -41,7 +41,7 @@ export function SessionsSection() {
       <CardContent className="space-y-3 text-sm">
         <p className="text-muted-foreground">{t("settings.sessionsHint")}</p>
         {(data?.sessions ?? []).map((row) => (
-          <div key={row.id} className="flex flex-wrap items-start justify-between gap-2 rounded-[4px] border border-border p-3">
+          <div key={row.id} className="flex flex-wrap items-start justify-between gap-2 rounded-[var(--ui-radius)] border border-border p-3">
             <div className="min-w-0">
               <p className="font-medium">
                 {row.ip || t("settings.sessionUnknownIp")}

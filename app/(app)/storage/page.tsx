@@ -134,7 +134,7 @@ export default function StoragePage() {
                         return (
                           <tr
                             key={`${n.node}-${s.storage}`}
-                            className={`cursor-pointer border-t border-border ${selected ? "bg-primary/5" : "hover:bg-white/[0.03]"}`}
+                            className={`cursor-pointer border-t border-border ${selected ? "bg-primary/5" : "hover:bg-foreground/[0.03]"}`}
                             onClick={() =>
                               setOpen(selected ? null : { hostId: block.host.id, node: n.node, storage: s.storage })
                             }

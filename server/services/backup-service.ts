@@ -5,7 +5,6 @@ import {
   guestNeedsStopForRestore,
   jobSchedulePayload,
   isBackupJobScheduleConflict,
-  newBackupJobId,
   normalizeBackupJob,
   orphanBackupFiles,
   parseBackupVolid,

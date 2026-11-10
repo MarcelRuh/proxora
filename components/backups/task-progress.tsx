@@ -31,7 +31,7 @@ export function ProxmoxTaskProgress({
       <ProgressBar value={shown} autoTone={false} className="h-2" />
       <pre
         ref={ref}
-        className="max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-[4px] border border-border bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-muted-foreground"
+        className="max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-[var(--ui-radius)] border border-border bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-muted-foreground"
       >
         {lines.join("\n") || fallbackDetail || "…"}
       </pre>

@@ -65,7 +65,7 @@ export function GuestHaCard({
           <div className="space-y-1">
             <Label>{t("ha.group")}</Label>
             <select
-              className="flex h-9 w-full max-w-md rounded-[4px] border border-input bg-white/[0.03] px-3 text-sm"
+              className="flex h-9 w-full max-w-md rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-3 text-sm"
               value={group || currentGroup}
               onChange={(e) => setGroup(e.target.value)}
             >

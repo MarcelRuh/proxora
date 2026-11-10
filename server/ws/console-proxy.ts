@@ -14,16 +14,7 @@ import { handleFederationWebsocket } from "@/server/ws/federation-ws";
 import { consumeProxmoxVncHandshake, wsPayloadToBuffer } from "@/lib/vnc-handshake";
 import { rfbPasswordFromVncProxy } from "@/lib/vnc-password";
 import { isTermproxySerialError, vmHasGraphics, vmHasSerialSocket } from "@/lib/guest-console";
-
-function cookieValue(req: IncomingMessage, name: string): string | undefined {
-  const header = req.headers.cookie;
-  if (!header) return undefined;
-  for (const part of header.split(";")) {
-    const [k, ...rest] = part.trim().split("=");
-    if (k === name) return decodeURIComponent(rest.join("="));
-  }
-  return undefined;
-}
+import { cookieValue } from "@/server/ws/request-cookie";
 
 export type ConsoleKind = "vm" | "lxc" | "node";
 
@@ -33,7 +24,15 @@ function asBuffer(data: WebSocket.RawData): Buffer {
 
 export function attachConsoleProxy(wss: WebSocketServer) {
   wss.on("connection", (client, req) => {
-    void handleConnection(client, req);
+    // Until pipeTerm/pipeVnc attach their own listeners, a reset or malformed frame
+    // would emit 'error' with no listener and crash the process.
+    client.on("error", (err) => logger.debug({ err }, "Console client socket error"));
+    handleConnection(client, req).catch((err) => {
+      logger.error({ err }, "Console connection failed");
+      if (client.readyState === WebSocket.OPEN || client.readyState === WebSocket.CONNECTING) {
+        client.close(1011, "Console error");
+      }
+    });
   });
 }
 

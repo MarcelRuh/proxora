@@ -61,6 +61,11 @@ async function main() {
     })();
   });
 
+  // Last-resort net: background schedulers and socket handlers use fire-and-forget promises.
+  process.on("unhandledRejection", (reason) => {
+    logger.error({ err: reason }, "Unhandled promise rejection");
+  });
+
   const wss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
   const uploadWss = new WebSocketServer({
     noServer: true,
@@ -71,6 +76,9 @@ async function main() {
   attachGuestFileUpload(uploadWss);
 
   server.on("upgrade", (req, socket, head) => {
+    // Node drops its own socket error handler on 'upgrade'; without one, a client reset
+    // during async auth/upstream setup is an uncaught exception that kills the server.
+    socket.on("error", () => socket.destroy());
     const { pathname } = parse(req.url ?? "");
     if (pathname === GUEST_FILE_UPLOAD_WS_PATH) {
       uploadWss.handleUpgrade(req, socket, head, (ws) => {
@@ -79,7 +87,10 @@ async function main() {
       return;
     }
     if (pathname?.startsWith("/ora/")) {
-      void handleSuiteProxyUpgrade(req, socket, head);
+      handleSuiteProxyUpgrade(req, socket, head).catch((err) => {
+        logger.warn({ err }, "Suite proxy upgrade failed");
+        socket.destroy();
+      });
       return;
     }
     if (pathname === "/ws/console" || pathname === "/ws/vnc" || pathname === "/api/federation/ws") {

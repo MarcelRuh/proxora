@@ -78,7 +78,7 @@ export function BackupNowDialog({
     if (!finished) return;
     const timer = window.setTimeout(() => resetAndClose(), 800);
     return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [finished]);
 
   function resetAndClose() {

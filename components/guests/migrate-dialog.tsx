@@ -17,7 +17,7 @@ type HostStatus = {
   nodes: Array<{ node: string; online: string }>;
 };
 
-const selectClass = "mt-1 h-9 w-full rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm";
+const selectClass = "mt-1 h-9 w-full rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm";
 
 export function MigrateDialog({
   kind,

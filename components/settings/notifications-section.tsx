@@ -257,7 +257,7 @@ function ChannelEditor({ channel }: { channel: Channel }) {
   }
 
   return (
-    <div className="space-y-3 rounded-[4px] border border-border p-3">
+    <div className="space-y-3 rounded-[var(--ui-radius)] border border-border p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="font-medium">
           {channel.name} · {channel.type}

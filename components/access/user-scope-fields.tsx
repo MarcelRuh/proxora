@@ -154,7 +154,7 @@ export function UserScopeFields({
             const custom = Boolean(grant && grant.permissions);
             const expanded = openHost === h.id && custom;
             return (
-              <div key={h.id} className="rounded-[4px] border border-border p-2">
+              <div key={h.id} className="rounded-[var(--ui-radius)] border border-border p-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="flex min-w-0 flex-1 items-center gap-2">
                     <input type="checkbox" checked={checked} onChange={(e) => toggleHost(h.id, e.target.checked)} />
@@ -199,7 +199,7 @@ export function UserScopeFields({
             const loaded = inventory?.find((block) => block.host.id === host.id);
             const expanded = openGuestHost === host.id || guests.some((g) => g.hostId === host.id);
             return (
-              <div key={host.id} className="rounded-[4px] border border-border p-2">
+              <div key={host.id} className="rounded-[var(--ui-radius)] border border-border p-2">
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{host.name}</p>
                   {!expanded ? (
@@ -287,7 +287,7 @@ function GuestChecks({
         const custom = Boolean(grant?.permissions);
         const expanded = openGuest === key && custom;
         return (
-          <div key={`${kind}-${g.vmid}`} className="rounded-[4px] border border-border/70 p-2">
+          <div key={`${kind}-${g.vmid}`} className="rounded-[var(--ui-radius)] border border-border/70 p-2">
             <div className="flex flex-wrap items-center gap-2">
               <label className="flex min-w-0 flex-1 items-center gap-2">
                 <input type="checkbox" checked={checked} onChange={(e) => onToggle(scope, e.target.checked)} />

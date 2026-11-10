@@ -136,7 +136,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
-        <div className="flex shrink-0 items-center gap-3 px-4 py-5">
+        <div className="flex shrink-0 items-center gap-3 px-4 py-4">
           <BrandMark className="h-11 w-11" />
           <div>
             <p className="proxora-logo text-lg leading-none">{APP_NAME.toUpperCase()}</p>
@@ -145,7 +145,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             </p>
           </div>
         </div>
-        <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+        <nav aria-label={t("nav.main")} className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
           {NAV_GROUPS.map((group) => {
             const items = NAV.filter((item) => item.group === group.id && navItemVisible(user, item.href, item.anyOf));
             const canSuite =
@@ -154,7 +154,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             if (!items.length && !suite) return null;
             return (
               <div key={group.id} className="mb-2">
-                <p className="px-3 pb-1 pt-3 text-[11px] text-sidebar-muted">{t(group.labelKey)}</p>
+                <p className="px-3 pb-1 pt-2 text-[11px] text-sidebar-muted">{t(group.labelKey)}</p>
                 {items.map((item) => (
                   <NavLink
                     key={item.href}
@@ -196,25 +196,45 @@ export function AppShell({ children, user }: { children: ReactNode; user: Sessio
             <kbd className="ml-auto hidden text-[10px] text-sidebar-muted sm:inline">{shortcut}</kbd>
           </button>
           {userHasAnyPermission(user, ["proxora.update", "updates.view"]) ? <SidebarVersion /> : null}
-          <LocaleSwitch className="px-1" />
-          <p className="px-1 text-[10px] text-sidebar-muted">
-            {user.username} · {user.role.name}
-          </p>
-          <button
-            onClick={() => void logout()}
-            className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-sidebar-muted hover:text-primary"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            {t("nav.logout")}
-          </button>
+          <div className="flex items-center gap-2 px-1">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium text-sidebar-foreground" title={user.username}>
+                {user.username}
+              </p>
+              <p className="truncate text-[10px] text-sidebar-muted" title={user.role.name}>
+                {user.role.name}
+              </p>
+            </div>
+            <LocaleSwitch compact className="shrink-0" />
+            <button
+              type="button"
+              onClick={() => void logout()}
+              title={t("nav.logout")}
+              aria-label={t("nav.logout")}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--ui-radius)] text-sidebar-muted hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </aside>
       {open ? (
-        <button className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={() => setOpen(false)} />
+        <button
+          type="button"
+          aria-label={t("common.close")}
+          className="fixed inset-0 z-30 bg-black/60 lg:hidden"
+          onClick={() => setOpen(false)}
+        />
       ) : null}
       <div className="app-main relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
         <header className="sticky top-0 z-20 flex items-center gap-3 bg-background/80 px-4 py-3 backdrop-blur-md lg:hidden">
-          <Button variant="outline" size="icon" onClick={() => setOpen(true)}>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setOpen((v) => !v)}
+            aria-label={t("nav.menu")}
+            aria-expanded={open}
+          >
             {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </Button>
           <BrandMark className="h-8 w-8" />
@@ -249,8 +269,9 @@ function NavLink({
   return (
     <Link
       href={href}
+      aria-current={active ? "page" : undefined}
       className={cn(
-        "app-nav-link flex min-h-11 items-center gap-2.5 px-3 py-2.5 text-sm font-medium transition-colors lg:min-h-0",
+        "app-nav-link flex min-h-11 items-center gap-2.5 px-3 py-2.5 text-sm lg:py-2 font-medium transition-colors lg:min-h-0",
         active ? "proxora-nav-active" : "text-sidebar-muted hover:bg-primary/10 hover:text-foreground",
       )}
     >

@@ -165,7 +165,7 @@ export function GuestFileEditor({
         <div
           ref={gutterRef}
           aria-hidden
-          className={`shrink-0 overflow-hidden border-r border-border bg-white/[0.03] px-2 py-2 text-right text-muted-foreground select-none ${LINE}`}
+          className={`shrink-0 overflow-hidden border-r border-border bg-foreground/[0.03] px-2 py-2 text-right text-muted-foreground select-none ${LINE}`}
           style={{ width: `${Math.max(2, digits) + 1.5}ch` }}
         >
           <pre className={`m-0 ${LINE}`}>{gutter}</pre>

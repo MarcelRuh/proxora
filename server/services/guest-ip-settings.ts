@@ -2,7 +2,6 @@ import { HostOrigin } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import {
   GUEST_IP_SETTING_KEY,
-  networksForHost,
   parseGuestIpNetworks,
   parseGuestIpSettings,
   resolveGuestNetworks,

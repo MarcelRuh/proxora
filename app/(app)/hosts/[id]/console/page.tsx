@@ -64,7 +64,7 @@ export default function HostConsolePage() {
             </Button>
             {(data?.nodes ?? []).length > 1 ? (
               <select
-                className="h-9 rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm"
+                className="h-9 rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm"
                 value={node ?? ""}
                 onChange={(e) => {
                   const next = e.target.value;

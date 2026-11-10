@@ -5,7 +5,7 @@ import { useI18n } from "@/components/i18n/locale-provider";
 import { peerHostAllowsPermission } from "@/lib/federation-access";
 
 const selectClass =
-  "mt-1 h-9 w-full rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm";
+  "mt-1 h-9 w-full rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm";
 
 export type CreateGuestKind = "vm" | "lxc";
 

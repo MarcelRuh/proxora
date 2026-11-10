@@ -698,7 +698,7 @@ function SelectField({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="flex h-9 w-full rounded-[4px] border border-input bg-white/[0.03] px-3 text-sm font-mono"
+        className="flex h-9 w-full rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-3 text-sm font-mono"
       >
         {opts.map((opt) => (
           <option key={opt.value || "__default"} value={opt.value}>
