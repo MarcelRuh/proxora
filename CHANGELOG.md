@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.5.1] – 2026-11-10
+
+### Fixed
+
+- Desktop titlebar min/max/close/drag now work on remote Proxora URLs (remote IPC capability + `desktop_*` window commands).
+
 ## [2.5.0] – 2026-11-10
 
 ### Added

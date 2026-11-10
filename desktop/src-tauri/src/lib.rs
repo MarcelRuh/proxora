@@ -175,6 +175,37 @@ fn check_for_updates(app: tauri::AppHandle) -> Result<(), String> {
   Ok(())
 }
 
+#[tauri::command]
+fn desktop_minimize(window: tauri::WebviewWindow) -> Result<(), String> {
+  window.minimize().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn desktop_toggle_maximize(window: tauri::WebviewWindow) -> Result<bool, String> {
+  let maximized = window.is_maximized().map_err(|e| e.to_string())?;
+  if maximized {
+    window.unmaximize().map_err(|e| e.to_string())?;
+  } else {
+    window.maximize().map_err(|e| e.to_string())?;
+  }
+  window.is_maximized().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn desktop_close(window: tauri::WebviewWindow) -> Result<(), String> {
+  window.close().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn desktop_start_dragging(window: tauri::WebviewWindow) -> Result<(), String> {
+  window.start_dragging().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn desktop_is_maximized(window: tauri::WebviewWindow) -> Result<bool, String> {
+  window.is_maximized().map_err(|e| e.to_string())
+}
+
 fn clear_server_internal(app: &tauri::AppHandle) -> Result<(), String> {
   let state = app.state::<AppState>();
   let mut prefs = state.prefs.lock().expect("prefs lock");
@@ -237,7 +268,12 @@ pub fn run() {
       get_prefs,
       save_server,
       clear_server,
-      check_for_updates
+      check_for_updates,
+      desktop_minimize,
+      desktop_toggle_maximize,
+      desktop_close,
+      desktop_start_dragging,
+      desktop_is_maximized
     ])
     .setup(|app| {
       let handle = app.handle().clone();

@@ -1,5 +1,8 @@
 //! Custom window chrome injected into every main-frame document.
 //! Keeps min/max/close + drag working with `decorations(false)`.
+//!
+//! Window actions go through custom `desktop_*` invoke commands so they work
+//! on remote Proxora origins (requires capability `remote.urls`).
 
 pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
   if (window.__proxoraTitlebarBoot) return;
@@ -9,20 +12,12 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
   var STYLE_ID = "proxora-desktop-titlebar-style";
   var BAR_ID = "proxora-desktop-titlebar";
 
-  function winApi() {
-    try {
-      return window.__TAURI__ && window.__TAURI__.window
-        ? window.__TAURI__.window.getCurrentWindow()
-        : null;
-    } catch (e) {
-      return null;
-    }
-  }
-
   function coreInvoke(cmd, args) {
     try {
       var core = window.__TAURI__ && window.__TAURI__.core;
-      if (!core || typeof core.invoke !== "function") return Promise.reject();
+      if (!core || typeof core.invoke !== "function") {
+        return Promise.reject(new Error("Tauri IPC unavailable"));
+      }
       return core.invoke(cmd, args || {});
     } catch (e) {
       return Promise.reject(e);
@@ -69,17 +64,21 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
     );
   }
 
-  async function refreshMaxState(btn) {
-    var w = winApi();
-    if (!w || !btn) return;
-    try {
-      var max = await w.isMaximized();
-      btn.innerHTML = max
-        ? svg('<path d="M2.5 3.5h4v4h-4zM3.5 2.5h4v4"/>')
-        : svg('<rect x="2" y="2" width="6" height="6"/>');
-      btn.setAttribute("aria-label", max ? "Restore" : "Maximize");
-      btn.title = max ? "Restore" : "Maximize";
-    } catch (e) {}
+  function setMaxIcon(btn, maximized) {
+    if (!btn) return;
+    btn.innerHTML = maximized
+      ? svg('<path d="M2.5 3.5h4v4h-4zM3.5 2.5h4v4"/>')
+      : svg('<rect x="2" y="2" width="6" height="6"/>');
+    btn.setAttribute("aria-label", maximized ? "Restore" : "Maximize");
+    btn.title = maximized ? "Restore" : "Maximize";
+  }
+
+  function refreshMaxState(btn) {
+    return coreInvoke("desktop_is_maximized")
+      .then(function (max) {
+        setMaxIcon(btn, Boolean(max));
+      })
+      .catch(function () {});
   }
 
   function ensureBar() {
@@ -120,7 +119,6 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
       svg('<path d="M2.5 2.5l5 5M7.5 2.5l-5 5" stroke-linecap="round"/>') +
       "</button></div>";
 
-    // Append (not prepend) so Next.js hydration is less likely to fight the first body child.
     document.body.appendChild(bar);
 
     var drag = bar.querySelector(".px-drag");
@@ -137,20 +135,14 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
     if (drag) {
       drag.addEventListener("mousedown", function (ev) {
         if (ev.button !== 0) return;
-        var w = winApi();
-        if (w && typeof w.startDragging === "function") {
-          try {
-            w.startDragging();
-          } catch (e) {}
-        }
+        coreInvoke("desktop_start_dragging").catch(function () {});
       });
       drag.addEventListener("dblclick", function () {
-        var w = winApi();
-        if (w && typeof w.toggleMaximize === "function") {
-          w.toggleMaximize().then(function () {
-            refreshMaxState(max);
-          });
-        }
+        coreInvoke("desktop_toggle_maximize")
+          .then(function (maximized) {
+            setMaxIcon(max, Boolean(maximized));
+          })
+          .catch(function () {});
       });
     }
 
@@ -180,33 +172,35 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
     }
 
     if (min) {
-      min.addEventListener("click", function () {
-        var w = winApi();
-        if (w) w.minimize();
+      min.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        coreInvoke("desktop_minimize").catch(function () {});
       });
     }
     if (max) {
-      max.addEventListener("click", function () {
-        var w = winApi();
-        if (w) {
-          w.toggleMaximize().then(function () {
-            refreshMaxState(max);
-          });
-        }
+      max.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        coreInvoke("desktop_toggle_maximize")
+          .then(function (maximized) {
+            setMaxIcon(max, Boolean(maximized));
+          })
+          .catch(function () {});
       });
       refreshMaxState(max);
     }
     if (close) {
-      close.addEventListener("click", function () {
-        var w = winApi();
-        if (w) w.close();
+      close.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        coreInvoke("desktop_close").catch(function () {});
       });
     }
   }
 
   function boot() {
     ensureBar();
-    // Re-create if a framework wipe removes the chrome node.
     try {
       var obs = new MutationObserver(function () {
         if (document.body && !document.getElementById(BAR_ID)) ensureBar();
