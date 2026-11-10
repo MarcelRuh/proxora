@@ -120,7 +120,8 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
       svg('<path d="M2.5 2.5l5 5M7.5 2.5l-5 5" stroke-linecap="round"/>') +
       "</button></div>";
 
-    document.body.prepend(bar);
+    // Append (not prepend) so Next.js hydration is less likely to fight the first body child.
+    document.body.appendChild(bar);
 
     var drag = bar.querySelector(".px-drag");
     var menu = bar.querySelector(".px-menu");
@@ -205,6 +206,13 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
 
   function boot() {
     ensureBar();
+    // Re-create if a framework wipe removes the chrome node.
+    try {
+      var obs = new MutationObserver(function () {
+        if (document.body && !document.getElementById(BAR_ID)) ensureBar();
+      });
+      obs.observe(document.documentElement, { childList: true, subtree: true });
+    } catch (e) {}
   }
 
   if (document.readyState === "loading") {

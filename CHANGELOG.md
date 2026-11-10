@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.5.0] – 2026-11-10
+
+### Added
+
+- Desktop client custom title bar (drag, minimize, maximize, close, app menu) with OS window decorations disabled.
+
 ### Removed
 
 - Native Rust/egui desktop client (`native/`) and its CI workflow `native-client.yml` (including related `native-v*` releases).
