@@ -114,14 +114,55 @@ function guestActionPermission(kind: "vm" | "lxc", method: string, lower: string
   return `${prefix}.view` as Permission;
 }
 
+const UNSAFE_PATH_CHARS = /[\\?#]/;
+
+function isDotSegment(segment: string): boolean {
+  return segment === "." || segment === "..";
+}
+
+/**
+ * Proxied paths must already be canonical: anything a URL parser or Proxmox could
+ * rewrite (dot segments, query/fragment, backslashes, double encoding) would let
+ * the classified path differ from the one actually requested.
+ *
+ * Percent escapes stay allowed because the Proxmox API classes encode UPIDs and
+ * volids (`local%3Abackup%2Fvzdump-…`), but only in canonical `encodeURIComponent`
+ * form: escaping plain letters (`q%65mu`) would hide a path from the classifier.
+ * Decoded segments must still be free of `%`, `\`, `?`, `#` and dot segments.
+ */
+export function isSafeProxmoxPath(path: string): boolean {
+  if (typeof path !== "string" || !path.startsWith("/")) return false;
+  if (UNSAFE_PATH_CHARS.test(path)) return false;
+  try {
+    if (new URL(path, "http://x").pathname !== path) return false;
+  } catch {
+    return false;
+  }
+  for (const raw of path.split("/")) {
+    if (isDotSegment(raw)) return false;
+    if (!raw.includes("%")) continue;
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch {
+      return false;
+    }
+    if (encodeURIComponent(decoded) !== raw) return false;
+    if (decoded.includes("%") || UNSAFE_PATH_CHARS.test(decoded)) return false;
+    if (decoded.split("/").some(isDotSegment)) return false;
+  }
+  return true;
+}
+
 /** Fine-grained permission for a proxied Proxmox call. */
 export function federationPermission(
   method: string,
   path: string,
   extra?: FederationExtra,
 ): Permission | Permission[] | "deny" {
+  if (!isSafeProxmoxPath(path)) return "deny";
   const m = method.toUpperCase();
-  const lower = (path.split("?")[0] ?? "").toLowerCase();
+  const lower = path.toLowerCase();
 
   if (/\/nodes\/[^/]+\/status\/stopall$/i.test(lower) || /\/nodes\/[^/]+\/startall$/i.test(lower)) return "deny";
   if (lower.includes("/apt/")) {

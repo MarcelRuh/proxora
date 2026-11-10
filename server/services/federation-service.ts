@@ -7,6 +7,7 @@ import { guestFilePermission, sanitizePermissions } from "@/lib/permissions";
 import {
   effectiveSharePermissions,
   federationPermission,
+  isSafeProxmoxPath,
   parseShareLevel,
   shareHasPermission,
   shareLevelFromPermissions,
@@ -89,6 +90,7 @@ export async function assertSharedHost(
   path: string,
   extra?: { query?: Record<string, string>; body?: Record<string, unknown> | null },
 ) {
+  if (!isSafeProxmoxPath(path)) throw new ValidationError("Invalid Proxmox path");
   const share = await prisma.hostShare.findUnique({
     where: { peerId_hostId: { peerId: peer.id, hostId: remoteHostId } },
     include: { host: true },
@@ -102,7 +104,7 @@ export async function assertSharedHost(
 }
 
 export async function proxyPveRequest(host: Host, method: string, path: string, query?: Record<string, string>, body?: Record<string, unknown>) {
-  if (!path.startsWith("/") || path.includes("..")) throw new ValidationError("Invalid Proxmox path");
+  if (!isSafeProxmoxPath(path)) throw new ValidationError("Invalid Proxmox path");
   const client = await clientForHost(host);
   const verb = method.toUpperCase();
   if (verb === "GET") return client.http.get(path, query);
