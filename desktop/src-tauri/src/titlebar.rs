@@ -1,8 +1,8 @@
 //! Custom window chrome injected into every main-frame document.
 //! Keeps min/max/close + drag working with `decorations(false)`.
 //!
-//! Window actions go through custom `desktop_*` invoke commands so they work
-//! on remote Proxora origins (requires capability `remote.urls`).
+//! Prefers `core:window` APIs; falls back to `desktop_*` app commands.
+//! Remote origins need capability `remote.urls` + explicit `allow-*` ACL.
 
 pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
   if (window.__proxoraTitlebarBoot) return;
@@ -23,6 +23,63 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
     } catch (e) {
       return Promise.reject(e);
     }
+  }
+
+  function currentWindow() {
+    try {
+      var api = window.__TAURI__ && window.__TAURI__.window;
+      return api && typeof api.getCurrentWindow === "function"
+        ? api.getCurrentWindow()
+        : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function callWindow(method) {
+    var w = currentWindow();
+    if (w && typeof w[method] === "function") {
+      try {
+        return Promise.resolve(w[method]());
+      } catch (e) {
+        return Promise.reject(e);
+      }
+    }
+    return Promise.reject(new Error("window." + method + " unavailable"));
+  }
+
+  function minimizeWindow() {
+    return callWindow("minimize").catch(function () {
+      return coreInvoke("desktop_minimize");
+    });
+  }
+
+  function toggleMaximizeWindow() {
+    return callWindow("toggleMaximize")
+      .then(function () {
+        return callWindow("isMaximized");
+      })
+      .catch(function () {
+        return coreInvoke("desktop_toggle_maximize");
+      });
+  }
+
+  function closeWindow() {
+    return callWindow("close").catch(function () {
+      return coreInvoke("desktop_close");
+    });
+  }
+
+  function startDraggingWindow() {
+    return callWindow("startDragging").catch(function () {
+      return coreInvoke("desktop_start_dragging");
+    });
+  }
+
+  function isMaximizedWindow() {
+    return callWindow("isMaximized").catch(function () {
+      return coreInvoke("desktop_is_maximized");
+    });
   }
 
   function ensureStyle() {
@@ -122,7 +179,7 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
   }
 
   function refreshMaxState(btn) {
-    return coreInvoke("desktop_is_maximized")
+    return isMaximizedWindow()
       .then(function (max) {
         setMaxIcon(btn, Boolean(max));
       })
@@ -184,10 +241,10 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
     if (drag) {
       drag.addEventListener("mousedown", function (ev) {
         if (ev.button !== 0) return;
-        coreInvoke("desktop_start_dragging").catch(function () {});
+        startDraggingWindow().catch(function () {});
       });
       drag.addEventListener("dblclick", function () {
-        coreInvoke("desktop_toggle_maximize")
+        toggleMaximizeWindow()
           .then(function (maximized) {
             setMaxIcon(max, Boolean(maximized));
           })
@@ -252,14 +309,14 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
       min.addEventListener("click", function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
-        coreInvoke("desktop_minimize").catch(function () {});
+        minimizeWindow().catch(function () {});
       });
     }
     if (max) {
       max.addEventListener("click", function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
-        coreInvoke("desktop_toggle_maximize")
+        toggleMaximizeWindow()
           .then(function (maximized) {
             setMaxIcon(max, Boolean(maximized));
           })
@@ -271,7 +328,7 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
       close.addEventListener("click", function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
-        coreInvoke("desktop_close").catch(function () {});
+        closeWindow().catch(function () {});
       });
     }
 

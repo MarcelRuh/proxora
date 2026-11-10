@@ -20,6 +20,15 @@
     "core:window:allow-start-dragging",
     "core:window:allow-set-focus",
     "opener:default",
-    "updater:default"
+    "updater:default",
+    "allow-get-prefs",
+    "allow-save-server",
+    "allow-clear-server",
+    "allow-check-for-updates",
+    "allow-desktop-minimize",
+    "allow-desktop-toggle-maximize",
+    "allow-desktop-close",
+    "allow-desktop-start-dragging",
+    "allow-desktop-is-maximized"
   ]
 }

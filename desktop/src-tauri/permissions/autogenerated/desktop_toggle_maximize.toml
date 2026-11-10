@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-toggle-maximize"
+description = "Enables the desktop_toggle_maximize command without any pre-configured scope."
+commands.allow = ["desktop_toggle_maximize"]
+
+[[permission]]
+identifier = "deny-desktop-toggle-maximize"
+description = "Denies the desktop_toggle_maximize command without any pre-configured scope."
+commands.deny = ["desktop_toggle_maximize"]

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.5.3] – 2026-11-10
+
+### Fixed
+
+- Desktop titlebar ACL: allow `check_for_updates`, `clear_server` and window commands on remote Proxora URLs (fixes “Command … not allowed by ACL”).
+
 ## [2.5.2] – 2026-11-10
 
 ### Fixed

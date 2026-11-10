@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clear-server"
+description = "Enables the clear_server command without any pre-configured scope."
+commands.allow = ["clear_server"]
+
+[[permission]]
+identifier = "deny-clear-server"
+description = "Denies the clear_server command without any pre-configured scope."
+commands.deny = ["clear_server"]
