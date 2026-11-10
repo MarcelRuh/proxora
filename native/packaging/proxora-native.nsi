@@ -3,7 +3,7 @@
 !include "FileFunc.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "0.2.2"
+  !define APP_VERSION "0.3.0"
 !endif
 !ifndef SOURCE_EXE
   !define SOURCE_EXE "..\target\release\proxora-native.exe"
@@ -21,8 +21,10 @@ Unicode True
 SetCompressor /SOLID lzma
 
 !define MUI_ABORTWARNING
-!define MUI_ICON "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
-!define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\modern-uninstall.ico"
+!define MUI_ICON "proxora.ico"
+!define MUI_UNICON "proxora.ico"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\proxora-native.exe"
+!define MUI_FINISHPAGE_RUN_TEXT "Proxora Desktop starten"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
@@ -46,6 +48,8 @@ Section "Proxora Native" SecApp
     "DisplayVersion" "${APP_VERSION}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ProxoraNative" \
     "Publisher" "Proxora"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ProxoraNative" \
+    "DisplayIcon" "$INSTDIR\proxora-native.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ProxoraNative" \
     "UninstallString" "$\"$INSTDIR\Uninstall.exe$\""
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ProxoraNative" \

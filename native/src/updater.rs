@@ -12,6 +12,7 @@ const USER_AGENT: &str = concat!("ProxoraNative/", env!("CARGO_PKG_VERSION"));
 #[derive(Debug, Clone)]
 pub struct UpdateInfo {
     pub version: String,
+    pub notes: String,
     pub download_url: String,
     pub asset_name: String,
     pub release_url: String,
@@ -41,6 +42,8 @@ pub enum UpdateMsg {
 struct GhRelease {
     tag_name: String,
     html_url: String,
+    #[serde(default)]
+    body: Option<String>,
     assets: Vec<GhAsset>,
     #[serde(default)]
     draft: bool,
@@ -158,6 +161,7 @@ fn check_for_update(client: &reqwest::blocking::Client) -> Result<Option<UpdateI
 
         let candidate = UpdateInfo {
             version: ver_str,
+            notes: rel.body.clone().unwrap_or_default(),
             download_url: asset.browser_download_url.clone(),
             asset_name: asset.name.clone(),
             release_url: rel.html_url.clone(),
@@ -285,18 +289,5 @@ fn launch_installer(path: &PathBuf) -> Result<(), String> {
 }
 
 pub fn open_url(url: &str) {
-    #[cfg(target_os = "windows")]
-    {
-        let _ = std::process::Command::new("cmd")
-            .args(["/C", "start", "", url])
-            .spawn();
-    }
-    #[cfg(target_os = "linux")]
-    {
-        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let _ = std::process::Command::new("open").arg(url).spawn();
-    }
+    let _ = open::that_detached(url);
 }

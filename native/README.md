@@ -1,64 +1,67 @@
-# Proxora Native
+# Proxora Desktop (nativ)
 
-Eigenständiger **Rust-/egui**-Desktop-Client für Proxora. Spricht die bestehende HTTP-API an (Session-Cookie `pm_session`) — **kein WebView**.
+Eigenständiger Desktop-Client für Proxora in **Rust + egui**. Spricht die Proxora-HTTP-API direkt an (Session-Cookie `pm_session`) — kein WebView, keine eingebettete Web-Oberfläche.
 
-Zielbild: langfristig die Web-Oberfläche ersetzen.
+## Funktionen
 
-## Features
+| Bereich | Inhalt |
+| --- | --- |
+| Übersicht | Cluster-Kennzahlen, Hinweise (Host-Fehler, Updates, volle Storages, CPU-Temperatur, fehlgeschlagene Tasks), Host-Tabelle |
+| Hosts | Liste + Inspector (Nodes mit CPU/RAM/RootFS, Cluster/Quorum, Gäste, Storage), Hinzufügen/Bearbeiten mit Verbindungstest, Wartungsmodus, Node-Neustart/-Shutdown, Entfernen |
+| VMs & Container | Filter, Sortierung, Mehrfachauswahl, Power-Aktionen; Inspector mit Übersicht, Konfigurations-Editor (inkl. Disk-Vergrößern, Windows-Profil, Rohschlüssel), Snapshots, Backups/Restore, Firewall, HA, Dateien (Guest Agent oder SFTP), Klonen, Migrieren, Löschen |
+| Erstellen | VM- und Container-Assistent (ISO/Vorlage, Storage, Netz, statische IPs aus den Gast-Netzen, Start nach Anlage) |
+| Konsole | Natives Terminal (Host-Shell, LXC, serielle VM-Konsole, `apt dist-upgrade`, Community-Skripte), SPICE über remote-viewer, VNC im Browser |
+| Daten | Storage-Inhalte mit Löschen, ZFS-Pools inkl. Disk-Status, Backup-Jobs (Zeitplan, Aufbewahrung), Backup-Dateien, Restore, Aufräumen verwaister Backups |
+| Betrieb | Vorlagen & ISOs, Community-Skripte, Proxmox-Aufgaben mit Live-Log und Abbrechen, APT-Updates mit Upgrade |
+| System | Proxora-Self-Update + DB-Backup, Benutzer, Rollen, Audit-Log, WireGuard/Freigaben, Einstellungen (Passwort, 2FA, Sitzungen, Gast-Netze, Alarme, Benachrichtigungen, Suite-Apps) |
+| Desktop | Eigene Titelleiste, Befehlspalette (Strg+K), Zurück/Vor, einklappbare Seitenleiste, Aufgaben-Leiste mit Fortschritt, Toasts, Auto-Updater |
 
-- Eigene Titelleiste (kein OS-Chrome) mit Drag / Min / Max / Close
-- Proxora-Web-DNA (Pink/Lila/Cyan), dichteres Native-Chrome
-- Server-URL + optionales insecure TLS
-- Login inkl. TOTP/Recovery
-- Übersicht (Dashboard-Metriken + Ressourcenbalken)
-- Hosts-Liste
-- Gäste (VMs + LXC) mit Start / Shutdown / Reboot / Stop
-- **Auto-Updater** über GitHub Releases (`native-v*` / ProxoraNative-Assets)
+Tastenkürzel: `Strg+K` Suche/Befehle · `F5`/`Strg+R` aktualisieren · `Strg+B` Seitenleiste · `Alt+←/→` Verlauf. Im fokussierten Terminal gehen alle Tasten an die Shell.
 
-## Voraussetzungen
+## Installation
 
-- Rust stable (`rustup`)
-- Linux: typische egui/OpenGL-Deps (`libgtk-3`, Mesa/GL)
-- Laufende Proxora-Instanz
+Releases mit Tag `native-v*` enthalten:
 
-## Windows-Installer
-
-CI baut unter Tags `v*` / `native-v*` (oder manuell via Workflow **Native Client**):
-
-- `ProxoraNative_<version>_x64-setup.exe` — NSIS-Installer
+- `ProxoraNative_<version>_x64-setup.exe` — Windows-Installer (NSIS)
 - `ProxoraNative_<version>_x64-portable.zip` — portable `.exe`
+- `ProxoraNative_<version>_linux_amd64.tar.gz`
 
-```bash
-gh workflow run native-client.yml
-gh run watch
-```
+Die App prüft beim Start auf neue Releases und installiert sie auf Wunsch selbst (Einstellungen › Desktop-App).
 
-> Nicht verwechseln mit dem **Tauri-WebView**-Installer `Proxora_*_x64-setup.exe`.
+> Nicht verwechseln mit dem Tauri-Installer `Proxora_*_x64-setup.exe`, der die Web-Oberfläche lädt.
 
-## Start (Entwicklung)
+## Entwicklung
 
 ```bash
 cd native
-cargo run --release
+cargo run --release          # App starten
+cargo test --release --lib   # Unit-Tests
+```
+
+UI-Screenshots ohne Server und ohne GPU (Demo-Daten, CPU-Rasterizer):
+
+```bash
+cargo run --release --example snapshot --features demo -- /tmp/snaps            # alle Szenen
+cargo run --release --example snapshot --features demo -- /tmp/snaps dashboard  # einzelne Szene
 ```
 
 ## Architektur
 
-| Schicht | Inhalt |
+| Pfad | Inhalt |
 | --- | --- |
-| `src/api/` | Blocking `reqwest`-Client, Models, Power-Actions |
-| `src/prefs.rs` | Config unter Proxora/proxora-native |
-| `src/theme.rs` | Farben, Typo, Visuals |
-| `src/updater.rs` | GitHub-Release-Check, Download, Installer-Launch |
-| `src/app.rs` | Custom Titlebar, Sidebar, Screens, Worker |
+| `src/net/` | Blocking-`reqwest`-Client, tolerante serde-Modelle, Rechteprüfung wie `lib/permissions.ts`, `Resource<T>` (Laden/Fehler/Veralten) |
+| `src/app/` | Fenster-Chrome, Arbeitsbereich mit Seitenleiste/Statusleiste, Befehlspalette, Dialoge, gemeinsamer Zustand mit Aktionen + Proxmox-Task-Verfolgung |
+| `src/pages/` | Eine Datei pro Bereich |
+| `src/term.rs` | `/ws/console`-WebSocket + vt100-Emulation |
+| `src/ui/` | Widgets, Formatierung, Toasts |
+| `src/theme.rs` | Farben, Typografie (Inter, JetBrains Mono, Orbitron), Phosphor-Icons |
+| `src/updater.rs` | GitHub-Release-Check, Download, Installer-Start |
+| `src/demo.rs` | Fixtures für Screenshots (`--features demo`) |
 
-## Updater
+Schriften: OFL-lizenziert, siehe `assets/fonts/OFL-*.txt`.
 
-Beim Start (und über „Nach Updates suchen“) prüft der Client `MarcelRuh/proxora` Releases:
+## Sicherheit
 
-1. Tags `native-vX.Y.Z` mit Asset `ProxoraNative_*_x64-setup.exe` (Windows) bzw. `*_linux_amd64.tar.gz`
-2. Banner bei neuer Version → Download → Installieren & Neustart (Windows startet den NSIS-Installer und beendet die App)
-
-## Version
-
-Aktuell: **0.2.2** (`Cargo.toml`).
+- „Angemeldet bleiben“ speichert das Sitzungs-Cookie unverschlüsselt im Benutzerprofil (`prefs.json`, unter Linux mit Rechten 600). Auf geteilten Rechnern abschalten.
+- „Selbstsignierte Zertifikate akzeptieren“ deaktiviert die TLS-Prüfung für HTTP und Terminal-WebSocket.
+- SFTP-Dateizugriff prüft den Host-Key nicht (Server-Verhalten).
