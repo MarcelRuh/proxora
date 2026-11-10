@@ -7,7 +7,7 @@ import { deleteUser, updateUser, updateUserSchema } from "@/server/services/user
 
 export const PATCH = apiRoute("users.update", async (req, session, params) => {
   const body = updateUserSchema.parse(await req.json());
-  const user = await updateUser(params.id, body);
+  const user = await updateUser(session.user, params.id, body);
   await writeAuditLog({
     userId: session.user.id,
     ip: await clientIp(),
@@ -19,7 +19,7 @@ export const PATCH = apiRoute("users.update", async (req, session, params) => {
 });
 
 export const DELETE = apiRoute("users.delete", async (_req, session, params) => {
-  await deleteUser(params.id, session.user.id);
+  await deleteUser(session.user, params.id);
   await writeAuditLog({
     userId: session.user.id,
     ip: await clientIp(),

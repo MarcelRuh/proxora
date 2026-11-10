@@ -7,7 +7,7 @@ import { createRoleSchema, deleteRole, updateRole } from "@/server/services/user
 
 export const PATCH = apiRoute("roles.update", async (req, session, params) => {
   const body = createRoleSchema.partial().parse(await req.json());
-  const role = await updateRole(params.id, body);
+  const role = await updateRole(session.user, params.id, body);
   await writeAuditLog({
     userId: session.user.id,
     ip: await clientIp(),
