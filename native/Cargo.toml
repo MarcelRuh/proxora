@@ -1,6 +1,6 @@
 [package]
 name = "proxora-native"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 description = "Native Rust desktop client for Proxora (API-first; eventual web UI replacement)"
 license = "MIT"

@@ -382,12 +382,12 @@ impl Workspace {
                                     ui.horizontal(|ui| {
                                         ui.add_space(10.0);
                                         ui.label(
-                                            RichText::new(item.group)
-                                                .font(theme::medium(11.0))
-                                                .color(c::FAINT),
+                                            RichText::new(item.group.to_uppercase())
+                                                .font(theme::medium(10.5))
+                                                .color(c::CYAN),
                                         );
                                     });
-                                    ui.add_space(2.0);
+                                    ui.add_space(4.0);
                                 }
                             }
                             let badge = match item.page {
@@ -710,14 +710,14 @@ fn nav_button(
     let hovered = resp.hovered();
     let t = ui.ctx().animate_bool_with_time(resp.id.with("h"), hovered || active, 0.12);
     let bg = if active {
-        tint(c::PINK, 26)
+        tint(c::PINK, 34)
     } else {
         egui::Color32::TRANSPARENT.lerp_to_gamma(c::HOVER, t)
     };
-    ui.painter().rect_filled(rect, 4.0, bg);
+    ui.painter().rect_filled(rect, 6.0, bg);
     if active {
         ui.painter().rect_filled(
-            Rect::from_min_size(rect.left_top() + Vec2::new(0.0, 7.0), Vec2::new(3.0, rect.height() - 14.0)),
+            Rect::from_min_size(rect.left_top() + Vec2::new(0.0, 6.0), Vec2::new(3.0, rect.height() - 12.0)),
             1.5,
             c::PINK,
         );
@@ -737,7 +737,7 @@ fn nav_button(
             Align2::LEFT_CENTER,
             label,
             theme::medium(13.0),
-            if active { c::TEXT } else { c::TEXT_2 },
+            if active { c::PINK } else { c::TEXT_2 },
         );
         if let Some((text, color)) = &badge {
             let g = ui.fonts(|f| f.layout_no_wrap(text.clone(), theme::medium(11.0), *color));

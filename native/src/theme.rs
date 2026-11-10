@@ -27,10 +27,10 @@ pub mod c {
     pub const FAINT: Color32 = Color32::from_rgb(0x5c, 0x5c, 0x78);
 
     pub const PINK: Color32 = Color32::from_rgb(0xff, 0x00, 0x6e);
-    /// Primary button fill — deeper than brand pink so white labels pass AA.
-    pub const PINK_FILL: Color32 = Color32::from_rgb(0xd6, 0x00, 0x5c);
-    pub const PINK_FILL_HOVER: Color32 = Color32::from_rgb(0xe8, 0x00, 0x6a);
-    pub const PINK_FILL_DOWN: Color32 = Color32::from_rgb(0xbd, 0x00, 0x51);
+    /// Primary CTA — brand pink (same as web `--primary`).
+    pub const PINK_FILL: Color32 = Color32::from_rgb(0xff, 0x00, 0x6e);
+    pub const PINK_FILL_HOVER: Color32 = Color32::from_rgb(0xff, 0x2a, 0x85);
+    pub const PINK_FILL_DOWN: Color32 = Color32::from_rgb(0xe0, 0x00, 0x60);
     pub const PURPLE: Color32 = Color32::from_rgb(0x83, 0x38, 0xec);
     pub const CYAN: Color32 = Color32::from_rgb(0x00, 0xb4, 0xd8);
 
@@ -43,9 +43,9 @@ pub mod c {
 
 pub const TITLEBAR_H: f32 = 40.0;
 pub const STATUSBAR_H: f32 = 26.0;
-pub const SIDEBAR_W: f32 = 232.0;
-pub const SIDEBAR_RAIL_W: f32 = 60.0;
-pub const RADIUS: u8 = 4;
+pub const SIDEBAR_W: f32 = 240.0;
+pub const SIDEBAR_RAIL_W: f32 = 64.0;
+pub const RADIUS: u8 = 6;
 pub const ROW_H: f32 = 36.0;
 
 pub fn radius() -> CornerRadius {

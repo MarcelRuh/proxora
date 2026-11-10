@@ -1,6 +1,8 @@
 # Proxora Desktop (nativ)
 
-Eigenständiger Desktop-Client für Proxora in **Rust + egui**. Spricht die Proxora-HTTP-API direkt an (Session-Cookie `pm_session`) — kein WebView, keine eingebettete Web-Oberfläche.
+Eigenständiger Desktop-Client für Proxora in **Rust + egui** (aktuell **0.3.1**). Spricht die Proxora-HTTP-API direkt an (Session-Cookie `pm_session`) — kein WebView, keine eingebettete Web-Oberfläche.
+
+Design: Proxora-Web-DNA (Pink/Lila/Cyan), dichteres Native-Chrome mit eigener Titelleiste.
 
 ## Funktionen
 

@@ -214,8 +214,9 @@ impl AuthScreen {
         egui::CentralPanel::default()
             .frame(Frame::new().fill(c::BG))
             .show(ctx, |ui| {
+                paint_atmosphere(ui);
                 let avail = ui.available_size();
-                ui.add_space((avail.y * 0.14).clamp(24.0, 120.0));
+                ui.add_space((avail.y * 0.12).clamp(20.0, 100.0));
                 ui.vertical_centered(|ui| {
                     self.card(ui, ctx, prefs);
                     ui.add_space(14.0);
@@ -233,38 +234,46 @@ impl AuthScreen {
     }
 
     fn card(&mut self, ui: &mut Ui, ctx: &egui::Context, prefs: &mut Prefs) {
-        let width = 400.0;
+        let width = 420.0;
         Frame::new()
             .fill(c::PANEL)
-            .stroke(Stroke::new(1.0_f32, c::BORDER))
-            .corner_radius(6)
+            .stroke(Stroke::new(1.0_f32, c::BORDER_STRONG))
+            .corner_radius(theme::RADIUS)
             .shadow(egui::Shadow {
-                offset: [0, 18],
-                blur: 48,
+                offset: [0, 20],
+                blur: 56,
                 spread: 0,
-                color: egui::Color32::from_black_alpha(140),
+                color: egui::Color32::from_rgba_unmultiplied(0x83, 0x38, 0xec, 48),
             })
-            .inner_margin(Margin::symmetric(28, 26))
+            .inner_margin(Margin::symmetric(30, 28))
             .show(ui, |ui| {
-                ui.set_width(width - 56.0);
+                ui.set_width(width - 60.0);
                 ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
                     let accent = ui.cursor();
                     let bar = egui::Rect::from_min_size(
-                        egui::pos2(accent.left() - 22.0, accent.top() - 26.0),
-                        egui::vec2(width - 12.0, 2.0),
+                        egui::pos2(accent.left() - 24.0, accent.top() - 28.0),
+                        egui::vec2(width - 12.0, 2.5),
                     );
                     paint_brand_bar(ui, bar);
 
-                    let (heading, sub) = match self.step {
-                        Step::Server => ("Mit Proxora verbinden", "Adresse deiner Proxora-Instanz."),
-                        Step::Restoring => ("Sitzung wird geprüft", "Gespeicherte Anmeldung wird übernommen."),
-                        Step::Login => ("Anmelden", "Mit deinem Proxora-Konto."),
-                        Step::Totp => ("Zwei-Faktor-Code", "Code aus der Authenticator-App oder Recovery-Code."),
-                    };
-                    ui.label(RichText::new(heading).font(theme::semibold(20.0)).color(c::TEXT));
-                    ui.add_space(2.0);
-                    ui.label(w::muted(sub));
-                    ui.add_space(18.0);
+                    ui.vertical_centered(|ui| {
+                        ui.add(
+                            egui::Image::new(egui::include_image!("../../assets/proxora-icon.png"))
+                                .fit_to_exact_size(egui::vec2(56.0, 56.0))
+                                .corner_radius(10.0),
+                        );
+                        ui.add_space(10.0);
+                        let (heading, sub) = match self.step {
+                            Step::Server => ("Mit Proxora verbinden", "Adresse deiner Proxora-Instanz."),
+                            Step::Restoring => ("Sitzung wird geprüft", "Gespeicherte Anmeldung wird übernommen."),
+                            Step::Login => ("Anmelden", "Mit deinem Proxora-Konto."),
+                            Step::Totp => ("Zwei-Faktor-Code", "Code aus der Authenticator-App oder Recovery-Code."),
+                        };
+                        ui.label(RichText::new(heading).font(theme::semibold(22.0)).color(c::TEXT));
+                        ui.add_space(2.0);
+                        ui.label(w::muted(sub));
+                    });
+                    ui.add_space(20.0);
 
                     if let Some(n) = self.notice.clone() {
                         w::callout(ui, ph::INFO, c::CYAN, &n);
@@ -417,4 +426,22 @@ fn paint_brand_bar(ui: &Ui, rect: egui::Rect) {
     mesh.add_triangle(0, 1, 2);
     mesh.add_triangle(0, 2, 3);
     ui.painter().add(egui::Shape::mesh(mesh));
+}
+
+/// Soft brand orbs — native stand-in for the web `UiAtmosphere`.
+fn paint_atmosphere(ui: &Ui) {
+    let rect = ui.max_rect();
+    let painter = ui.painter();
+    let t = ui.input(|i| i.time) as f32;
+    let blobs = [
+        (egui::pos2(rect.left() + rect.width() * 0.18, rect.top() + rect.height() * 0.22), 180.0, c::PURPLE, 22),
+        (egui::pos2(rect.right() - rect.width() * 0.16, rect.top() + rect.height() * 0.30), 200.0, c::PINK, 18),
+        (egui::pos2(rect.center().x + 40.0, rect.bottom() - rect.height() * 0.18), 160.0, c::CYAN, 14),
+    ];
+    for (i, (mut center, radius, color, alpha)) in blobs.into_iter().enumerate() {
+        let phase = t * (0.18 + i as f32 * 0.05);
+        center.x += phase.sin() * 18.0;
+        center.y += (phase * 0.85).cos() * 14.0;
+        painter.circle_filled(center, radius, theme::tint(color, alpha));
+    }
 }
