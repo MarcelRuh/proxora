@@ -33,9 +33,9 @@ const bodySchema = z
 export async function POST(request: Request) {
   try {
     const payload = bodySchema.parse(await request.json());
-    await requireSharedGuestFiles(request, payload.remoteHostId, payload.kind);
+    const { host } = await requireSharedGuestFiles(request, payload.remoteHostId, payload.kind);
     if (!payload.target.trim()) throw new ValidationError("SSH host fehlt");
-    const data = await guestSftp({
+    const data = await guestSftp(host, {
       kind: payload.kind,
       node: "",
       vmid: payload.vmid,

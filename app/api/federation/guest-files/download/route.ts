@@ -30,9 +30,9 @@ export const maxDuration = 3600;
 export async function POST(request: Request) {
   try {
     const payload = bodySchema.parse(await request.json());
-    await requireSharedGuestFiles(request, payload.remoteHostId, payload.kind);
+    const { host } = await requireSharedGuestFiles(request, payload.remoteHostId, payload.kind);
     if (!payload.target.trim()) throw new ValidationError("SSH host fehlt");
-    return await sftpDownloadResponse({
+    return await sftpDownloadResponse({ host, kind: payload.kind, vmid: payload.vmid }, {
       target: payload.target,
       port: payload.port,
       username: payload.username,
