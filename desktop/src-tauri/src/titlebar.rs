@@ -25,6 +25,35 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
     }
   }
 
+  // Works even on chrome-error pages where Origin/IPC is broken.
+  function schemeAction(action) {
+    try {
+      var iframe = document.createElement("iframe");
+      iframe.style.display = "none";
+      iframe.src = "proxora-desktop://" + action;
+      document.documentElement.appendChild(iframe);
+      setTimeout(function () {
+        try {
+          iframe.remove();
+        } catch (e) {}
+      }, 0);
+      return Promise.resolve();
+    } catch (e) {
+      try {
+        location.assign("proxora-desktop://" + action);
+        return Promise.resolve();
+      } catch (err) {
+        return Promise.reject(err);
+      }
+    }
+  }
+
+  function invokeOrScheme(cmd, scheme) {
+    return coreInvoke(cmd).catch(function () {
+      return schemeAction(scheme);
+    });
+  }
+
   function currentWindow() {
     try {
       var api = window.__TAURI__ && window.__TAURI__.window;
@@ -49,9 +78,13 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
   }
 
   function minimizeWindow() {
-    return callWindow("minimize").catch(function () {
-      return coreInvoke("desktop_minimize");
-    });
+    return callWindow("minimize")
+      .catch(function () {
+        return coreInvoke("desktop_minimize");
+      })
+      .catch(function () {
+        return schemeAction("minimize");
+      });
   }
 
   function toggleMaximizeWindow() {
@@ -61,19 +94,30 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
       })
       .catch(function () {
         return coreInvoke("desktop_toggle_maximize");
+      })
+      .catch(function () {
+        return schemeAction("toggle-maximize");
       });
   }
 
   function closeWindow() {
-    return callWindow("close").catch(function () {
-      return coreInvoke("desktop_close");
-    });
+    return callWindow("close")
+      .catch(function () {
+        return coreInvoke("desktop_close");
+      })
+      .catch(function () {
+        return schemeAction("close");
+      });
   }
 
   function startDraggingWindow() {
-    return callWindow("startDragging").catch(function () {
-      return coreInvoke("desktop_start_dragging");
-    });
+    return callWindow("startDragging")
+      .catch(function () {
+        return coreInvoke("desktop_start_dragging");
+      })
+      .catch(function () {
+        return schemeAction("start-dragging");
+      });
   }
 
   function isMaximizedWindow() {
@@ -263,19 +307,26 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
           var act = el.getAttribute("data-act");
           closeMenu();
           if (act === "reload") {
-            location.reload();
+            schemeAction("reload").catch(function () {
+              location.reload();
+            });
             return;
           }
           if (act === "change") {
             setStatus("Opening server setup…", "info", 2500);
-            coreInvoke("clear_server").catch(function (err) {
-              setStatus("Change server failed: " + (err && err.message ? err.message : String(err)), "err", 7000);
+            invokeOrScheme("clear_server", "change-server").catch(function (err) {
+              setStatus(
+                "Change server failed: " +
+                  (err && err.message ? err.message : String(err)),
+                "err",
+                7000
+              );
             });
             return;
           }
           if (act === "updates") {
             setStatus("Checking for desktop updates…", "info", 0);
-            coreInvoke("check_for_updates")
+            invokeOrScheme("check_for_updates", "check-updates")
               .then(function () {
                 setTimeout(function () {
                   var el = document.querySelector("#" + BAR_ID + " .px-status");
@@ -285,7 +336,7 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
                     /Checking for desktop updates/i.test(el.textContent || "")
                   ) {
                     setStatus(
-                      "No updater response — reinstall from GitHub Releases if this persists",
+                      "No updater response — use menu Proxora → Check for updates, or reinstall",
                       "err",
                       8000
                     );

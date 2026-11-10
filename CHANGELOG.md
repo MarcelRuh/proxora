@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.5.4] – 2026-11-10
+
+### Fixed
+
+- Desktop recovers from unreachable-server WebView error pages (invalid Origin broke IPC): auto-return to setup, `proxora-desktop://` action fallback, and native Proxora menu on Windows/Linux.
+
 ## [2.5.3] – 2026-11-10
 
 ### Fixed

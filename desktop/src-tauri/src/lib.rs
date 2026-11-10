@@ -6,9 +6,8 @@ mod url_util;
 use prefs::Prefs;
 use serde::Serialize;
 use std::sync::Mutex;
-use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
-#[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder};
+use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_updater::UpdaterExt;
 use url::Url;
@@ -42,6 +41,72 @@ fn apply_insecure_env(allow: bool) {
 fn setup_nav_url() -> Url {
   // Custom protocol host used by Tauri 2 desktop webviews.
   Url::parse("http://tauri.localhost/index.html").expect("setup url")
+}
+
+fn setup_nav_url_with_error(code: &str) -> Url {
+  let mut url = setup_nav_url();
+  url.query_pairs_mut().append_pair("error", code);
+  url
+}
+
+fn is_webview_error_url(url: &str) -> bool {
+  let lower = url.to_ascii_lowercase();
+  lower.starts_with("chrome-error:")
+    || lower.starts_with("edge-error:")
+    || lower.contains("chromewebdata")
+    || lower.starts_with("about:neterror")
+    || lower.starts_with("data:text/html,chromewebdata")
+}
+
+/// Fallback channel when the current document has no valid Origin (WebView error pages).
+/// Titlebar uses `proxora-desktop://action` so Rust can handle it without IPC.
+fn handle_desktop_scheme(app: &tauri::AppHandle, url: &str) -> bool {
+  let Ok(parsed) = Url::parse(url) else {
+    return false;
+  };
+  if parsed.scheme() != "proxora-desktop" {
+    return false;
+  }
+  let action = parsed.host_str().unwrap_or("").to_ascii_lowercase();
+  match action.as_str() {
+    "change-server" => {
+      let _ = clear_server_internal(app);
+    }
+    "check-updates" => {
+      spawn_update_check(app, true);
+    }
+    "reload" => {
+      if let Some(window) = app.get_webview_window("main") {
+        let _ = window.reload();
+      }
+    }
+    "minimize" => {
+      if let Some(window) = app.get_webview_window("main") {
+        let _ = window.minimize();
+      }
+    }
+    "toggle-maximize" => {
+      if let Some(window) = app.get_webview_window("main") {
+        if window.is_maximized().unwrap_or(false) {
+          let _ = window.unmaximize();
+        } else {
+          let _ = window.maximize();
+        }
+      }
+    }
+    "close" => {
+      if let Some(window) = app.get_webview_window("main") {
+        let _ = window.close();
+      }
+    }
+    "start-dragging" => {
+      if let Some(window) = app.get_webview_window("main") {
+        let _ = window.start_dragging();
+      }
+    }
+    _ => {}
+  }
+  true
 }
 
 fn navigate_main(app: &tauri::AppHandle, target: Url) -> Result<(), String> {
@@ -218,7 +283,6 @@ fn clear_server_internal(app: &tauri::AppHandle) -> Result<(), String> {
   navigate_main(app, setup_nav_url())
 }
 
-#[cfg(target_os = "macos")]
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
   let reload = MenuItem::with_id(app, "reload", "Reload", true, Some("CmdOrCtrl+R"))?;
   let change = MenuItem::with_id(app, "change_server", "Change server…", true, None::<&str>)?;
@@ -277,12 +341,9 @@ pub fn run() {
     ])
     .setup(|app| {
       let handle = app.handle().clone();
-      // Custom HTML chrome owns window actions on Win/Linux; keep native menu on macOS.
-      #[cfg(target_os = "macos")]
-      {
-        let menu = build_menu(&handle)?;
-        app.set_menu(menu)?;
-      }
+      // Native menu remains available when WebView error pages break IPC Origin checks.
+      let menu = build_menu(&handle)?;
+      app.set_menu(menu)?;
 
       let prefs = app.state::<AppState>().prefs.lock().expect("prefs lock").clone();
 
@@ -308,11 +369,35 @@ pub fn run() {
         .user_agent(&desktop_ua)
         .initialization_script(titlebar::TITLEBAR_BOOTSTRAP)
         .initialization_script_for_all_frames(&desktop_bridge)
+        .on_page_load({
+          let handle = handle.clone();
+          move |window, payload| {
+            if payload.event() != tauri::webview::PageLoadEvent::Finished {
+              return;
+            }
+            let url = payload.url().to_string();
+            if !is_webview_error_url(&url) {
+              return;
+            }
+            // Error pages (DNS/TLS/offline) have no valid Origin → IPC dies.
+            // Bounce back to setup so the user can change server / retry.
+            let target = setup_nav_url_with_error("unreachable");
+            let _ = window.navigate(target);
+            let _ = handle;
+          }
+        })
         .on_navigation({
           let handle = handle.clone();
           move |url| {
             let url = url.to_string();
+            if handle_desktop_scheme(&handle, &url) {
+              return false;
+            }
             if is_setup_url(&url) {
+              return true;
+            }
+            if is_webview_error_url(&url) {
+              // Allow the browser error document briefly; on_page_load redirects to setup.
               return true;
             }
             let state = handle.state::<AppState>();

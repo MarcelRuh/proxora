@@ -49,6 +49,19 @@ function showUpdate(detail) {
   }
 }
 
+function readQueryError() {
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+    const code = params.get("error");
+    if (code === "unreachable") {
+      return "Server could not be reached (DNS/network). Check the URL or your connection, then Connect again.";
+    }
+    return code ? `Setup error: ${code}` : "";
+  } catch {
+    return "";
+  }
+}
+
 async function bootstrap() {
   try {
     const prefs = await invoke("get_prefs");
@@ -56,6 +69,8 @@ async function bootstrap() {
     insecureInput.checked = Boolean(prefs?.allowInsecureTls);
     if (prefs?.appVersion) verEl.textContent = `· v${prefs.appVersion}`;
     showLegacy(prefs?.legacyInstall ?? null);
+    const queryError = readQueryError();
+    if (queryError) showError(queryError);
   } catch (err) {
     showError(String(err));
   }
