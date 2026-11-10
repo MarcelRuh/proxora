@@ -4,10 +4,9 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-### Added
+### Removed
 
-- Native Rust desktop client (`native/`): egui MVP against the Proxora HTTP API (login/TOTP, dashboard, hosts, guest power actions) — path toward replacing the web UI.
-- CI workflow `native-client.yml` builds Windows NSIS installer (`ProxoraNative_*_x64-setup.exe`) + portable zip and Linux tarball.
+- Native Rust/egui desktop client (`native/`) and its CI workflow `native-client.yml` (including related `native-v*` releases).
 
 ## [2.4.18] – 2026-11-09
 
