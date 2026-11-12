@@ -3,12 +3,14 @@ import path from "node:path";
 import {
   COMMUNITY_SCRIPTS_CATEGORIES_DB,
   COMMUNITY_SCRIPTS_DB,
+  COMMUNITY_SCRIPTS_SITE,
   communityScriptInstallCommand,
   communityScriptPageUrl,
   communityScriptRawUrl,
   filterCommunityScripts,
   isSafeCommunityScriptSlug,
   parseCommunityScriptCategory,
+  parseCommunityScriptInstallStats,
   parseCommunityScriptSummary,
   type CommunityScriptCategory,
   type CommunityScriptKind,
@@ -22,8 +24,13 @@ const MAX_PAGES = 20;
 const DISK_CACHE_DIR = process.env.PROXORA_CACHE_DIR ?? "/var/lib/proxora";
 const DISK_CACHE_PATH = path.join(DISK_CACHE_DIR, "community-scripts-catalog.json");
 
+/** Bump when CommunityScriptSummary gains fields so old disk caches get refreshed. */
+const CACHE_VERSION = 2;
+
 type CatalogCache = {
+  version?: number;
   fetchedAt: number;
+  hasInstallStats?: boolean;
   scripts: CommunityScriptSummary[];
   categories: CommunityScriptCategory[];
 };
@@ -75,7 +82,7 @@ async function fetchAllScripts(): Promise<CommunityScriptSummary[]> {
       filter: "(is_deleted=false&&is_disabled=false)",
       sort: "name",
       fields:
-        "id,name,slug,description,logo,type,categories,port,privileged,updateable,website,documentation,install_methods,is_deleted,is_disabled",
+        "id,name,slug,description,logo,type,categories,port,privileged,updateable,website,documentation,install_methods,is_deleted,is_disabled,script_created,script_updated,created,updated,has_arm,architectures,is_dev,oidc_url",
     });
     const data = (await fetchJson(`${COMMUNITY_SCRIPTS_DB}?${params}`)) as {
       items?: unknown[];
@@ -93,6 +100,23 @@ async function fetchAllScripts(): Promise<CommunityScriptSummary[]> {
     if (page >= totalPages) break;
   }
   return out;
+}
+
+/** Best effort: 30-day install counts are only published inside the site's script page. */
+async function fetchInstallStats(): Promise<Map<string, number>> {
+  try {
+    const res = await fetch(`${COMMUNITY_SCRIPTS_SITE}/scripts`, {
+      headers: { Accept: "text/html", "User-Agent": "Proxora/community-scripts" },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    if (html.length > 20_000_000) throw new Error("page too large");
+    return parseCommunityScriptInstallStats(html);
+  } catch (error) {
+    logger.warn({ err: error }, "Community Scripts install stats unavailable");
+    return new Map();
+  }
 }
 
 async function fetchCategories(): Promise<CommunityScriptCategory[]> {
@@ -114,8 +138,9 @@ async function ensureMemoryCache(): Promise<void> {
   if (cache) return;
   const disk = await readDiskCache();
   if (disk) {
-    cache = disk;
-    servedStale = Date.now() - disk.fetchedAt >= CACHE_TTL_MS;
+    // Older cache layouts lack fields the UI sorts on: serve them, but refresh first chance.
+    cache = disk.version === CACHE_VERSION ? disk : { ...disk, fetchedAt: 0 };
+    servedStale = Date.now() - cache.fetchedAt >= CACHE_TTL_MS;
   }
 }
 
@@ -128,8 +153,16 @@ async function loadCatalog(force = false): Promise<CatalogCache> {
   if (!force && inflight) return inflight;
   inflight = (async () => {
     try {
-      const [scripts, categories] = await Promise.all([fetchAllScripts(), fetchCategories()]);
-      cache = { fetchedAt: Date.now(), scripts, categories };
+      const [scripts, categories, stats] = await Promise.all([
+        fetchAllScripts(),
+        fetchCategories(),
+        fetchInstallStats(),
+      ]);
+      const hasInstallStats = stats.size > 0;
+      const withStats = hasInstallStats
+        ? scripts.map((script) => ({ ...script, installs30d: stats.get(script.slug) ?? 0 }))
+        : scripts;
+      cache = { version: CACHE_VERSION, fetchedAt: Date.now(), hasInstallStats, scripts: withStats, categories };
       servedStale = false;
       await writeDiskCache(cache);
       return cache;
@@ -165,6 +198,7 @@ export async function listCommunityScripts(opts?: {
   fetchedAt: number;
   total: number;
   stale: boolean;
+  hasInstallStats: boolean;
 }> {
   const catalog = await loadCatalog(opts?.force === true);
   const filtered = filterCommunityScripts(catalog.scripts, {
@@ -177,6 +211,7 @@ export async function listCommunityScripts(opts?: {
     categories: catalog.categories,
     fetchedAt: catalog.fetchedAt,
     total: catalog.scripts.length,
+    hasInstallStats: catalog.hasInstallStats === true,
     stale: servedStale || Date.now() - catalog.fetchedAt >= CACHE_TTL_MS,
   };
 }

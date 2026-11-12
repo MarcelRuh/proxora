@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.6.1] – 2026-11-12
+
+### Added
+
+- Community Scripts: sort tabs (by category, popular, newest, updated, least installed, name), type chips with counts (container, VM, addon, PVE tool, TurnKey), ARM / Testing / OIDC filters and a "Clear all" reset. The chosen sort is remembered.
+- Script cards show 30-day install counts plus "New" and "Testing" badges; "By category" groups cards under category headings.
+
+### Changed
+
+- The catalog now carries creation/update dates, ARM support, testing status and OIDC hints; install counts are read best-effort from community-scripts.org (popularity sorting hides itself when unavailable). Old disk caches are refreshed automatically.
+- Filtering and sorting run client-side on the cached catalog; the kind dropdown was replaced by chips.
+
 ## [2.6.0] – 2026-11-10
 
 ### Added

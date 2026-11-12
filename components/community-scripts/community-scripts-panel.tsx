@@ -1,9 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Copy, ExternalLink, Play, RefreshCw, Search } from "lucide-react";
+import {
+  ArrowDownAZ,
+  Box,
+  Copy,
+  Cpu,
+  ExternalLink,
+  Flame,
+  FlaskConical,
+  History,
+  KeyRound,
+  LayoutGrid,
+  Monitor,
+  Package,
+  Play,
+  Puzzle,
+  RefreshCw,
+  Search,
+  Server,
+  Sparkles,
+  TrendingDown,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,11 +38,18 @@ import { peerHostAllowsPermission } from "@/lib/federation-access";
 import type { PublicHost } from "@/lib/types";
 import type {
   CommunityScriptCategory,
+  CommunityScriptFlag,
   CommunityScriptKind,
+  CommunityScriptSort,
   CommunityScriptSummary,
 } from "@/lib/community-scripts";
 import {
   COMMUNITY_SCRIPTS_SITE,
+  COMMUNITY_SCRIPT_FLAGS,
+  COMMUNITY_SCRIPT_SORTS,
+  communityScriptFacetCounts,
+  filterCommunityScripts,
+  sortCommunityScripts,
   communityScriptInstallCommand,
   communityScriptLogoSrc,
   communityScriptPageUrl,
@@ -35,6 +64,7 @@ type CatalogResponse = {
   fetchedAt: number;
   total: number;
   stale?: boolean;
+  hasInstallStats?: boolean;
 };
 
 type RunResponse = {
@@ -45,8 +75,94 @@ type RunResponse = {
   script: CommunityScriptSummary;
 };
 
-const KIND_OPTIONS: Array<CommunityScriptKind | "all"> = ["all", "lxc", "vm", "addon", "pve", "turnkey"];
+const KIND_OPTIONS: CommunityScriptKind[] = ["lxc", "vm", "addon", "pve", "turnkey"];
 const PAGE_SIZE = 48;
+const NEW_WINDOW_MS = 30 * 24 * 60 * 60_000;
+const SORT_STORAGE_KEY = "proxora.cs.sort";
+const STATS_SORTS = new Set<CommunityScriptSort>(["popular", "least"]);
+
+const SORT_ICONS: Record<CommunityScriptSort, LucideIcon> = {
+  category: LayoutGrid,
+  popular: Flame,
+  newest: Sparkles,
+  updated: History,
+  least: TrendingDown,
+  name: ArrowDownAZ,
+};
+const KIND_ICONS: Record<CommunityScriptKind, LucideIcon> = {
+  lxc: Box,
+  vm: Monitor,
+  addon: Puzzle,
+  pve: Server,
+  turnkey: Package,
+};
+const FLAG_ICONS: Record<CommunityScriptFlag, LucideIcon> = {
+  arm: Cpu,
+  testing: FlaskConical,
+  oidc: KeyRound,
+};
+
+function readStoredSort(): CommunityScriptSort | null {
+  try {
+    const raw = window.localStorage.getItem(SORT_STORAGE_KEY);
+    return raw && (COMMUNITY_SCRIPT_SORTS as string[]).includes(raw) ? (raw as CommunityScriptSort) : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeSort(sort: CommunityScriptSort) {
+  try {
+    window.localStorage.setItem(SORT_STORAGE_KEY, sort);
+  } catch {
+    // storage blocked: sort just isn't remembered
+  }
+}
+
+function toggle<T>(list: T[], item: T): T[] {
+  return list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
+}
+
+function FilterChip({
+  active,
+  icon: Icon,
+  label,
+  count,
+  onClick,
+}: {
+  active: boolean;
+  icon: LucideIcon;
+  label: string;
+  count: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      disabled={!active && count === 0}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
+        active
+          ? "border-primary/60 bg-primary/15 text-foreground"
+          : "border-border bg-foreground/[0.02] text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground",
+      )}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+      <span
+        className={cn(
+          "rounded-full px-1.5 text-[10px] tabular-nums",
+          active ? "bg-primary/25 text-foreground" : "bg-foreground/[0.07]",
+        )}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
 
 function resourcesLabel(script: CommunityScriptSummary): string | null {
   const parts: string[] = [];
@@ -114,12 +230,14 @@ export function CommunityScriptsPanel({
   hostId: string;
   onHostChange: (id: string) => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const canConsole = useCan("hosts.console", hostId || undefined);
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [kind, setKind] = useState<CommunityScriptKind | "all">("all");
+  const [kinds, setKinds] = useState<CommunityScriptKind[]>([]);
+  const [flags, setFlags] = useState<CommunityScriptFlag[]>([]);
+  const [sort, setSortState] = useState<CommunityScriptSort>("popular");
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [selected, setSelected] = useState<CommunityScriptSummary | null>(null);
   const [detail, setDetail] = useState<CommunityScriptSummary | null>(null);
@@ -134,44 +252,71 @@ export function CommunityScriptsPanel({
   }, [query]);
 
   useEffect(() => {
+    const stored = readStoredSort();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is client-only; read after mount to avoid hydration drift
+    if (stored) setSortState(stored);
+  }, []);
+
+  useEffect(() => {
     setVisible(PAGE_SIZE);
-  }, [debounced, categoryId, kind]);
+  }, [debounced, categoryId, kinds, flags, sort]);
+
+  function setSort(next: CommunityScriptSort) {
+    setSortState(next);
+    storeSort(next);
+  }
 
   const activeHost = hosts.find((host) => host.id === hostId) ?? null;
   const hostOnline = activeHost?.connectionState === "ONLINE";
   const peerOk = activeHost ? peerHostAllowsPermission(activeHost, "hosts.console") : true;
   const canRun = Boolean(canConsole && hostOnline && peerOk && hostId);
 
-  const catalogKey = ["community-scripts", debounced, categoryId, kind] as const;
   const { data, isLoading, isFetching, error, refetch, isError } = useQuery({
-    queryKey: catalogKey,
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (debounced) params.set("q", debounced);
-      if (categoryId) params.set("category", categoryId);
-      if (kind !== "all") params.set("kind", kind);
-      const qs = params.toString();
-      return api<CatalogResponse>(`/api/community-scripts${qs ? `?${qs}` : ""}`);
-    },
+    queryKey: ["community-scripts"],
+    queryFn: () => api<CatalogResponse>("/api/community-scripts"),
     staleTime: 5 * 60_000,
   });
 
-  const scripts = data?.scripts ?? [];
+  const hasStats = data?.hasInstallStats === true;
+  const sortOptions = COMMUNITY_SCRIPT_SORTS.filter((item) => hasStats || !STATS_SORTS.has(item));
+  const effectiveSort: CommunityScriptSort = sortOptions.includes(sort) ? sort : "newest";
+  const categories = useMemo(() => data?.categories ?? [], [data?.categories]);
+  const filter = useMemo(
+    () => ({ query: debounced, categoryId: categoryId || undefined, kinds, flags }),
+    [debounced, categoryId, kinds, flags],
+  );
+  const scripts = useMemo(
+    () => sortCommunityScripts(filterCommunityScripts(data?.scripts ?? [], filter), effectiveSort, categories),
+    [data?.scripts, filter, effectiveSort, categories],
+  );
+  const facets = useMemo(() => communityScriptFacetCounts(data?.scripts ?? [], filter), [data?.scripts, filter]);
   const shown = scripts.slice(0, visible);
-  const categories = data?.categories ?? [];
-  const categoryName = useMemo(() => {
-    const map = new Map(categories.map((item) => [item.id, item.name]));
-    return (ids: string[]) => ids.map((id) => map.get(id)).filter(Boolean).join(", ");
-  }, [categories]);
+  const filtersActive = Boolean(debounced || categoryId || kinds.length || flags.length);
+  const categoryById = useMemo(() => new Map(categories.map((item) => [item.id, item.name])), [categories]);
+  const categoryName = (ids: string[]) => ids.map((id) => categoryById.get(id)).filter(Boolean).join(", ");
+  const groupByCategory = effectiveSort === "category" && !categoryId;
+  const categoryOrder = useMemo(() => new Map(categories.map((cat, index) => [cat.id, index])), [categories]);
+  const primaryCategory = (script: CommunityScriptSummary) =>
+    [...script.categoryIds].sort((a, b) => (categoryOrder.get(a) ?? 9_999) - (categoryOrder.get(b) ?? 9_999))[0] ??
+    "";
+  const compact = useMemo(
+    () => new Intl.NumberFormat(locale),
+    [locale],
+  );
+  // eslint-disable-next-line react-hooks/purity -- "new" badge only needs render-time precision
+  const now = Date.now();
+
+  function clearFilters() {
+    setQuery("");
+    setDebounced("");
+    setCategoryId("");
+    setKinds([]);
+    setFlags([]);
+  }
 
   async function refreshCatalog() {
-    const params = new URLSearchParams();
-    if (debounced) params.set("q", debounced);
-    if (categoryId) params.set("category", categoryId);
-    if (kind !== "all") params.set("kind", kind);
-    params.set("refresh", "1");
     try {
-      await api<CatalogResponse>(`/api/community-scripts?${params}`);
+      await api<CatalogResponse>("/api/community-scripts?refresh=1");
       await refetch();
       toast.success(t("cs.refreshDone"));
     } catch (err) {
@@ -234,17 +379,6 @@ export function CommunityScriptsPanel({
           />
         </div>
         <select
-          className="h-9 rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm"
-          value={kind}
-          onChange={(e) => setKind(e.target.value as CommunityScriptKind | "all")}
-        >
-          {KIND_OPTIONS.map((item) => (
-            <option key={item} value={item}>
-              {t(`cs.kind.${item}`)}
-            </option>
-          ))}
-        </select>
-        <select
           className="h-9 max-w-[16rem] rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm"
           value={categoryId}
           onChange={(e) => setCategoryId(e.target.value)}
@@ -277,6 +411,69 @@ export function CommunityScriptsPanel({
         </Button>
       </div>
 
+      <div className="space-y-3 rounded-[var(--ui-radius)] border border-border bg-foreground/[0.02] p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div
+            role="tablist"
+            aria-label={t("cs.sortLabel")}
+            className="flex flex-wrap gap-1 rounded-[var(--ui-radius)] border border-border bg-background/40 p-1"
+          >
+            {sortOptions.map((item) => {
+              const Icon = SORT_ICONS[item];
+              const active = item === effectiveSort;
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setSort(item)}
+                  className={cn(
+                    "inline-flex h-8 items-center gap-1.5 rounded-[calc(var(--ui-radius)-2px)] px-3 text-xs font-medium transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    active
+                      ? "bg-foreground/[0.09] text-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
+                  )}
+                >
+                  <Icon className={cn("h-3.5 w-3.5", active && "text-primary")} />
+                  {t(`cs.sort.${item}`)}
+                </button>
+              );
+            })}
+          </div>
+          {filtersActive ? (
+            <Button type="button" size="sm" variant="ghost" className="gap-1 text-muted-foreground" onClick={clearFilters}>
+              <X className="h-3.5 w-3.5" />
+              {t("cs.clearAll")}
+            </Button>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {KIND_OPTIONS.map((item) => (
+            <FilterChip
+              key={item}
+              active={kinds.includes(item)}
+              icon={KIND_ICONS[item]}
+              label={t(`cs.kindChip.${item}`)}
+              count={facets.kinds[item]}
+              onClick={() => setKinds((list) => toggle(list, item))}
+            />
+          ))}
+          <span aria-hidden className="mx-1 hidden h-5 w-px bg-border sm:block" />
+          {COMMUNITY_SCRIPT_FLAGS.map((item) => (
+            <FilterChip
+              key={item}
+              active={flags.includes(item)}
+              icon={FLAG_ICONS[item]}
+              label={t(`cs.flag.${item}`)}
+              count={facets.flags[item]}
+              onClick={() => setFlags((list) => toggle(list, item))}
+            />
+          ))}
+        </div>
+      </div>
+
       {!canRun ? (
         <p className="text-sm text-muted-foreground">
           {!hostId
@@ -301,39 +498,76 @@ export function CommunityScriptsPanel({
       ) : null}
       {isLoading ? <p className="text-sm text-muted-foreground">{t("common.loading")}</p> : null}
 
-      {!isLoading && !isError && scripts.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t("cs.empty")}</p>
+      {!isLoading && !isError && data && scripts.length === 0 ? (
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span>{t("cs.empty")}</span>
+          {filtersActive ? (
+            <Button type="button" size="sm" variant="outline" onClick={clearFilters}>
+              {t("cs.clearAll")}
+            </Button>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {shown.map((script) => {
+        {shown.map((script, index) => {
           const resources = resourcesLabel(script);
+          const group = groupByCategory ? primaryCategory(script) : "";
+          const newGroup = groupByCategory && (index === 0 || primaryCategory(shown[index - 1]) !== group);
+          const isNew = script.createdAt != null && now - script.createdAt < NEW_WINDOW_MS;
           return (
-            <Card key={script.id} className="overflow-hidden">
-              <CardContent className="flex h-full flex-col gap-3 p-4">
-                <div className="flex items-start gap-3">
-                  <ScriptLogo name={script.name} logo={script.logo} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{script.name}</p>
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      {t(`cs.kind.${script.kind}`)}
-                      {categoryName(script.categoryIds) ? ` · ${categoryName(script.categoryIds)}` : ""}
-                    </p>
+            <Fragment key={script.id}>
+              {newGroup ? (
+                <h3 className="col-span-full pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground first:pt-0">
+                  {categoryById.get(group) ?? t("cs.uncategorized")}
+                </h3>
+              ) : null}
+              <Card className="overflow-hidden">
+                <CardContent className="flex h-full flex-col gap-3 p-4">
+                  <div className="flex items-start gap-3">
+                    <ScriptLogo name={script.name} logo={script.logo} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className="truncate text-sm font-medium">{script.name}</p>
+                        {isNew ? (
+                          <span className="shrink-0 rounded-full bg-primary/15 px-1.5 text-[10px] font-medium text-primary">
+                            {t("cs.badgeNew")}
+                          </span>
+                        ) : null}
+                        {script.isDev ? (
+                          <span className="shrink-0 rounded-full bg-warning/15 px-1.5 text-[10px] font-medium text-warning">
+                            {t("cs.flag.testing")}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="truncate text-[11px] uppercase tracking-wide text-muted-foreground">
+                        {t(`cs.kind.${script.kind}`)}
+                        {categoryName(script.categoryIds) ? ` · ${categoryName(script.categoryIds)}` : ""}
+                      </p>
+                    </div>
+                    {hasStats && script.installs30d ? (
+                      <span
+                        className="shrink-0 text-[11px] tabular-nums text-muted-foreground"
+                        title={t("cs.installsTitle", { count: String(script.installs30d) })}
+                      >
+                        {t("cs.installs30d", { count: compact.format(script.installs30d) })}
+                      </span>
+                    ) : null}
                   </div>
-                </div>
-                <p className="line-clamp-3 flex-1 text-xs text-muted-foreground">{script.description || "—"}</p>
-                {resources ? <p className="text-[11px] text-muted-foreground">{resources}</p> : null}
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" disabled={!canRun || running} onClick={() => setSelected(script)}>
-                    <Play className="mr-1 h-3.5 w-3.5" />
-                    {t("cs.install")}
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => setDetail(script)}>
-                    {t("cs.details")}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                  <p className="line-clamp-3 flex-1 text-xs text-muted-foreground">{script.description || "—"}</p>
+                  {resources ? <p className="text-[11px] text-muted-foreground">{resources}</p> : null}
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" disabled={!canRun || running} onClick={() => setSelected(script)}>
+                      <Play className="mr-1 h-3.5 w-3.5" />
+                      {t("cs.install")}
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setDetail(script)}>
+                      {t("cs.details")}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </Fragment>
           );
         })}
       </div>
@@ -348,7 +582,8 @@ export function CommunityScriptsPanel({
 
       {data ? (
         <p className="text-xs text-muted-foreground">
-          {t("cs.count", { shown: String(Math.min(visible, scripts.length)), total: String(data.total) })}
+          {t("cs.count", { shown: String(Math.min(visible, scripts.length)), total: String(scripts.length) })}
+          {scripts.length !== data.total ? ` · ${t("cs.ofCatalog", { total: String(data.total) })}` : ""}
         </p>
       ) : null}
 
