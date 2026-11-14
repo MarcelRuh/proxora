@@ -157,6 +157,70 @@ export function vzdumpGuestParams(job: { all: boolean; vmid: string }): Record<s
   return { vmid };
 }
 
+/** Job-config keys that `/nodes/{node}/vzdump` accepts. Scheduling/metadata keys are left out. */
+const VZDUMP_JOB_OPTIONS = [
+  "storage",
+  "dumpdir",
+  "mode",
+  "compress",
+  "zstd",
+  "pigz",
+  "bwlimit",
+  "ionice",
+  "lockwait",
+  "stopwait",
+  "tmpdir",
+  "script",
+  "remove",
+  "protected",
+  "stdexcludes",
+  "exclude",
+  "exclude-path",
+  "fleecing",
+  "performance",
+  "pbs-change-detection-mode",
+  "notes-template",
+  "notification-mode",
+  "mailto",
+  "mailnotification",
+  "prune-backups",
+] as const;
+
+function vzdumpOptionValue(value: unknown): unknown {
+  if (value === undefined || value === null) return undefined;
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (typeof value === "object") {
+    // Proxmox returns property strings like prune-backups as objects on GET.
+    const parts = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined && v !== null && v !== "")
+      .map(([k, v]) => `${k}=${String(v)}`);
+    return parts.length ? parts.join(",") : undefined;
+  }
+  return value;
+}
+
+/**
+ * Parameters for running an existing backup job via `/nodes/{node}/vzdump`.
+ * `job-id` does not make vzdump load the job's config, so storage, mode, retention etc.
+ * have to be passed explicitly — otherwise vzdump falls back to storage `local`.
+ */
+export function vzdumpJobParams(raw: Record<string, unknown>): Record<string, unknown> {
+  const params: Record<string, unknown> = {};
+  for (const key of VZDUMP_JOB_OPTIONS) {
+    const value = vzdumpOptionValue(raw[key]);
+    if (value !== undefined && value !== "") params[key] = value;
+  }
+  if (params["prune-backups"] === undefined) {
+    const keepLast = parseKeepLast(undefined, raw.maxfiles);
+    if (keepLast != null) params["prune-backups"] = pruneKeepLast(keepLast);
+  }
+  const pool = String(raw.pool ?? "").trim();
+  if (pool) return { ...params, pool };
+  const job = normalizeBackupJob(raw);
+  return { ...params, ...vzdumpGuestParams(job) };
+}
+
 export function normalizeBackupJob(raw: Record<string, unknown>): {
   id: string;
   enabled: boolean;

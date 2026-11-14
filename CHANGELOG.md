@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.7.1] – 2026-11-14
+
+### Fixed
+
+- Backups: running a backup job no longer fails with "can't use storage 'local' for backups". Proxora now passes the job's storage, mode, compression, retention and other vzdump options when starting it, since `job-id` alone does not load the job config. Pool-based jobs run against their pool instead of all guests.
+
 ## [2.7.0] – 2026-11-14
 
 ### Added

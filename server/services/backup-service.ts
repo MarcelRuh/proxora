@@ -9,7 +9,7 @@ import {
   orphanBackupFiles,
   parseBackupVolid,
   pruneKeepLast,
-  vzdumpGuestParams,
+  vzdumpJobParams,
   waitUntilGuestStopped,
 } from "@/lib/backup";
 import { ValidationError } from "@/lib/errors";
@@ -247,7 +247,7 @@ export async function runBackupJob(client: ProxmoxClient, hostId: string, jobId:
   if (!node) throw new Error("Kein Node für das Backup");
   const upid = await client.backup.start(
     node,
-    compactProxmoxBody({ "job-id": jobId, ...vzdumpGuestParams(job) }),
+    compactProxmoxBody({ ...vzdumpJobParams(raw), "job-id": jobId }),
   );
   return { upid, job, node };
 }

@@ -20,6 +20,7 @@ import {
   parseProxmoxTaskProgress,
   pruneKeepLast,
   vzdumpGuestParams,
+  vzdumpJobParams,
   waitUntilGuestStopped,
 } from "@/lib/backup";
 
@@ -88,6 +89,39 @@ describe("backup job helpers", () => {
     expect(vzdumpGuestParams({ all: true, vmid: "" })).toEqual({ all: 1 });
     expect(vzdumpGuestParams({ all: false, vmid: "100,101" })).toEqual({ vmid: "100,101" });
     expect(vzdumpGuestParams({ all: false, vmid: "" })).toEqual({ all: 1 });
+  });
+
+  it("passes the job's storage and options when running a job", () => {
+    const params = vzdumpJobParams({
+      id: "backup-x",
+      type: "vzdump",
+      schedule: "02:00",
+      enabled: 1,
+      "next-run": 123,
+      storage: "nas-backup",
+      mode: "snapshot",
+      compress: "zstd",
+      all: 1,
+      "prune-backups": { "keep-last": "3" },
+      "notes-template": "{{guestname}}",
+    });
+    expect(params).toEqual({
+      storage: "nas-backup",
+      mode: "snapshot",
+      compress: "zstd",
+      all: 1,
+      "prune-backups": "keep-last=3",
+      "notes-template": "{{guestname}}",
+    });
+  });
+
+  it("maps legacy maxfiles and pool jobs", () => {
+    expect(vzdumpJobParams({ storage: "b", vmid: "100", maxfiles: 2 })).toEqual({
+      storage: "b",
+      vmid: "100",
+      "prune-backups": "keep-last=2",
+    });
+    expect(vzdumpJobParams({ storage: "b", pool: "prod" })).toEqual({ storage: "b", pool: "prod" });
   });
 
   it("treats unix seconds as milliseconds", () => {
