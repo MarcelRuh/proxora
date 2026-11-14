@@ -37,4 +37,4 @@ export type BackupOverview = {
 };
 
 export const SELECT_CLASS =
-  "mt-1 h-9 w-full rounded-[4px] border border-input bg-white/[0.03] px-2 text-sm";
+  "mt-1 h-9 w-full rounded-[var(--ui-radius)] border border-input bg-foreground/[0.03] px-2 text-sm";

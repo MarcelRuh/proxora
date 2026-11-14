@@ -30,6 +30,20 @@ export class StorageApi {
     );
   }
 
+  /** Adds a storage to the datacenter config (Datacenter → Storage → Add). */
+  create(body: Record<string, string | number>) {
+    return this.http.post<null>("/storage", body);
+  }
+
+  /** Discovery helpers: /nodes/{node}/scan/{nfs|cifs|pbs|lvm|lvmthin|zfs}. */
+  scan(node: string, kind: "nfs" | "cifs" | "pbs" | "lvm" | "lvmthin" | "zfs", params?: Record<string, string | number>) {
+    return this.http.get<Array<Record<string, unknown>>>(
+      `/nodes/${encodeURIComponent(node)}/scan/${kind}`,
+      params,
+      20_000,
+    );
+  }
+
   downloadUrl(node: string, storage: string, params: { content: "iso" | "vztmpl"; url: string; filename: string }) {
     return this.http.post<string>(
       `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/download-url`,

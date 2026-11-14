@@ -4,6 +4,23 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.7.0] – 2026-11-14
+
+### Added
+
+- Storage: add datacenter storages from the Storage page (Directory, NFS, SMB/CIFS, Proxmox Backup Server, LVM, LVM-Thin, ZFS), with per-type content, node restriction, shared / thin-provisioning / enabled toggles and inline ID validation.
+- Storage scan: discover NFS exports, SMB shares, PBS datastores, LVM volume groups, thin pools and ZFS pools from a chosen node and pick them instead of typing.
+- New permission `storage.config` ("Add storage"); granted to Super Admin and Administrator, not to Operator / Viewer, guest-scoped users or host shares by default. Storage creation is audit-logged (success and failure, never passwords).
+
+### Security
+
+- Federation: Proxmox `/nodes/*/scan/*` and datacenter `/storage` writes now require `storage.config` instead of falling through to view access.
+- Proxmox connection errors no longer log query strings (scan credentials).
+
+### Fixed
+
+- Backup dialog selects used hard-coded colours/radius and looked off on the Atelier theme.
+
 ## [2.6.1] – 2026-11-12
 
 ### Added

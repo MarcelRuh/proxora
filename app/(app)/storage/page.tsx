@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/misc";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import { EmptyState } from "@/components/ui/misc";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { ZfsSection, type ZfsHostBlock } from "@/components/storage/zfs-section";
 import { StorageContentPanel } from "@/components/storage/storage-content-panel";
+import { AddStorageButton } from "@/components/storage/add-storage-dialog";
 
 type StorageResp = {
   storage: Array<{
@@ -38,6 +39,7 @@ const STORAGE_HOST_CONCURRENCY = 2;
 export default function StoragePage() {
   const { t } = useI18n();
   const [open, setOpen] = useState<OpenStorage | null>(null);
+  const queryClient = useQueryClient();
   const { data: hosts, isPending: hostsPending, error: hostsError, refetch: refetchHosts } = useQuery({
     queryKey: ["hosts"],
     queryFn: () => api<{ hosts: PublicHost[] }>("/api/hosts"),
@@ -105,8 +107,14 @@ export default function StoragePage() {
           <div className="space-y-4">
           {(data ?? []).map((block) => (
         <Card key={block.host.id}>
-          <CardHeader>
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
             <CardTitle>{block.host.name}</CardTitle>
+            <AddStorageButton
+              host={block.host}
+              nodes={[...new Set(block.storage.map((n) => n.node))].sort()}
+              existing={[...new Set(block.storage.flatMap((n) => n.storage.map((s) => s.storage)))]}
+              onDone={() => void queryClient.invalidateQueries({ queryKey: ["storage"] })}
+            />
           </CardHeader>
           <CardContent>
             {"error" in block && block.error ? (

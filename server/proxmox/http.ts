@@ -310,7 +310,8 @@ export class ProxmoxHttpClient {
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Unknown network error";
-      logger.error({ url, reason }, "Proxmox API request failed");
+      // Query strings can carry scan credentials (CIFS/PBS): never log them.
+      logger.error({ url: url.split("?")[0], reason }, "Proxmox API request failed");
       throw new ProxmoxApiError(`Connection failed: ${reason}`, 503);
     }
   }

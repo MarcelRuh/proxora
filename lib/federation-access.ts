@@ -43,6 +43,7 @@ const SHARE_DEFAULT_DENY: Permission[] = [
   "hosts.credentials",
   "updates.check",
   "updates.upgrade",
+  "storage.config",
 ];
 
 export function permissionsForShareLevel(level: ShareLevel): Permission[] {
@@ -209,6 +210,12 @@ export function federationPermission(
   if (lower.includes("vzdump")) {
     if (m === "GET" || m === "HEAD") return "backup.view";
     if (m === "POST") return "backup.run";
+  }
+  // Storage discovery probes arbitrary servers (with credentials for CIFS/PBS): config-level.
+  if (/\/nodes\/[^/]+\/scan(\/|$)/i.test(lower)) return "storage.config";
+  if (/^\/?storage\/?$/i.test(lower.split("?")[0] ?? "")) {
+    if (m === "GET" || m === "HEAD") return "storage.view";
+    return "storage.config";
   }
   if (lower.includes("/storage/")) {
     if (m === "GET" || m === "HEAD") return "storage.view";
