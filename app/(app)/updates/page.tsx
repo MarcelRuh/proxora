@@ -74,6 +74,11 @@ export default function UpdatesPage() {
     placeholderData: (previous) => previous,
   });
 
+  // The live list may have corrected the stored count server-side; refresh the nav badge.
+  useEffect(() => {
+    if (details) void qc.invalidateQueries({ queryKey: ["apt-summary"] });
+  }, [details, qc]);
+
   function applyChecked(hostId: string, data: { version: string | null; updates: HostUpdates["updates"] }) {
     const checkedAt = new Date().toISOString();
     const updates = Array.isArray(data.updates)

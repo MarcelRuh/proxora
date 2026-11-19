@@ -53,6 +53,24 @@ async function storeSnapshot(
   return count;
 }
 
+async function listNodeUpdates(client: ProxmoxClient, nodes: Array<{ node: string }>): Promise<NodeUpdates[]> {
+  return mapPool(nodes, UPDATE_NODE_CONCURRENCY, async (n) => {
+    const raw = await client.updates.list(n.node);
+    const packages = Array.isArray(raw) ? raw : [];
+    return { node: n.node, packages, count: packages.length };
+  });
+}
+
+/** Persists the live count when it differs from the stored one. */
+async function syncStoredCount(
+  host: { id: string; name: string; aptNotifiedCount: number; aptUpdateCount: number },
+  updates: NodeUpdates[],
+) {
+  const count = updates.reduce((sum, n) => sum + n.count, 0);
+  if (count === host.aptUpdateCount) return count;
+  return storeSnapshot(host, updates);
+}
+
 /** Counts from the last APT refresh — no Proxmox package-list calls. */
 export async function summarizeHostUpdates(hostId: string, user: SessionUser) {
   return withHostClient(hostId, user, async (_client, host) => ({
@@ -69,11 +87,10 @@ export async function listHostUpdates(hostId: string, user: SessionUser, node?: 
 
   const data = await withHostClient(hostId, user, async (client, host) => {
     const nodes = await nodesFor(client, hostId, node);
-    const updates: NodeUpdates[] = await mapPool(nodes, UPDATE_NODE_CONCURRENCY, async (n) => {
-      const raw = await client.updates.list(n.node);
-      const packages = Array.isArray(raw) ? raw : [];
-      return { node: n.node, packages, count: packages.length };
-    });
+    const updates = await listNodeUpdates(client, nodes);
+    // Upgrades run outside Proxora's bookkeeping (console, PVE GUI, shell) — keep the
+    // stored count that drives the nav badge in sync with what Proxmox reports now.
+    if (!node) await syncStoredCount(host, updates);
     return { version: host.proxmoxVersion, updates };
   });
   listCache.set(key, { at: Date.now(), data });
@@ -102,7 +119,14 @@ export async function refreshHostUpdates(hostId: string, user: SessionUser, node
       const packages = await client.updates.list(n.node);
       updates.push({ node: n.node, packages, count: packages.length });
     }
-    await storeSnapshot(host, updates);
+    // A single-node check must not overwrite the host total with that node's count.
+    const others = node
+      ? await listNodeUpdates(
+          client,
+          (await nodesFor(client, hostId)).filter((n) => n.node !== node),
+        ).catch(() => null)
+      : [];
+    if (others) await storeSnapshot(host, [...updates, ...others]);
     const data = { version: host.proxmoxVersion, updates };
     clearHostUpdatesListCache(hostId);
     listCache.set(listCacheKey(hostId, node), { at: Date.now(), data });

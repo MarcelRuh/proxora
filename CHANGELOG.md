@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.7.2] – 2026-11-19
+
+### Fixed
+
+- Updates: the badge next to "Updates" in the navigation no longer keeps showing a count after all host updates were installed. Loading the live package list now writes the current count back, and the Updates page refreshes the badge once the list is loaded.
+- Updates: checking a single node no longer stores that node's count as the total for the whole host.
+
 ## [2.7.1] – 2026-11-14
 
 ### Fixed
