@@ -1,33 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { mergeUsedGuestSets, nextSmallerVmid } from "@/lib/next-vmid";
+import { mergeUsedGuestSets, nextVmidAboveHighest } from "@/lib/next-vmid";
 
-describe("nextSmallerVmid", () => {
-  it("picks the next free ID below the highest used, across nodes", () => {
-    expect(nextSmallerVmid([243, 244])).toBe(242);
-    expect(nextSmallerVmid([244, 243, 242])).toBe(241);
-  });
-
-  it("skips IDs that are already taken", () => {
-    expect(nextSmallerVmid([240, 242, 243, 244])).toBe(241);
+describe("nextVmidAboveHighest", () => {
+  it("picks the next ID above the highest used, ignoring gaps below", () => {
+    expect(nextVmidAboveHighest([243, 244])).toBe(245);
+    expect(nextVmidAboveHighest([243, 244, 245, 246, 247, 248, 249, 250, 251])).toBe(252);
+    expect(nextVmidAboveHighest([100, 105, 251])).toBe(252);
   });
 
   it("starts at 100 when nothing is used", () => {
-    expect(nextSmallerVmid([])).toBe(100);
+    expect(nextVmidAboveHighest([])).toBe(100);
   });
 
-  it("goes above max when everything below is taken", () => {
-    const used = Array.from({ length: 145 }, (_, i) => 100 + i); // 100..244
-    expect(nextSmallerVmid(used)).toBe(245);
+  it("ignores IDs below the minimum", () => {
+    expect(nextVmidAboveHighest([5, 42])).toBe(100);
   });
 
   it("skips IDs whose implied IP is already used", () => {
-    expect(nextSmallerVmid([243, 244], 100, (id) => id === 242)).toBe(241);
+    expect(nextVmidAboveHighest([250, 251], 100, (id) => id === 252 || id === 253)).toBe(254);
   });
 
   it("uses the union of IDs from multiple hosts", () => {
-    const pvePower = Array.from({ length: 146 }, (_, i) => 100 + i); // 100..245 → next would be 246
-    const pveMain = Array.from({ length: 150 }, (_, i) => 100 + i); // 100..249 → next would be 250
-    const used = mergeUsedGuestSets([{ vmids: pvePower }, { vmids: pveMain }]);
-    expect(nextSmallerVmid(used.vmids)).toBe(250);
+    const used = mergeUsedGuestSets([{ vmids: [243, 245] }, { vmids: [244, 249] }]);
+    expect(nextVmidAboveHighest(used.vmids)).toBe(250);
   });
 });

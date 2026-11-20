@@ -71,7 +71,7 @@ export async function collectUsedGuestIps(
 
 async function forEachHostInScope<T>(
   target: Host,
-  fn: (client: ProxmoxClient, hostId: string) => Promise<T>,
+  fn: (client: ProxmoxClient, hostId: string, host: Host) => Promise<T>,
   empty: T,
 ): Promise<T[]> {
   const all = await prisma.host.findMany({ orderBy: { name: "asc" } });
@@ -85,7 +85,7 @@ async function forEachHostInScope<T>(
   return mapPool(hosts, GUEST_IP_HOST_CONCURRENCY, async (host) => {
     try {
       const client = await clientForHost(host);
-      return await fn(client, host.id);
+      return await fn(client, host.id, host);
     } catch (error) {
       logger.warn(
         { host: host.name, err: error instanceof Error ? error.message : String(error) },
@@ -101,11 +101,25 @@ export async function collectUsedVmidsForHost(target: Host): Promise<number[]> {
   return mergeUsedGuestSets(parts.map((vmids) => ({ vmids }))).vmids;
 }
 
+/** IPv4 address of the Proxmox host itself (from its API URL), so guests never get the host's IP. */
+export function hostIpFromUrl(url: string): string | null {
+  try {
+    const hostname = new URL(url).hostname;
+    return /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) ? hostname : null;
+  } catch {
+    return null;
+  }
+}
+
 /** VMIDs and guest IPs in the create-target scope (local lab or one colleague cluster). */
 export async function collectUsedGuestIpsForHost(target: Host): Promise<{ vmids: number[]; ips: string[] }> {
   const parts = await forEachHostInScope(
     target,
-    (client, hostId) => collectUsedGuestIps(client, hostId),
+    async (client, hostId, host) => {
+      const used = await collectUsedGuestIps(client, hostId);
+      const hostIp = hostIpFromUrl(host.url);
+      return hostIp ? { vmids: used.vmids, ips: [...used.ips, hostIp] } : used;
+    },
     { vmids: [] as number[], ips: [] as string[] },
   );
   return mergeUsedGuestSets(parts);

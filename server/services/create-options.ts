@@ -1,5 +1,5 @@
 import { guestIpFromVmid, type GuestIpNetwork } from "@/lib/create-ip";
-import { nextSmallerVmid } from "@/lib/next-vmid";
+import { nextVmidAboveHighest } from "@/lib/next-vmid";
 import { inventoryStorageForNode, type StorageOverviewItem } from "@/lib/storage-overview";
 import type { ProxmoxClient } from "@/server/proxmox/client";
 import type { ProxmoxStorage } from "@/server/proxmox/types";
@@ -81,16 +81,16 @@ export async function loadCreateIdentity(
     const usedIpSet = new Set(used.ips);
     const nextid =
       used.vmids.length > 0
-        ? nextSmallerVmid(used.vmids, undefined, (id) => {
+        ? nextVmidAboveHighest(used.vmids, undefined, (id) => {
             const ip = guestIpFromVmid(defaultNet, id, networks);
             return Boolean(ip && usedIpSet.has(ip));
           })
-        : nextSmallerVmid([]);
+        : nextVmidAboveHighest([]);
     return { nextid, usedIps: used.ips, usedVmids: used.vmids };
   }
   const usedVmids = await collectUsedVmidsForHost(host);
   return {
-    nextid: nextSmallerVmid(usedVmids),
+    nextid: nextVmidAboveHighest(usedVmids),
     usedIps: [],
     usedVmids,
   };

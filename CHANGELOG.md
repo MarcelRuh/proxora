@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.7.3] – 2026-11-20
+
+### Changed
+
+- Create forms: the suggested VMID is now the next free ID **above** the highest used VMID across all local hosts (e.g. 243–251 used → 252), instead of the next free ID below it (which gave 242). IDs whose implied static IP is already taken are still skipped.
+
+### Fixed
+
+- Create forms: with static IP, the Proxmox host's own IP (from its API URL) counts as taken, so a guest is never suggested or allowed to take the host's address (e.g. VMID 253 → 192.168.178.253).
+
 ## [2.7.2] – 2026-11-19
 
 ### Fixed

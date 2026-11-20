@@ -16,8 +16,12 @@ export function mergeUsedGuestSets(
   return { vmids: [...vmids], ips: [...ips] };
 }
 
-/** Next free VMID below the highest used ID (all nodes). Falls back above max if 100..max are taken. */
-export function nextSmallerVmid(
+/**
+ * Next free VMID above the highest used ID (all hosts in scope), like "max + 1".
+ * `skip` blocks IDs that are free as VMID but unusable otherwise (e.g. implied IP taken).
+ * Starts at `min` when nothing is used yet.
+ */
+export function nextVmidAboveHighest(
   used: Iterable<number>,
   min = MIN_VMID,
   skip?: (id: number) => boolean,
@@ -25,15 +29,7 @@ export function nextSmallerVmid(
   const ids = [...new Set([...used].map((n) => Number(n)).filter((n) => Number.isInteger(n) && n >= min))];
   const taken = new Set(ids);
   const blocked = (id: number) => taken.has(id) || Boolean(skip?.(id));
-  if (ids.length === 0) {
-    let id = min;
-    while (blocked(id)) id += 1;
-    return id;
-  }
-  for (let id = Math.max(...ids) - 1; id >= min; id -= 1) {
-    if (!blocked(id)) return id;
-  }
-  let up = Math.max(...ids) + 1;
-  while (blocked(up)) up += 1;
-  return up;
+  let id = ids.length > 0 ? Math.max(...ids) + 1 : min;
+  while (blocked(id)) id += 1;
+  return id;
 }

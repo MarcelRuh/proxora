@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { hostsInGuestIdentityScope, identityConflict } from "@/lib/guest-identity";
 import { mergeUsedGuestSets } from "@/lib/next-vmid";
-import { collectUsedGuestIps } from "@/server/services/guest-ips";
+import { collectUsedGuestIps, hostIpFromUrl } from "@/server/services/guest-ips";
 import { clearGuestIpCache, rememberGuestIpCache } from "@/server/services/guest-ip-cache";
 import { clearInventoryCache } from "@/server/services/inventory-cache";
 import type { ProxmoxClient } from "@/server/proxmox/client";
@@ -102,5 +102,17 @@ describe("collectUsedGuestIps cache", () => {
     expect(used.ips.sort()).toEqual(["10.0.0.8", "10.0.0.9"]);
     expect(config).toHaveBeenCalledTimes(1);
     expect(config).toHaveBeenCalledWith("pve", 101);
+  });
+});
+
+describe("hostIpFromUrl", () => {
+  it("returns the IPv4 of a Proxmox API URL", () => {
+    expect(hostIpFromUrl("https://192.168.178.253:8006")).toBe("192.168.178.253");
+  });
+
+  it("ignores hostnames and federation URLs", () => {
+    expect(hostIpFromUrl("https://pve.local:8006")).toBeNull();
+    expect(hostIpFromUrl("federation://peer/host")).toBeNull();
+    expect(hostIpFromUrl("not a url")).toBeNull();
   });
 });
