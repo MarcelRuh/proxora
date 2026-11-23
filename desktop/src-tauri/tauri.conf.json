@@ -33,6 +33,10 @@
         "bundleMediaFramework": false
       }
     },
+    "macOS": {
+      "signingIdentity": "-",
+      "minimumSystemVersion": "10.15"
+    },
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper"

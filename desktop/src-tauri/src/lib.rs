@@ -296,7 +296,22 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
     .item(&sep)
     .item(&quit)
     .build()?;
-  MenuBuilder::new(app).item(&proxora).build()
+  let menu = MenuBuilder::new(app).item(&proxora);
+  // macOS routes Cmd+C/V/X/A/Z through the Edit menu; without it the WebView ignores them.
+  #[cfg(target_os = "macos")]
+  let menu = {
+    let edit = SubmenuBuilder::new(app, "Edit")
+      .undo()
+      .redo()
+      .separator()
+      .cut()
+      .copy()
+      .paste()
+      .select_all()
+      .build()?;
+    menu.item(&edit)
+  };
+  menu.build()
 }
 
 #[cfg(target_os = "linux")]

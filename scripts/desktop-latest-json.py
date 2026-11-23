@@ -7,6 +7,8 @@ Usage:
 Expects the release to already contain:
   Proxora_<ver>_amd64.AppImage (+ .sig)
   Proxora_<ver>_x64-setup.exe (+ .sig)
+Optional (added to darwin-* platforms when present):
+  Proxora_<ver>_universal.app.tar.gz (+ .sig)
 """
 from __future__ import annotations
 
@@ -48,6 +50,7 @@ def main() -> int:
 
     appimage = f"Proxora_{ver}_amd64.AppImage"
     nsis = f"Proxora_{ver}_x64-setup.exe"
+    mac_archive = f"Proxora_{ver}_universal.app.tar.gz"
     needed = [appimage, f"{appimage}.sig", nsis, f"{nsis}.sig"]
     missing = [n for n in needed if n not in assets]
     if missing:
@@ -74,6 +77,12 @@ def main() -> int:
         )
         linux_sig = read_sig(tmp_path / f"{appimage}.sig")
         windows_sig = read_sig(tmp_path / f"{nsis}.sig")
+        mac_sig = None
+        if mac_archive in assets and f"{mac_archive}.sig" in assets:
+            subprocess.check_call(
+                ["gh", "release", "download", tag, "-R", args.repo, "-D", str(tmp_path), "-p", f"{mac_archive}.sig"]
+            )
+            mac_sig = read_sig(tmp_path / f"{mac_archive}.sig")
 
     pub_date = release.get("publishedAt") or datetime.now(timezone.utc).isoformat()
     notes = (args.notes or release.get("body") or "").strip()
@@ -96,6 +105,10 @@ def main() -> int:
             },
         },
     }
+    if mac_sig:
+        # One universal build serves both Apple Silicon and Intel Macs.
+        for key in ("darwin-aarch64", "darwin-x86_64"):
+            payload["platforms"][key] = {"signature": mac_sig, "url": f"{base}/{mac_archive}"}
     out = Path(args.out)
     out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {out}")

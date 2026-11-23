@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { compareSemver } from "@/lib/version";
+import { parseReleaseAssets, type ReleaseAsset } from "@/lib/desktop-clients";
 
 const execFileAsync = promisify(execFile);
 
@@ -148,6 +149,28 @@ export async function fetchGithubReleaseApkUrl(repo: string, tag: string): Promi
   }
   return null;
 }
+
+/** All downloadable assets of a release tag (empty when GitHub is unreachable). */
+export async function fetchGithubReleaseAssets(repo: string, tag: string): Promise<ReleaseAsset[]> {
+  const version = tag.replace(/^v/i, "");
+  const normalized = /^v/i.test(tag) ? tag : `v${version}`;
+  const now = Date.now();
+  const cached = assetCache.get(`${repo}@${normalized}`);
+  if (cached && now - cached.at < RELEASE_CACHE_MS) return cached.value;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(normalized)}`, {
+      headers: githubHeaders(),
+    });
+    if (!res.ok) return [];
+    const value = parseReleaseAssets(await res.json());
+    assetCache.set(`${repo}@${normalized}`, { at: now, value });
+    return value;
+  } catch {
+    return [];
+  }
+}
+
+const assetCache = new Map<string, { at: number; value: ReleaseAsset[] }>();
 
 export function parseReleaseTagFromUrl(url: string | null | undefined): string | null {
   if (!url) return null;

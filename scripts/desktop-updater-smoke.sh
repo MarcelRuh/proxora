@@ -39,7 +39,7 @@ assert ver == tag, f"latest.json version {ver!r} != tag {tag!r}"
 release = json.loads(Path("${tmpdir}/release.json").read_text())
 assets = {a["name"]: a for a in (release.get("assets") or []) if a.get("name")}
 platforms = data.get("platforms") or {}
-for key in ("linux-x86_64", "windows-x86_64"):
+for key in ("linux-x86_64", "windows-x86_64", *(k for k in ("darwin-aarch64", "darwin-x86_64") if k in platforms)):
     entry = platforms.get(key)
     assert isinstance(entry, dict), f"missing platform {key}"
     url = entry.get("url") or ""
