@@ -14,6 +14,15 @@ Tagged GitHub releases ship Linux packages:
 
 Windows builds (`.msi` / NSIS `.exe`) are produced on tagged releases. The NSIS installer uses **per-machine** mode (`C:\Program Files\Proxora`, admin required).
 
+macOS builds are universal (Apple Silicon + Intel, macOS 10.15+):
+
+- `Proxora_<version>_universal.dmg`
+- `Proxora_<version>_universal.app.tar.gz` (also used by the in-app updater)
+
+The macOS app is ad-hoc signed and **not notarized**. Gatekeeper blocks it until the quarantine flag is removed: `xattr -dr com.apple.quarantine /Applications/Proxora.app`.
+
+The easiest way to get a client is the **Clients herunterladen / Download clients** card on the Proxora page (`/proxora`) of your instance. It offers the Windows `.exe`, the Android APK and a macOS install script (`install-proxora-macos.sh`) that downloads the app, installs it to `/Applications`, removes the quarantine flag and presets your server URL.
+
 ## Use
 
 1. Install or run the AppImage / package.
@@ -32,6 +41,7 @@ Requirements:
 - Node.js 20+
 - Linux: `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `patchelf`
 - Windows: WebView2 runtime (bootstrapper is bundled by Tauri)
+- macOS: Xcode command line tools; for a universal build `rustup target add aarch64-apple-darwin x86_64-apple-darwin` and `npm run build -- --target universal-apple-darwin`
 
 ```bash
 cd desktop
@@ -55,4 +65,4 @@ Artifacts land under `src-tauri/target/release/bundle/`.
 | --- | --- |
 | `ui/` | Setup screen (URL + insecure TLS) |
 | `src-tauri/` | Tauri shell, prefs, menu, navigation |
-| Prefs file | `~/.config/proxora-desktop/prefs.json` (Linux) |
+| Prefs file | `~/.config/proxora-desktop/prefs.json` (Linux), `~/Library/Application Support/proxora-desktop/prefs.json` (macOS) |

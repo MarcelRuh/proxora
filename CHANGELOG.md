@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [2.7.4] – 2026-11-23
+
+### Added
+
+- Desktop: macOS client (universal build for Apple Silicon and Intel, `.dmg` and `.app.tar.gz`), built in CI on tagged releases and included in the in-app updater manifest. The app is ad-hoc signed, not notarized.
+- Desktop (macOS): Edit menu so Cmd+C / Cmd+V / Cmd+A work in the app.
+- Proxora page: new "Download clients" card with the Windows installer (`.exe`, plus `.msi`), a macOS install script with step-by-step instructions (manual `.dmg` install as fallback) and the Android APK. Downloads are proxied through Proxora from the latest GitHub release.
+
 ## [2.7.3] – 2026-11-20
 
 ### Changed
