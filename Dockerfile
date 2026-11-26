@@ -17,6 +17,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
+# next/font/google under Turbopack sometimes fails to resolve a font file at random;
+# retry with a clean .next, otherwise the cached failure repeats instantly.
 # Prisma/Next evaluate env during `next build`. Do not use a 64-char hex value:
 # Next may inline process.env.ENCRYPTION_KEY and then runtime Compose secrets would not match.
 ENV DATABASE_URL="postgresql://proxora:proxora@127.0.0.1:5432/proxora?schema=public"
@@ -24,10 +26,11 @@ ENV ENCRYPTION_KEY="build-time-placeholder-not-a-real-secret-key"
 ENV SESSION_SECRET="build-time-placeholder-not-a-real-session-secret"
 RUN set -eux; \
   npx prisma generate; \
-  for attempt in 1 2 3; do \
+  for attempt in 1 2 3 4; do \
     if npm run build; then break; fi; \
-    if [ "$attempt" -eq 3 ]; then exit 1; fi; \
-    echo "next build attempt $attempt failed (next/font download?), retrying"; sleep 20; \
+    if [ "$attempt" -eq 4 ]; then exit 1; fi; \
+    echo "next build attempt $attempt failed (Turbopack next/font flake), retrying"; \
+    rm -rf .next; sleep 10; \
   done; \
   test -f .next/BUILD_ID; \
   npm prune --omit=dev; \

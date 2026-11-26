@@ -30,11 +30,13 @@ jobs:
       - run: npm test
       - name: Production build
         run: |
-          # next/font Google downloads can flake under Turbopack; retry with a short pause.
-          for attempt in 1 2 3; do
+          # next/font/google under Turbopack sometimes fails to resolve a font file at random.
+          # Retry with a clean .next, otherwise the cached failure repeats instantly.
+          for attempt in 1 2 3 4; do
             npm run build && exit 0
-            echo "::warning::Production build attempt ${attempt} of 3 failed"
-            if [ "$attempt" -lt 3 ]; then sleep 20; fi
+            echo "::warning::Production build attempt ${attempt} of 4 failed"
+            rm -rf .next
+            if [ "$attempt" -lt 4 ]; then sleep 10; fi
           done
           exit 1
 
