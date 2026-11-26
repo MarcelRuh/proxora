@@ -24,7 +24,11 @@ ENV ENCRYPTION_KEY="build-time-placeholder-not-a-real-secret-key"
 ENV SESSION_SECRET="build-time-placeholder-not-a-real-session-secret"
 RUN set -eux; \
   npx prisma generate; \
-  npm run build; \
+  for attempt in 1 2 3; do \
+    if npm run build; then break; fi; \
+    if [ "$attempt" -eq 3 ]; then exit 1; fi; \
+    echo "next build attempt $attempt failed (next/font download?), retrying"; sleep 20; \
+  done; \
   test -f .next/BUILD_ID; \
   npm prune --omit=dev; \
   rm -rf /root/.npm /tmp/* .next/cache .next/dev; \

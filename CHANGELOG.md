@@ -16,7 +16,7 @@ All notable changes to this project are documented here.
 - macOS install script: verifies the SHA-256 of the app archive, quits a running Proxora before replacing it, installs the app owned by you (so the in-app updater needs no password) and falls back to `~/Applications` without admin rights. It only presets the server of the instance it was downloaded from, never overwrites a configured server, accepts `--tag 2.7.5` without the `v`, has `--help` and explains failed downloads (build still running, GitHub unreachable, TLS problem).
 - Download clients (Windows): the hint explains the SmartScreen warning ("More info" → "Run anyway").
 - Desktop setup screen: shows "Connecting to …", gives up after 15 s with a hint, and explains certificate and connection errors for each OS. On macOS, **Allow insecure TLS** is hidden (the system WebView cannot skip certificate errors) and a Keychain "Always Trust" note is shown instead. On Windows, changing the option restarts the app once to apply it.
-- CI: the production build is retried up to three times (next/font downloads are flaky; 2.7.3 stayed a draft because of it).
+- CI: the production build (also inside the Docker image) is retried up to three times (next/font downloads are flaky; 2.7.3 stayed a draft because of it).
 - CI: a manual run (**Run workflow**) now builds the Windows client too, like macOS, so both can be checked before a release is tagged. Manual runs keep the packages as workflow artifacts only (no updater signatures, no release upload).
 
 ### Fixed
