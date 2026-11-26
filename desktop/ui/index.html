@@ -20,11 +20,13 @@
           <span>Server URL</span>
           <input id="url" type="url" spellcheck="false" autocomplete="url" placeholder="https://proxora.home.arpa" />
         </label>
-        <label class="check">
+        <label id="insecure-row" class="check">
           <input id="insecure" type="checkbox" />
           <span>Allow insecure TLS (self-signed / LAN)</span>
         </label>
-        <p id="error" class="error" hidden></p>
+        <p id="tls-note" class="note" hidden></p>
+        <p id="status" class="status" role="status" aria-live="polite" hidden></p>
+        <p id="error" class="error" role="alert" hidden></p>
         <button id="connect" type="button">Connect</button>
         <p class="foot">Menu Proxora: Reload · Change server · Updates <span id="ver"></span></p>
       </div>

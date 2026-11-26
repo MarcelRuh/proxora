@@ -9,11 +9,15 @@ Expects the release to already contain:
   Proxora_<ver>_x64-setup.exe (+ .sig)
 Optional (added to darwin-* platforms when present):
   Proxora_<ver>_universal.app.tar.gz (+ .sig)
+Optional (linux-x86_64-deb / linux-x86_64-rpm, so installed packages update as packages):
+  Proxora_<ver>_amd64.deb (+ .sig)
+  Proxora-<ver>-<release>.x86_64.rpm (+ .sig)
 """
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -51,6 +55,15 @@ def main() -> int:
     appimage = f"Proxora_{ver}_amd64.AppImage"
     nsis = f"Proxora_{ver}_x64-setup.exe"
     mac_archive = f"Proxora_{ver}_universal.app.tar.gz"
+    deb = f"Proxora_{ver}_amd64.deb"
+    rpm_pattern = re.compile(rf"^Proxora-{re.escape(ver)}-\d+\.x86_64\.rpm$")
+    rpm = next((n for n in sorted(assets) if rpm_pattern.match(n)), None)
+    # Package entries without a signature would break the updater, so they are added only in pairs.
+    packages = {
+        key: name
+        for key, name in (("linux-x86_64-deb", deb), ("linux-x86_64-rpm", rpm))
+        if name and name in assets and f"{name}.sig" in assets
+    }
     needed = [appimage, f"{appimage}.sig", nsis, f"{nsis}.sig"]
     missing = [n for n in needed if n not in assets]
     if missing:
@@ -83,6 +96,12 @@ def main() -> int:
                 ["gh", "release", "download", tag, "-R", args.repo, "-D", str(tmp_path), "-p", f"{mac_archive}.sig"]
             )
             mac_sig = read_sig(tmp_path / f"{mac_archive}.sig")
+        package_sigs = {}
+        for key, name in packages.items():
+            subprocess.check_call(
+                ["gh", "release", "download", tag, "-R", args.repo, "-D", str(tmp_path), "-p", f"{name}.sig"]
+            )
+            package_sigs[key] = read_sig(tmp_path / f"{name}.sig")
 
     pub_date = release.get("publishedAt") or datetime.now(timezone.utc).isoformat()
     notes = (args.notes or release.get("body") or "").strip()
@@ -109,6 +128,8 @@ def main() -> int:
         # One universal build serves both Apple Silicon and Intel Macs.
         for key in ("darwin-aarch64", "darwin-x86_64"):
             payload["platforms"][key] = {"signature": mac_sig, "url": f"{base}/{mac_archive}"}
+    for key, name in packages.items():
+        payload["platforms"][key] = {"signature": package_sigs[key], "url": f"{base}/{name}"}
     out = Path(args.out)
     out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {out}")

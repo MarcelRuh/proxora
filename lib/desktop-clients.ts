@@ -1,18 +1,44 @@
-/** Desktop client downloads (Windows / macOS) published on GitHub releases by CI. */
+/**
+ * Desktop client downloads (Windows / macOS / Linux) that CI publishes as GitHub release assets.
+ * Proxora proxies them, so a client only has to reach this server, not GitHub.
+ */
+export type ReleaseAsset = {
+  name: string;
+  url: string;
+  size: number;
+  /** Lower-case hex SHA-256 from the GitHub asset digest, when GitHub provides one. */
+  sha256: string | null;
+};
 
-export type ReleaseAsset = { name: string; url: string; size: number };
-
-export type DesktopPlatform = "windows" | "windows-msi" | "macos" | "macos-app";
+export type DesktopPlatform =
+  | "windows"
+  | "windows-msi"
+  | "macos"
+  | "macos-app"
+  | "linux-appimage"
+  | "linux-deb"
+  | "linux-rpm";
 
 export type DesktopDownloads = Record<DesktopPlatform, ReleaseAsset | null>;
 
-export const DESKTOP_PLATFORMS: DesktopPlatform[] = ["windows", "windows-msi", "macos", "macos-app"];
+export const DESKTOP_PLATFORMS: DesktopPlatform[] = [
+  "windows",
+  "windows-msi",
+  "macos",
+  "macos-app",
+  "linux-appimage",
+  "linux-deb",
+  "linux-rpm",
+];
 
 const PATTERNS: Record<DesktopPlatform, RegExp> = {
   windows: /^Proxora_[\d.]+_x64-setup\.exe$/i,
   "windows-msi": /^Proxora_[\d.]+_x64_[a-z-]+\.msi$/i,
   macos: /^Proxora_[\d.]+_universal\.dmg$/i,
   "macos-app": /^Proxora_[\d.]+_universal\.app\.tar\.gz$/i,
+  "linux-appimage": /^Proxora_[\d.]+_amd64\.AppImage$/i,
+  "linux-deb": /^Proxora_[\d.]+_amd64\.deb$/i,
+  "linux-rpm": /^Proxora-[\d.]+-\d+\.x86_64\.rpm$/i,
 };
 
 export const DESKTOP_CONTENT_TYPES: Record<DesktopPlatform, string> = {
@@ -20,10 +46,19 @@ export const DESKTOP_CONTENT_TYPES: Record<DesktopPlatform, string> = {
   "windows-msi": "application/x-msi",
   macos: "application/x-apple-diskimage",
   "macos-app": "application/gzip",
+  "linux-appimage": "application/vnd.appimage",
+  "linux-deb": "application/vnd.debian.binary-package",
+  "linux-rpm": "application/x-rpm",
 };
 
 export function isDesktopPlatform(value: string): value is DesktopPlatform {
   return (DESKTOP_PLATFORMS as string[]).includes(value);
+}
+
+function parseDigest(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const match = value.trim().match(/^sha256:([a-f0-9]{64})$/i);
+  return match?.[1] ? match[1].toLowerCase() : null;
 }
 
 export function parseReleaseAssets(json: unknown): ReleaseAsset[] {
@@ -33,11 +68,11 @@ export function parseReleaseAssets(json: unknown): ReleaseAsset[] {
   const out: ReleaseAsset[] = [];
   for (const asset of assets) {
     if (!asset || typeof asset !== "object") continue;
-    const raw = asset as { name?: unknown; browser_download_url?: unknown; size?: unknown };
+    const raw = asset as { name?: unknown; browser_download_url?: unknown; size?: unknown; digest?: unknown };
     const name = String(raw.name ?? "");
     const url = String(raw.browser_download_url ?? "");
     if (!name || !/^https:\/\//i.test(url)) continue;
-    out.push({ name, url, size: typeof raw.size === "number" ? raw.size : 0 });
+    out.push({ name, url, size: typeof raw.size === "number" ? raw.size : 0, sha256: parseDigest(raw.digest) });
   }
   return out;
 }
@@ -48,6 +83,10 @@ export function pickDesktopDownloads(assets: ReleaseAsset[]): DesktopDownloads {
     result[platform] = assets.find((a) => PATTERNS[platform].test(a.name)) ?? null;
   }
   return result;
+}
+
+export function pickAndroidApk(assets: ReleaseAsset[]): ReleaseAsset | null {
+  return assets.find((a) => /\.apk$/i.test(a.name)) ?? null;
 }
 
 /** Only http(s) origins are embedded into the install script. */
@@ -67,90 +106,185 @@ function shellQuote(value: string): string {
 }
 
 /**
- * macOS installer: downloads the universal app from the GitHub release, installs it to
- * /Applications (or ~/Applications), clears Gatekeeper quarantine (build is not notarized)
- * and pre-fills this Proxora server when the client has no server configured yet.
+ * macOS installer: downloads the universal app from the GitHub release, verifies its SHA-256
+ * (for the release it was generated for), quits a running client, installs to /Applications
+ * (or ~/Applications without admin rights) owned by the user so the updater works without a
+ * password, clears Gatekeeper quarantine (the build is not notarized) and presets this Proxora
+ * server when the client has none configured yet.
  */
-export function buildMacInstallScript(opts: { repo: string; tag: string | null; serverUrl: string | null }): string {
+export function buildMacInstallScript(opts: {
+  repo: string;
+  tag: string | null;
+  serverUrl: string | null;
+  sha256?: string | null;
+}): string {
   const tag = opts.tag && /^v?\d+\.\d+\.\d+$/.test(opts.tag) ? (opts.tag.startsWith("v") ? opts.tag : `v${opts.tag}`) : "";
   const repo = /^[\w.-]+\/[\w.-]+$/.test(opts.repo) ? opts.repo : "MarcelRuh/proxora";
   const server = normalizeServerOrigin(opts.serverUrl) ?? "";
+  const sha256 = tag && opts.sha256 && /^[a-f0-9]{64}$/i.test(opts.sha256) ? opts.sha256.toLowerCase() : "";
   return `#!/bin/bash
-# Proxora desktop client installer for macOS (Intel + Apple Silicon).
+# Proxora desktop client installer for macOS (Intel + Apple Silicon), generated by your Proxora server.
 # Usage: bash install-proxora-macos.sh [--server URL] [--tag vX.Y.Z]
 set -euo pipefail
 
 REPO=${shellQuote(repo)}
 TAG=${shellQuote(tag)}
 SERVER_URL=${shellQuote(server)}
+# SHA-256 of the app archive of PINNED_TAG as published on the GitHub release.
+PINNED_TAG=${shellQuote(sha256 ? tag : "")}
+EXPECTED_SHA256=${shellQuote(sha256)}
+BUNDLE_ID="app.proxora.desktop"
+
+usage() {
+  echo "Usage: bash install-proxora-macos.sh [--server URL] [--tag vX.Y.Z]"
+  echo "  --server URL   Proxora server to preset (only when the client has none yet)"
+  echo "  --tag vX.Y.Z   install this release instead of the one this script was made for"
+}
+
+die() {
+  echo "Error: $*" >&2
+  exit 1
+}
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --server) SERVER_URL="\${2:-}"; shift 2 ;;
-    --tag) TAG="\${2:-}"; shift 2 ;;
-    *) echo "Unknown option: $1" >&2; exit 2 ;;
+    --server | --tag)
+      if [ $# -lt 2 ]; then
+        echo "Option $1 needs a value." >&2
+        usage >&2
+        exit 2
+      fi
+      if [ "$1" = "--server" ]; then SERVER_URL="$2"; else TAG="$2"; fi
+      shift 2
+      ;;
+    -h | --help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
-if [ "$(uname -s)" != "Darwin" ]; then
-  echo "This installer is for macOS only." >&2
-  exit 1
-fi
+[ "$(uname -s)" = "Darwin" ] || die "This installer is for macOS only."
+
+case "$TAG" in
+  "" | v*) ;;
+  *) TAG="v$TAG" ;;
+esac
 
 if [ -z "$TAG" ]; then
   echo "==> Looking up the latest Proxora release"
-  TAG="$(curl -fsSL "https://api.github.com/repos/\${REPO}/releases/latest" | sed -n 's/.*"tag_name": *"\\([^"]*\\)".*/\\1/p' | head -1)"
+  LATEST_URL="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" 2>/dev/null || true)"
+  TAG="$(printf '%s\\n' "$LATEST_URL" | sed -n 's#.*/releases/tag/\\(v[0-9][0-9.]*\\)$#\\1#p')"
   if [ -z "$TAG" ]; then
-    echo "Could not determine the latest release." >&2
-    exit 1
+    TAG="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | sed -n 's/.*"tag_name": *"\\([^"]*\\)".*/\\1/p' | head -n 1 || true)"
   fi
+  [ -n "$TAG" ] || die "Could not determine the latest release (is github.com reachable?). Pass --tag vX.Y.Z."
 fi
+printf '%s\\n' "$TAG" | grep -Eq '^v[0-9]+\\.[0-9]+\\.[0-9]+$' || die "Invalid release tag: $TAG (expected vX.Y.Z)."
+
 VERSION="\${TAG#v}"
 ASSET="Proxora_\${VERSION}_universal.app.tar.gz"
-URL="https://github.com/\${REPO}/releases/download/\${TAG}/\${ASSET}"
+URL="https://github.com/$REPO/releases/download/$TAG/$ASSET"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-echo "==> Downloading Proxora \${VERSION}"
-curl -fL --progress-bar -o "$TMP/proxora.tar.gz" "$URL"
-tar -xzf "$TMP/proxora.tar.gz" -C "$TMP"
-if [ ! -d "$TMP/Proxora.app" ]; then
-  echo "Download did not contain Proxora.app" >&2
+echo "==> Downloading Proxora $VERSION"
+rc=0
+curl -fL --progress-bar -o "$TMP/proxora.tar.gz" "$URL" || rc=$?
+if [ "$rc" -ne 0 ]; then
+  case "$rc" in
+    22) echo "Error: $ASSET is not available. The macOS build of $TAG may still be running - try again in a few minutes." >&2 ;;
+    6 | 7 | 28) echo "Error: github.com is not reachable (curl exit $rc)." >&2 ;;
+    35 | 51 | 58 | 60 | 77) echo "Error: TLS/certificate problem talking to github.com (curl exit $rc). Proxy or SSL inspection in between?" >&2 ;;
+    *) echo "Error: download failed (curl exit $rc)." >&2 ;;
+  esac
+  echo "URL: $URL" >&2
   exit 1
 fi
 
+if [ -n "$EXPECTED_SHA256" ] && [ "$TAG" = "$PINNED_TAG" ]; then
+  ACTUAL_SHA256="$(shasum -a 256 "$TMP/proxora.tar.gz" | awk '{print $1}')"
+  [ "$ACTUAL_SHA256" = "$EXPECTED_SHA256" ] || die "Checksum mismatch for $ASSET (expected $EXPECTED_SHA256, got $ACTUAL_SHA256)."
+  echo "==> Checksum OK"
+fi
+
+tar -xzf "$TMP/proxora.tar.gz" -C "$TMP"
+[ -d "$TMP/Proxora.app" ] || die "The download did not contain Proxora.app."
+
+# Quit a running client first, otherwise "open" below would only focus the old version.
+APP_PROC='Proxora\\.app/Contents/MacOS/'
+proxora_running() { pgrep -u "$(id -u)" -f "$APP_PROC" >/dev/null 2>&1; }
+if proxora_running; then
+  echo "==> Quitting the running Proxora"
+  osascript -e "tell application id \\"$BUNDLE_ID\\" to quit" >/dev/null 2>&1 || true
+  i=0
+  while proxora_running && [ "$i" -lt 20 ]; do
+    sleep 0.5
+    i=$((i + 1))
+  done
+  if proxora_running; then
+    pkill -u "$(id -u)" -f "$APP_PROC" >/dev/null 2>&1 || true
+    sleep 1
+  fi
+fi
+
+is_admin() { id -Gn 2>/dev/null | tr ' ' '\\n' | grep -qx admin; }
+
 DEST_DIR="/Applications"
 SUDO=""
-if [ ! -w "$DEST_DIR" ]; then
-  if sudo -v 2>/dev/null; then
-    SUDO="sudo"
-  else
+if [ ! -w "$DEST_DIR" ] || { [ -e "$DEST_DIR/Proxora.app" ] && [ ! -O "$DEST_DIR/Proxora.app" ]; }; then
+  if is_admin; then
+    echo "==> Administrator password needed to install to $DEST_DIR"
+    if sudo -v; then
+      SUDO="sudo"
+    fi
+  fi
+  if [ -z "$SUDO" ]; then
+    if [ -e "$DEST_DIR/Proxora.app" ]; then
+      echo "Note: $DEST_DIR/Proxora.app cannot be replaced without administrator rights and stays there." >&2
+    fi
     DEST_DIR="$HOME/Applications"
     mkdir -p "$DEST_DIR"
   fi
 fi
 APP="$DEST_DIR/Proxora.app"
 
-osascript -e 'tell application "Proxora" to quit' >/dev/null 2>&1 || true
 echo "==> Installing to $APP"
 $SUDO rm -rf "$APP"
 $SUDO ditto "$TMP/Proxora.app" "$APP"
-# Not notarized by Apple: drop the quarantine flag so Gatekeeper lets it start.
-$SUDO xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+if [ -n "$SUDO" ]; then
+  # Owned by you, so the built-in updater can replace the app without asking for a password.
+  sudo chown -R "$(id -un):$(id -gn)" "$APP"
+fi
+# Not notarized by Apple: make sure no quarantine flag blocks the first start.
+xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
 
 PREFS_DIR="$HOME/Library/Application Support/proxora-desktop"
 PREFS="$PREFS_DIR/prefs.json"
-if [ -n "$SERVER_URL" ] && [ ! -s "$PREFS" ]; then
-  case "$SERVER_URL" in
-    http://*|https://*) ;;
-    *) echo "Ignoring invalid server URL: $SERVER_URL" >&2; SERVER_URL="" ;;
-  esac
-  if [ -n "$SERVER_URL" ] && ! printf '%s' "$SERVER_URL" | grep -q '["\\\\]'; then
-    mkdir -p "$PREFS_DIR"
-    printf '{\\n  "serverUrl": "%s",\\n  "allowInsecureTls": false,\\n  "lastPageUrl": null\\n}\\n' "$SERVER_URL" > "$PREFS"
-    echo "==> Server preset: $SERVER_URL"
+case "$SERVER_URL" in
+  "" | http://* | https://*) ;;
+  *) echo "Ignoring invalid server URL: $SERVER_URL" >&2; SERVER_URL="" ;;
+esac
+SERVER_URL="\${SERVER_URL%/}"
+if [ -n "$SERVER_URL" ]; then
+  CURRENT=""
+  if [ -s "$PREFS" ]; then
+    CURRENT="$(sed -n 's/.*"serverUrl"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' "$PREFS" | head -n 1 || true)"
   fi
+  if [ -z "$CURRENT" ]; then
+    if printf '%s' "$SERVER_URL" | grep -q '["\\[:space:]]'; then
+      echo "Ignoring server URL with quotes, backslashes or spaces: $SERVER_URL" >&2
+    else
+      mkdir -p "$PREFS_DIR"
+      printf '{\\n  "serverUrl": "%s",\\n  "allowInsecureTls": false,\\n  "lastPageUrl": null\\n}\\n' "$SERVER_URL" > "$PREFS"
+      echo "==> Server preset: $SERVER_URL"
+    fi
+  elif [ "\${CURRENT%/}" != "$SERVER_URL" ]; then
+    echo "==> Proxora is already connected to $CURRENT."
+    echo "    To switch to $SERVER_URL use Proxora > Change server... in the menu bar."
+  fi
+  case "$SERVER_URL" in
+    https://*) echo "    Self-signed certificate? Trust it in Keychain Access (\\"Always Trust\\") - macOS apps cannot skip certificate checks." ;;
+  esac
 fi
 
 echo "==> Done. Starting Proxora"

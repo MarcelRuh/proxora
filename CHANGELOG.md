@@ -2,7 +2,31 @@
 
 All notable changes to this project are documented here.
 
-## [Unreleased]
+## [2.7.5] – 2026-11-26
+
+### Added
+
+- Download clients: Linux tile with the AppImage (plus the `chmod +x` command), `.deb` and `.rpm`. The tile for the device you are on comes first and is marked "This device"; file sizes are shown and commands have a copy button (also on plain-HTTP installs).
+- Desktop (Linux): `.deb`/`.rpm` installs can update themselves. CI now signs both packages and adds them to the updater manifest (`linux-x86_64-deb`, `linux-x86_64-rpm`). The start check only reports a new version; **Check for updates…** installs it (admin password). Without a matching package the app says where to download it instead of failing on the AppImage.
+- Desktop (macOS): **Hide**, **Hide Others**, **Show All** and a **Window** menu. An `Info.plist` allows plain-HTTP servers in the web view and explains the local network permission prompt.
+
+### Changed
+
+- Download clients: all downloads (including the Android APK) stream through Proxora with a 30 s connect timeout. GitHub lookups time out after 10 s, are shared between requests, and failed lookups are retried after 30 s, so a slow GitHub no longer stalls the page. The card then says that GitHub is not answering and retries, instead of claiming a file is missing.
+- macOS install script: verifies the SHA-256 of the app archive, quits a running Proxora before replacing it, installs the app owned by you (so the in-app updater needs no password) and falls back to `~/Applications` without admin rights. It only presets the server of the instance it was downloaded from, never overwrites a configured server, accepts `--tag 2.7.5` without the `v`, has `--help` and explains failed downloads (build still running, GitHub unreachable, TLS problem).
+- Download clients (Windows): the hint explains the SmartScreen warning ("More info" → "Run anyway").
+- Desktop setup screen: shows "Connecting to …", gives up after 15 s with a hint, and explains certificate and connection errors for each OS. On macOS, **Allow insecure TLS** is hidden (the system WebView cannot skip certificate errors) and a Keychain "Always Trust" note is shown instead. On Windows, changing the option restarts the app once to apply it.
+- CI: the production build is retried up to three times (next/font downloads are flaky; 2.7.3 stayed a draft because of it).
+- CI: a manual run (**Run workflow**) now builds the Windows client too, like macOS, so both can be checked before a release is tagged. Manual runs keep the packages as workflow artifacts only (no updater signatures, no release upload).
+
+### Fixed
+
+- Desktop (macOS, Linux): **Change server…** opened the Windows-only setup address and ended on an error page.
+- Desktop (macOS): a saved server that does not load no longer leaves a blank or silently unchanged window. The server opens once the setup screen has loaded, and the setup screen reports the timeout.
+- Desktop (Linux): **Allow insecure TLS** works now (WebKit TLS policy) instead of reloading the failing page in a loop. Certificate and connection errors return to the setup screen with a message instead of the raw WebKit error page.
+- Desktop (Windows): **Allow insecure TLS** no longer drops WebView2's default browser arguments, and the setting is no longer passed on to programs started from the app.
+- Desktop: the user agent names the real OS (it always said Linux), so the Download clients card recognizes the device.
+- Desktop: removed the unused `glib` dependency.
 
 ## [2.7.4] – 2026-11-23
 

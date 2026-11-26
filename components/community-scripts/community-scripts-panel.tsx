@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { WebConsole } from "@/components/console/web-console";
 import { api } from "@/lib/api";
+import { copyText } from "@/lib/clipboard";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { useCan } from "@/components/auth/session-user";
 import { peerHostAllowsPermission } from "@/lib/federation-access";
@@ -197,28 +198,6 @@ function ScriptLogo({ name, logo }: { name: string; logo: string | null }) {
       />
     </div>
   );
-}
-
-async function copyText(value: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(value);
-    return true;
-  } catch {
-    try {
-      const area = document.createElement("textarea");
-      area.value = value;
-      area.setAttribute("readonly", "");
-      area.style.position = "fixed";
-      area.style.left = "-9999px";
-      document.body.appendChild(area);
-      area.select();
-      const ok = document.execCommand("copy");
-      area.remove();
-      return ok;
-    } catch {
-      return false;
-    }
-  }
 }
 
 export function CommunityScriptsPanel({

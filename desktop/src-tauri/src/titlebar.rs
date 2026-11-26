@@ -208,6 +208,17 @@ pub const TITLEBAR_BOOTSTRAP: &str = r##"(function () {
       setStatus("Desktop client is up to date", "ok", 4500);
       return;
     }
+    if (detail.status === "manual") {
+      var name = "Update " + (detail.version || "") + " available";
+      setStatus(
+        detail.reason === "confirm"
+          ? name + " — choose Check for updates… in the menu to install it (admin password required)"
+          : name + " — download the new package from your Proxora server (Proxora → Download clients)",
+        "info",
+        15000
+      );
+      return;
+    }
     if (detail.status === "error") {
       setStatus("Update failed: " + (detail.message || "unknown error"), "err", 8000);
     }

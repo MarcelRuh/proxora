@@ -5,6 +5,7 @@ mod url_util;
 
 use prefs::Prefs;
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::menu::{MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -15,6 +16,11 @@ use url_util::{is_setup_url, normalize_server_url, same_origin};
 
 struct AppState {
   prefs: Mutex<Prefs>,
+  /// Open the saved server once setup has loaded, so setup can report a server that never answers.
+  open_saved_server: AtomicBool,
+  /// WebView2 reads browser arguments only when it starts, so remember what this process launched with.
+  #[cfg(windows)]
+  webview_insecure: bool,
 }
 
 #[derive(Serialize)]
@@ -24,23 +30,32 @@ struct PrefsDto {
   allow_insecure_tls: bool,
   legacy_install: Option<legacy_install::LegacyInstallHint>,
   app_version: String,
+  os: &'static str,
 }
 
-fn apply_insecure_env(allow: bool) {
-  // WebView2 reads this before the controller starts (Windows).
-  if allow {
-    std::env::set_var(
-      "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-      "--ignore-certificate-errors",
-    );
-  } else {
-    std::env::remove_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS");
-  }
-}
+// Tauri serves bundled pages from http://tauri.localhost on Windows/Android and tauri://localhost elsewhere.
+#[cfg(any(windows, target_os = "android"))]
+const SETUP_URL: &str = "http://tauri.localhost/index.html";
+#[cfg(not(any(windows, target_os = "android")))]
+const SETUP_URL: &str = "tauri://localhost/index.html";
+
+#[cfg(windows)]
+const BASE_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+#[cfg(target_os = "macos")]
+const BASE_UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
+#[cfg(not(any(windows, target_os = "macos")))]
+const BASE_UA: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+/// wry's own WebView2 switches; passing additional_browser_args replaces them, so repeat them.
+#[cfg(windows)]
+const WEBVIEW2_DEFAULT_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
+
+/// Set for the process started by a TLS-setting restart (Windows only).
+#[cfg(windows)]
+const RESTART_ENV: &str = "PROXORA_DESKTOP_RESTARTED";
 
 fn setup_nav_url() -> Url {
-  // Custom protocol host used by Tauri 2 desktop webviews.
-  Url::parse("http://tauri.localhost/index.html").expect("setup url")
+  Url::parse(SETUP_URL).expect("setup url")
 }
 
 fn setup_nav_url_with_error(code: &str) -> Url {
@@ -156,6 +171,13 @@ async fn run_update_check(app: tauri::AppHandle, interactive: bool) {
   match updater.check().await {
     Ok(Some(update)) => {
       let version = update.version.clone();
+      if let Some(reason) = manual_update_reason(&update, interactive) {
+        emit_update_event(
+          &app,
+          serde_json::json!({ "status": "manual", "version": version, "reason": reason }),
+        );
+        return;
+      }
       emit_update_event(
         &app,
         serde_json::json!({ "status": "available", "version": version }),
@@ -189,6 +211,31 @@ async fn run_update_check(app: tauri::AppHandle, interactive: bool) {
   }
 }
 
+/// .deb/.rpm installs can only be replaced by a signed package of the same type, and installing one
+/// asks for an admin password. Without such a package the updater would fetch the AppImage and fail.
+#[cfg(target_os = "linux")]
+fn manual_update_reason(update: &tauri_plugin_updater::Update, interactive: bool) -> Option<&'static str> {
+  use tauri::utils::{config::BundleType, platform::bundle_type};
+  let ext = match bundle_type() {
+    Some(BundleType::Deb) => ".deb",
+    Some(BundleType::Rpm) => ".rpm",
+    _ => return None,
+  };
+  if !update.download_url.path().to_ascii_lowercase().ends_with(ext) {
+    return Some("package");
+  }
+  // Never pop a password prompt from the quiet startup check.
+  if !interactive {
+    return Some("confirm");
+  }
+  None
+}
+
+#[cfg(not(target_os = "linux"))]
+fn manual_update_reason(_update: &tauri_plugin_updater::Update, _interactive: bool) -> Option<&'static str> {
+  None
+}
+
 fn spawn_update_check(app: &tauri::AppHandle, interactive: bool) {
   let handle = app.clone();
   tauri::async_runtime::spawn(async move {
@@ -204,16 +251,18 @@ fn get_prefs(state: State<'_, AppState>) -> PrefsDto {
     allow_insecure_tls: prefs.allow_insecure_tls,
     legacy_install: legacy_install::detect(),
     app_version: env!("CARGO_PKG_VERSION").to_string(),
+    os: std::env::consts::OS,
   }
 }
 
+/// Returns true when the app restarts to apply the TLS setting (Windows).
 #[tauri::command]
 fn save_server(
   app: tauri::AppHandle,
   state: State<'_, AppState>,
   url: String,
   allow_insecure_tls: bool,
-) -> Result<(), String> {
+) -> Result<bool, String> {
   let normalized = normalize_server_url(&url)?;
   let mut prefs = state.prefs.lock().expect("prefs lock");
   let changed = prefs.server_url.as_deref() != Some(normalized.as_str());
@@ -223,9 +272,17 @@ fn save_server(
   prefs.server_url = Some(normalized.clone());
   prefs.allow_insecure_tls = allow_insecure_tls;
   prefs::save(&prefs)?;
-  apply_insecure_env(allow_insecure_tls);
   drop(prefs);
-  open_server(&app, &normalized, None)
+  #[cfg(windows)]
+  if allow_insecure_tls != state.webview_insecure {
+    // The new process opens the saved server with matching WebView2 arguments.
+    std::env::set_var(RESTART_ENV, "1");
+    app.request_restart();
+    return Ok(true);
+  }
+  apply_tls_policy(&app, allow_insecure_tls);
+  open_server(&app, &normalized, None)?;
+  Ok(false)
 }
 
 #[tauri::command]
@@ -278,8 +335,8 @@ fn clear_server_internal(app: &tauri::AppHandle) -> Result<(), String> {
   prefs.allow_insecure_tls = false;
   prefs::clear_session_fields(&mut prefs);
   prefs::save(&prefs)?;
-  apply_insecure_env(false);
   drop(prefs);
+  apply_tls_policy(app, false);
   navigate_main(app, setup_nav_url())
 }
 
@@ -289,11 +346,25 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
   let updates = MenuItem::with_id(app, "check_updates", "Check for updates…", true, None::<&str>)?;
   let sep = PredefinedMenuItem::separator(app)?;
   let quit = PredefinedMenuItem::quit(app, Some("Quit"))?;
+  #[cfg(not(target_os = "macos"))]
   let proxora = SubmenuBuilder::new(app, "Proxora")
     .item(&reload)
     .item(&change)
     .item(&updates)
     .item(&sep)
+    .item(&quit)
+    .build()?;
+  // The first macOS submenu is the app menu, which users expect to offer Hide (Cmd+H) as well.
+  #[cfg(target_os = "macos")]
+  let proxora = SubmenuBuilder::new(app, "Proxora")
+    .item(&reload)
+    .item(&change)
+    .item(&updates)
+    .item(&sep)
+    .hide()
+    .hide_others()
+    .show_all()
+    .separator()
     .item(&quit)
     .build()?;
   let menu = MenuBuilder::new(app).item(&proxora);
@@ -309,39 +380,100 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
       .paste()
       .select_all()
       .build()?;
-    menu.item(&edit)
+    // Gives the frameless window Cmd+M and the usual Window menu entries.
+    let window = SubmenuBuilder::new(app, "Window")
+      .minimize()
+      .maximize()
+      .fullscreen()
+      .separator()
+      .close_window()
+      .build()?;
+    menu.item(&edit).item(&window)
   };
   menu.build()
 }
 
+/// WebKitGTK can switch certificate checking at runtime (Windows needs a restart, macOS cannot skip it).
 #[cfg(target_os = "linux")]
-fn attach_insecure_tls_hook(window: &tauri::WebviewWindow, allow: bool) {
-  if !allow {
+fn apply_tls_policy(app: &tauri::AppHandle, allow: bool) {
+  let Some(window) = app.get_webview_window("main") else {
     return;
-  }
+  };
+  let _ = window.with_webview(move |webview| {
+    use webkit2gtk::{TLSErrorsPolicy, WebViewExt, WebsiteDataManagerExt};
+    if let Some(manager) = webview.inner().website_data_manager() {
+      manager.set_tls_errors_policy(if allow {
+        TLSErrorsPolicy::Ignore
+      } else {
+        TLSErrorsPolicy::Fail
+      });
+    }
+  });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn apply_tls_policy(_app: &tauri::AppHandle, _allow: bool) {}
+
+/// WebKitGTK shows its own error page for unreachable servers and certificate failures,
+/// which has no titlebar and no way back. Send those loads to setup with a reason instead.
+#[cfg(target_os = "linux")]
+fn attach_load_failed_hook(window: &tauri::WebviewWindow) {
   let _ = window.with_webview(|webview| {
-    use webkit2gtk::WebViewExt;
-    let wv = webview.inner();
-    wv.connect_load_failed_with_tls_errors(move |view, failing_uri, _cert, _errors| {
-      view.load_uri(failing_uri);
+    use webkit2gtk::{gio, glib, NetworkError, PolicyError, WebViewExt};
+    webview.inner().connect_load_failed(|view, _event, failing_uri, error| {
+      // Policy errors come from navigations we cancelled ourselves (external links, downloads).
+      if is_setup_url(failing_uri)
+        || failing_uri.starts_with("proxora-desktop:")
+        || error.kind::<PolicyError>().is_some()
+        || error.matches(NetworkError::Cancelled)
+        || error.matches(gio::IOErrorEnum::Cancelled)
+      {
+        return false;
+      }
+      let code = if error.kind::<gio::TlsError>().is_some() {
+        "tls"
+      } else {
+        "unreachable"
+      };
+      let view = view.clone();
+      glib::idle_add_local_once(move || {
+        view.load_uri(setup_nav_url_with_error(code).as_str());
+      });
       true
     });
   });
 }
 
 #[cfg(not(target_os = "linux"))]
-fn attach_insecure_tls_hook(_window: &tauri::WebviewWindow, _allow: bool) {}
+fn attach_load_failed_hook(_window: &tauri::WebviewWindow) {}
+
+/// Right after a restart the old WebView2 browser process can still hold the profile with the
+/// previous arguments, and WebView2 refuses to start with different ones until it exits.
+#[cfg(windows)]
+fn wait_after_tls_restart() {
+  if std::env::var_os(RESTART_ENV).is_some() {
+    std::env::remove_var(RESTART_ENV);
+    std::thread::sleep(std::time::Duration::from_millis(2000));
+  }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  #[cfg(windows)]
+  wait_after_tls_restart();
   let initial = prefs::load();
-  apply_insecure_env(initial.allow_insecure_tls);
+  let has_server = initial.server_url.is_some();
+  #[cfg(windows)]
+  let webview_insecure = initial.allow_insecure_tls;
 
   tauri::Builder::default()
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
     .manage(AppState {
       prefs: Mutex::new(initial),
+      open_saved_server: AtomicBool::new(has_server),
+      #[cfg(windows)]
+      webview_insecure,
     })
     .invoke_handler(tauri::generate_handler![
       get_prefs,
@@ -363,9 +495,8 @@ pub fn run() {
       let prefs = app.state::<AppState>().prefs.lock().expect("prefs lock").clone();
 
       let app_version = env!("CARGO_PKG_VERSION");
-      let desktop_ua = format!(
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 ProxoraDesktop/{app_version}"
-      );
+      // Per-OS base so the web UI recognises the real platform (e.g. for client downloads).
+      let desktop_ua = format!("{BASE_UA} ProxoraDesktop/{app_version}");
       // Injected into every page (including the remote Proxora UI) so web code can
       // open external https links without relying on window.open.
       let desktop_bridge = format!(
@@ -373,6 +504,7 @@ pub fn run() {
         version = app_version
       );
 
+      #[allow(unused_mut)]
       let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
         .title("Proxora")
         .inner_size(1280.0, 800.0)
@@ -391,6 +523,21 @@ pub fn run() {
               return;
             }
             let url = payload.url().to_string();
+            if is_setup_url(&url) {
+              let state = handle.state::<AppState>();
+              if state.open_saved_server.swap(false, Ordering::SeqCst) {
+                let prefs = state.prefs.lock().expect("prefs lock").clone();
+                if let Some(server) = prefs.server_url.as_deref() {
+                  // Setup shows "Connecting…" and a timeout: macOS keeps this page when the server never loads.
+                  let _ = window.eval(format!(
+                    "window.dispatchEvent(new CustomEvent('proxora-connecting',{{detail:{{url:{}}}}}));",
+                    serde_json::json!(server)
+                  ));
+                  let _ = open_server(&handle, server, prefs.last_page_url.as_deref());
+                }
+              }
+              return;
+            }
             if !is_webview_error_url(&url) {
               return;
             }
@@ -398,7 +545,6 @@ pub fn run() {
             // Bounce back to setup so the user can change server / retry.
             let target = setup_nav_url_with_error("unreachable");
             let _ = window.navigate(target);
-            let _ = handle;
           }
         })
         .on_navigation({
@@ -431,21 +577,16 @@ pub fn run() {
           }
         });
 
+      #[cfg(windows)]
       if prefs.allow_insecure_tls {
-        builder = builder.additional_browser_args("--ignore-certificate-errors");
+        builder = builder.additional_browser_args(&format!(
+          "{WEBVIEW2_DEFAULT_ARGS} --ignore-certificate-errors"
+        ));
       }
 
       let window = builder.build()?;
-      attach_insecure_tls_hook(&window, prefs.allow_insecure_tls);
-
-      if let Some(server) = prefs.server_url.as_deref() {
-        let last = prefs.last_page_url.clone();
-        let handle = handle.clone();
-        let server = server.to_string();
-        std::thread::spawn(move || {
-          let _ = open_server(&handle, &server, last.as_deref());
-        });
-      }
+      attach_load_failed_hook(&window);
+      apply_tls_policy(&handle, prefs.allow_insecure_tls);
 
       // Quiet background check a few seconds after launch.
       let update_handle = handle.clone();
@@ -472,4 +613,24 @@ pub fn run() {
     })
     .run(tauri::generate_context!())
     .expect("error while running Proxora desktop");
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn setup_url_is_recognised_as_setup() {
+    assert!(is_setup_url(SETUP_URL));
+    let with_error = setup_nav_url_with_error("tls");
+    assert!(is_setup_url(with_error.as_str()));
+    assert_eq!(with_error.query(), Some("error=tls"));
+  }
+
+  #[test]
+  fn user_agent_keeps_desktop_marker() {
+    let ua = format!("{BASE_UA} ProxoraDesktop/{}", env!("CARGO_PKG_VERSION"));
+    assert!(ua.starts_with("Mozilla/5.0 ("));
+    assert!(ua.ends_with(&format!("ProxoraDesktop/{}", env!("CARGO_PKG_VERSION"))));
+  }
 }

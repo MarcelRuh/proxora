@@ -91,6 +91,8 @@ mod tests {
   #[test]
   fn setup_hosts() {
     assert!(is_setup_url("http://tauri.localhost/index.html"));
+    assert!(is_setup_url("tauri://localhost/index.html"));
+    assert!(is_setup_url("tauri://localhost/index.html?error=unreachable"));
     assert!(!is_setup_url("http://192.168.1.10:3000/"));
   }
 }

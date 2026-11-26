@@ -15,6 +15,11 @@
   box-sizing: border-box;
 }
 
+/* Elements with display rules (e.g. .check) must still honour the hidden attribute. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -101,6 +106,23 @@ h1 {
 
 .check input {
   margin-top: 3px;
+}
+
+.note {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.check:not([hidden]) + .note {
+  margin-top: -10px;
+}
+
+.status {
+  margin: 0 0 14px;
+  color: var(--accent-2);
+  font-size: 0.88rem;
 }
 
 .error {

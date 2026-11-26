@@ -1,9 +1,14 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { compareSemver } from "@/lib/version";
-import { parseReleaseAssets, type ReleaseAsset } from "@/lib/desktop-clients";
+import { parseReleaseAssets, pickAndroidApk, type ReleaseAsset } from "@/lib/desktop-clients";
 
 const execFileAsync = promisify(execFile);
+
+/** Upper bound for a single GitHub metadata request, so a hanging GitHub never blocks a page. */
+const GITHUB_TIMEOUT_MS = 10_000;
+/** Failed lookups are retried after this long instead of being cached like successful ones. */
+const FAILURE_CACHE_MS = 30_000;
 
 function githubHeaders(): Record<string, string> {
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
@@ -133,44 +138,48 @@ export function pickGithubReleaseApkUrl(json: unknown): string | null {
   return null;
 }
 
+/** APK download URL of a release tag (null when there is none or GitHub is unreachable). */
 export async function fetchGithubReleaseApkUrl(repo: string, tag: string): Promise<string | null> {
+  const assets = await fetchGithubReleaseAssets(repo, tag);
+  return assets ? (pickAndroidApk(assets)?.url ?? null) : null;
+}
+
+const assetCache = new Map<string, { at: number; ttl: number; value: ReleaseAsset[] | null }>();
+const assetInflight = new Map<string, Promise<ReleaseAsset[] | null>>();
+
+/**
+ * All downloadable assets of a release tag, or null when GitHub cannot be asked right now
+ * (unreachable, timeout, rate limit). Shared by the desktop, macOS script and Android routes,
+ * so a page load costs at most one GitHub API request per tag every few minutes.
+ */
+export async function fetchGithubReleaseAssets(repo: string, tag: string): Promise<ReleaseAsset[] | null> {
   const version = tag.replace(/^v/i, "");
   const normalized = /^v/i.test(tag) ? tag : `v${version}`;
-  try {
-    const res = await fetch(`https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(normalized)}`, {
-      headers: githubHeaders(),
-    });
-    if (res.ok) {
-      const fromAssets = pickGithubReleaseApkUrl(await res.json());
-      if (fromAssets) return fromAssets;
+  const key = `${repo}@${normalized}`;
+  const cached = assetCache.get(key);
+  if (cached && Date.now() - cached.at < cached.ttl) return cached.value;
+  const running = assetInflight.get(key);
+  if (running) return running;
+  const request = (async () => {
+    let value: ReleaseAsset[] | null = null;
+    try {
+      const res = await fetch(`https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(normalized)}`, {
+        headers: githubHeaders(),
+        signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
+      });
+      if (res.ok) value = parseReleaseAssets(await res.json());
+      // 404: the tag has no published release (yet). Rate limits and outages stay null = unknown.
+      else if (res.status === 404) value = [];
+    } catch {
+      value = null;
     }
-  } catch {
-    /* fall through */
-  }
-  return null;
-}
-
-/** All downloadable assets of a release tag (empty when GitHub is unreachable). */
-export async function fetchGithubReleaseAssets(repo: string, tag: string): Promise<ReleaseAsset[]> {
-  const version = tag.replace(/^v/i, "");
-  const normalized = /^v/i.test(tag) ? tag : `v${version}`;
-  const now = Date.now();
-  const cached = assetCache.get(`${repo}@${normalized}`);
-  if (cached && now - cached.at < RELEASE_CACHE_MS) return cached.value;
-  try {
-    const res = await fetch(`https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(normalized)}`, {
-      headers: githubHeaders(),
-    });
-    if (!res.ok) return [];
-    const value = parseReleaseAssets(await res.json());
-    assetCache.set(`${repo}@${normalized}`, { at: now, value });
+    // Empty or unknown results are asked again soon: CI may still be uploading the files.
+    assetCache.set(key, { at: Date.now(), ttl: value?.length ? RELEASE_CACHE_MS : FAILURE_CACHE_MS, value });
     return value;
-  } catch {
-    return [];
-  }
+  })().finally(() => assetInflight.delete(key));
+  assetInflight.set(key, request);
+  return request;
 }
-
-const assetCache = new Map<string, { at: number; value: ReleaseAsset[] }>();
 
 export function parseReleaseTagFromUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -202,9 +211,12 @@ export function pickLatestSemverTag(tags: string[]): string | null {
 
 async function fetchGithubLatestReleaseFromHtml(repo: string): Promise<GithubRelease | null> {
   try {
+    // HEAD is enough: only the final URL (…/releases/tag/vX.Y.Z) matters, not the HTML page.
     const res = await fetch(`https://github.com/${repo}/releases/latest`, {
+      method: "HEAD",
       headers: { "User-Agent": "proxora-self-update" },
       redirect: "follow",
+      signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     const tag = parseReleaseTagFromUrl(res.url);
@@ -244,22 +256,40 @@ async function fetchGithubLatestReleaseFromGit(repo: string): Promise<GithubRele
 
 const RELEASE_CACHE_MS = 5 * 60_000;
 let releaseCache: { at: number; repo: string; value: GithubRelease | null } | null = null;
+let releaseInflight: { repo: string; promise: Promise<GithubRelease | null> } | null = null;
 
 async function fetchGithubLatestReleaseUncached(repo: string): Promise<GithubRelease | null> {
   const fromHtml = await fetchGithubLatestReleaseFromHtml(repo);
   if (fromHtml) return fromHtml;
   const fromGit = await fetchGithubLatestReleaseFromGit(repo);
   if (fromGit) return fromGit;
-  const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, { headers: githubHeaders() });
-  if (!res.ok) return null;
-  return parseGithubRelease(await res.json());
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+      headers: githubHeaders(),
+      signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    return parseGithubRelease(await res.json());
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchGithubLatestRelease(repo: string): Promise<GithubRelease | null> {
-  if (releaseCache && releaseCache.repo === repo && Date.now() - releaseCache.at < RELEASE_CACHE_MS) {
-    return releaseCache.value;
+  if (releaseCache && releaseCache.repo === repo) {
+    const ttl = releaseCache.value ? RELEASE_CACHE_MS : FAILURE_CACHE_MS;
+    if (Date.now() - releaseCache.at < ttl) return releaseCache.value;
   }
-  const value = await fetchGithubLatestReleaseUncached(repo);
-  releaseCache = { at: Date.now(), repo, value };
-  return value;
+  if (releaseInflight && releaseInflight.repo === repo) return releaseInflight.promise;
+  const promise = fetchGithubLatestReleaseUncached(repo)
+    .catch(() => null)
+    .then((value) => {
+      releaseCache = { at: Date.now(), repo, value };
+      return value;
+    })
+    .finally(() => {
+      if (releaseInflight?.promise === promise) releaseInflight = null;
+    });
+  releaseInflight = { repo, promise };
+  return promise;
 }

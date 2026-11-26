@@ -39,7 +39,8 @@ assert ver == tag, f"latest.json version {ver!r} != tag {tag!r}"
 release = json.loads(Path("${tmpdir}/release.json").read_text())
 assets = {a["name"]: a for a in (release.get("assets") or []) if a.get("name")}
 platforms = data.get("platforms") or {}
-for key in ("linux-x86_64", "windows-x86_64", *(k for k in ("darwin-aarch64", "darwin-x86_64") if k in platforms)):
+optional = ("linux-x86_64-deb", "linux-x86_64-rpm", "darwin-aarch64", "darwin-x86_64")
+for key in ("linux-x86_64", "windows-x86_64", *(k for k in optional if k in platforms)):
     entry = platforms.get(key)
     assert isinstance(entry, dict), f"missing platform {key}"
     url = entry.get("url") or ""
@@ -50,6 +51,9 @@ for key in ("linux-x86_64", "windows-x86_64", *(k for k in ("darwin-aarch64", "d
     name = unquote(urlparse(url).path.rsplit("/", 1)[-1])
     asset = assets.get(name)
     assert asset, f"{key}: asset {name!r} missing from release"
+    for suffix in ("deb", "rpm"):
+        if key.endswith(f"-{suffix}"):
+            assert name.endswith(f".{suffix}"), f"{key}: expected a .{suffix} package, got {name!r}"
     size = int(asset.get("size") or 0)
     assert size > 1_000_000, f"{key}: asset size too small: {size}"
 print("ok: latest.json platforms", ", ".join(sorted(platforms)))
